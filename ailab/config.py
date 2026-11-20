@@ -20,6 +20,10 @@ DEFAULTS: dict = {
     # USD per million tokens. Edit in config.json; prices drift — UNVERIFIED until checked.
     "prices_per_mtok": {},
     "base_urls": {},                      # override any provider's base URL
+    # Feature flags. Switched on one at a time by Scott (M7). There is deliberately no API to flip them.
+    "flags": {"router": False, "preview": False, "agent": False},
+    "port": 8795,                         # UNVERIFIED free on gandalf
+    "hermes_url": "",                     # connected mode: where the ⌂ Hermes button goes
 }
 
 
@@ -45,6 +49,8 @@ def load(overrides: dict | None = None) -> dict:
     if f.exists():
         cfg.update(json.loads(f.read_text() or "{}"))
     cfg.update(overrides or {})
+    cfg["flags"] = {**DEFAULTS["flags"], **{k: bool(v) for k, v in (cfg.get("flags") or {}).items()
+                                           if k in DEFAULTS["flags"]}}
     if cfg["mode"] not in ("standalone", "connected"):
         raise ValueError("mode must be 'standalone' or 'connected'")
     return cfg

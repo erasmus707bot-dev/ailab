@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🧪 AI Lab</title>
+<script>
+  // Theme before first paint (dark by default) — no flash of the wrong mode.
+  try { var t = localStorage.getItem('ailab.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+  :root { --r: 14px; --gap: 12px; font-size: 17px; }
+  [data-theme="dark"] {
+    --bg: #0d1520; --panel: #142133; --panel2: #1b2b40; --line: #2a3d57;
+    --text: #e8dfc8; --dim: #a9a08c; --accent: #c9a54a; --accent-ink: #1a1408;
+    --calm: #26394f; --ok: #6f9c7a; --warn: #b89558; --bad: #b97a6c; --me: #223a55;
+  }
+  [data-theme="light"] {
+    --bg: #f5f2ec; --panel: #fbf9f4; --panel2: #ece6da; --line: #d6cdbb;
+    --text: #1d2a3a; --dim: #5d6672; --accent: #8a6a1f; --accent-ink: #fff8e6;
+    --calm: #e3ebf2; --ok: #4f7a5a; --warn: #8a6a2c; --bad: #8f5446; --me: #dfe8f1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45; }
+  body { display: flex; flex-direction: column; min-height: 100dvh; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  /* slim top bar: ← ⌂ left, title, chips right */
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); min-height: 48px; }
+  .ib { background: none; border: 0; border-radius: 10px; min-width: 40px; height: 40px; font-size: 1.15rem; }
+  .ib:hover, .ib:focus-visible { background: var(--panel2); outline: none; }
+  .title { font-weight: 650; font-size: 1rem; white-space: nowrap; }
+  .chips { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px;
+    background: var(--panel2); border: 1px solid var(--line); font-size: .85rem; white-space: nowrap; }
+  .spend .bar { width: 46px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .spend .bar i { display: block; height: 100%; background: var(--ok); width: 0; }
+
+  main { flex: 1; display: flex; flex-direction: column; width: 100%; max-width: 1100px; margin: 0 auto; padding: var(--gap); gap: var(--gap); }
+  .loading { margin: 25vh auto; font-size: 2rem; opacity: .6; }
+
+  /* start: project row + path cards */
+  .proj { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--panel);
+    border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; }
+  .proj select { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; min-width: 10rem; }
+  .lock { font-size: .85rem; color: var(--dim); }
+  .paths { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--gap); }
+  .path { position: relative; text-align: left; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+  .path:hover, .path:focus-visible { border-color: var(--accent); outline: none; }
+  .path .sym { font-size: 2rem; line-height: 1; }
+  .path .name { font-weight: 650; }
+  .path .st { font-size: .8rem; color: var(--dim); margin-top: auto; }
+  .path.off { opacity: .78; }
+  .path.off .sym { filter: grayscale(.6); }
+
+  /* calm "not switched on" card */
+  .offcard { margin: 6vh auto 0; max-width: 520px; text-align: center; background: var(--calm);
+    border: 1px solid var(--line); border-radius: var(--r); padding: 22px 18px; }
+  .offcard .big { font-size: 2.6rem; }
+  .offcard h2 { margin: 8px 0 4px; font-size: 1.15rem; }
+  .offcard p { margin: 6px 0; color: var(--dim); }
+  details { text-align: left; margin-top: 10px; }
+  summary { cursor: pointer; color: var(--dim); }
+
+  /* chat */
+  .chat { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .picker { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .picker select { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; max-width: 100%; }
+  .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; min-height: 30vh; }
+  .msg { max-width: 85%; padding: 10px 12px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); white-space: pre-wrap; word-wrap: break-word; }
+  .msg.me { align-self: flex-end; background: var(--me); }
+  .msg .meta { display: block; margin-top: 6px; font-size: .78rem; color: var(--dim); }
+  .msg.err { border-color: var(--warn); }
+  .composer { display: flex; gap: 8px; align-items: flex-end; position: sticky; bottom: 0; background: var(--bg); padding-top: 6px; }
+  .composer textarea { flex: 1; min-height: 52px; max-height: 40vh; resize: vertical; border-radius: var(--r);
+    border: 1px solid var(--line); background: var(--panel); padding: 10px 12px; }
+  .send { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: var(--r); height: 52px; min-width: 56px; font-size: 1.3rem; }
+  .send:disabled { opacity: .5; cursor: default; }
+  .saved { font-size: .78rem; color: var(--dim); min-height: 1em; }
+
+  dialog { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); color: var(--text); max-width: 92vw; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); }
+  .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .btn { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 8px 14px; }
+  .btn.pri { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+  @media (max-width: 640px) {
+    :root { --gap: 10px; }
+    .title .full { display: none; }
+    .chip .lbl, .spend .bar { display: none; }
+    header { gap: 2px; padding: 6px 6px; }
+    .ib { min-width: 36px; }
+    .chips { gap: 4px; }
+    .chip { padding: 4px 8px; }
+    .msg { max-width: 94%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <button class="ib" id="back" title="Back" aria-label="Back">←</button>
+  <button class="ib" id="home" title="Home" aria-label="Home">⌂</button>
+  <span class="title">🧪 <span class="full">AI Lab</span></span>
+  <span class="chips">
+    <span class="chip" id="mode" title="Mode"></span>
+    <span class="chip spend" id="spend" title="Spent today / daily cap"><span>💲</span><span id="spendtxt">–</span><span class="bar"><i id="spendbar"></i></span></span>
+    <button class="ib" id="full" title="Full screen" aria-label="Full screen">⛶</button>
+    <button class="ib" id="theme" title="Light / dark" aria-label="Light or dark mode">☀️</button>
+  </span>
+</header>
+<main id="main" aria-live="polite"><div class="loading" aria-label="Loading">⏳</div></main>
+
+<dialog id="newproj">
+  <form method="dialog">
+    <h3 style="margin-top:0">➕ New project</h3>
+    <label class="sr" for="pname">Name</label>
+    <input type="text" id="pname" placeholder="Name" maxlength="60" required>
+    <p><label><input type="checkbox" id="psens"> 🔒 Sensitive — stays on this computer (Ollama only)</label></p>
+    <div class="row"><button class="btn" value="cancel">✕</button><button class="btn pri" value="ok" id="pok">✓ Create</button></div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+const $ = (s, el) => (el || document).querySelector(s);
+const h = (tag, attrs, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ailab." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ailab." + k, JSON.stringify(v)); } catch (e) {} },
+};
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  j.status = r.status; return j;
+}
+
+const PATHS = [
+  { id: "chat", flag: "router", sym: "💬", name: "Ask models", tip: "Pick a model, ask, see the cost of every answer." },
+  { id: "preview", flag: "preview", sym: "👁", name: "Live preview", tip: "Code on one side, the running page on the other." },
+  { id: "agent", flag: "agent", sym: "🤖", name: "Agent", tip: "Plan → write → run → check, step by step, with a Stop button." },
+  { id: "compare", flag: null, sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side.", later: "M8" },
+];
+let S = null;                          // server state
+let view = "start", trail = [];        // ← retraces this trail
+let chatLog = [];
+
+/* ---------- top bar ---------- */
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("ailab.theme", t); } catch (e) {}
+  $("#theme").textContent = t === "dark" ? "☀️" : "🌙";
+}
+$("#theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+$("#theme").textContent = document.documentElement.dataset.theme === "dark" ? "☀️" : "🌙";
+$("#full").onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+};
+$("#back").onclick = () => { if (trail.length) { view = trail.pop(); render(); } else if (S && S.hermes_url) location.href = S.hermes_url; };
+$("#home").onclick = () => { if (view !== "start") { trail = []; view = "start"; render(); } else if (S && S.hermes_url) location.href = S.hermes_url; };
+function go(v) { if (v !== view) { trail.push(view); view = v; render(); } }
+
+function paintBar() {
+  const connected = S.mode === "connected";
+  $("#mode").innerHTML = "";
+  $("#mode").append(connected ? "🔌" : "🏝", h("span", { class: "lbl" }, connected ? "Hermes" : "Standalone"));
+  $("#mode").title = connected ? "Connected to Hermes — one budget, Hermes holds the keys" : "Standalone — own keys, own $ cap";
+  const sp = S.spend || {};
+  if (sp.today_usd == null) { $("#spendtxt").textContent = "?"; $("#spendbar").style.width = "0"; return; }
+  $("#spendtxt").textContent = `$${sp.today_usd.toFixed(2)} / $${sp.cap_usd.toFixed(2)}`;
+  const pct = Math.min(100, (sp.today_usd / (sp.cap_usd || 1)) * 100);
+  $("#spendbar").style.width = pct + "%";
+  $("#spendbar").style.background = pct >= 90 ? "var(--bad)" : pct >= 70 ? "var(--warn)" : "var(--ok)";
+}
+
+/* ---------- project ---------- */
+const curProject = () => S.projects.find(p => p.id === store.get("project", "scratch")) || S.projects[0];
+function projectRow() {
+  const sel = h("select", { "aria-label": "Project", onchange: e => { store.set("project", e.target.value); chatLog = []; render(); } },
+    S.projects.map(p => h("option", { value: p.id, selected: p.id === curProject().id }, (p.sensitive ? "🔒 " : "📁 ") + p.name)));
+  const p = curProject();
+  return h("div", { class: "proj" }, h("span", { "aria-hidden": "true" }, "📂"), sel,
+    h("button", { class: "ib", title: "New project", "aria-label": "New project", onclick: newProject }, "➕"),
+    p.sensitive ? h("span", { class: "lock" }, "🔒 stays on this computer — Ollama only") : null);
+}
+function newProject() {
+  const d = $("#newproj"); $("#pname").value = ""; $("#psens").checked = false;
+  d.onclose = async () => {
+    if (d.returnValue !== "ok" || !$("#pname").value.trim()) return;
+    const r = await api("/api/projects", { name: $("#pname").value, sensitive: $("#psens").checked });
+    if (r.ok) { S.projects.push(r.project); store.set("project", r.project.id); render(); }
+  };
+  d.showModal();
+}
+
+/* ---------- views ---------- */
+function offCard(flag, sym, name, later) {
+  return h("div", { class: "offcard", id: "offcard", role: "status" },
+    h("div", { class: "big", "aria-hidden": "true" }, "⏸"),
+    h("h2", {}, `${sym} ${name} — not switched on yet`),
+    h("p", {}, "Nothing is sent and nothing is spent."),
+    h("details", {}, h("summary", {}, "ℹ️ Why?"),
+      h("p", {}, later ? `This part arrives in build step ${later}.`
+        : "Each part is switched on by Scott, one at a time, after it is tested (step M7). Order: 💬 Ask models → 👁 Live preview → 🤖 Agent.")));
+}
+function startView() {
+  return [projectRow(), h("div", { class: "paths" }, PATHS.map(p => {
+    const on = p.flag && S.flags[p.flag];
+    return h("button", { class: "path" + (on ? "" : " off"), onclick: () => go(p.id), "data-path": p.id },
+      h("span", { class: "sym", "aria-hidden": "true" }, p.sym), h("span", { class: "name" }, p.name),
+      h("span", {}, p.tip), h("span", { class: "st" }, on ? "🟢 On" : "⏸ Not switched on yet"));
+  }))];
+}
+
+let saveTimer = null;
+function autosave(text) {
+  store.set("draft." + curProject().id, text);          // instant local copy
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const r = await api("/api/autosave", { project: curProject().id, field: "chat-draft", text });
+    const s = $("#saved"); if (s) s.textContent = r.ok ? "💾 saved" : "⚠️ not saved — kept on this device";
+  }, 700);
+}
+
+function chatView() {
+  if (!S.flags.router) return [offCard("router", "💬", "Ask models")];
+  const p = curProject();
+  const provs = S.providers.filter(x => !p.sensitive || x.local);
+  const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
+  const modelSel = h("select", { "aria-label": "Model", id: "model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
+  const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
+    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
+  api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
+    modelSel.innerHTML = "";
+    if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
+    const want = store.get("model." + prov, r.models[0]);
+    r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, m)));
+  });
+  const log = h("div", { class: "log", id: "log" }, chatLog.map(msgEl));
+  const ta = h("textarea", { id: "draft", placeholder: "💬 …", "aria-label": "Message",
+    oninput: e => autosave(e.target.value),
+    onkeydown: e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); } });
+  ta.value = store.get("draft." + p.id, "");
+  const btn = h("button", { class: "send", id: "send", title: "Send (Ctrl+Enter)", "aria-label": "Send", onclick: send }, "➤");
+  async function send() {
+    const text = ta.value.trim(); if (!text || btn.disabled) return;
+    btn.disabled = true; chatLog.push({ role: "user", content: text }); log.append(msgEl(chatLog.at(-1)));
+    ta.value = ""; autosave("");
+    const r = await api("/api/chat", { project: p.id, provider: prov, model: modelSel.value,
+      messages: chatLog.filter(m => !m.err).map(({ role, content }) => ({ role, content })) });
+    const m = r.ok ? { role: "assistant", content: r.text, meta: r }
+                   : { role: "assistant", content: `${r.icon || "⚠️"} ${r.message || "Something went wrong."}`, err: true };
+    chatLog.push(m); log.append(msgEl(m)); log.scrollTop = log.scrollHeight;
+    if (r.spend) { S.spend = r.spend; paintBar(); }
+    btn.disabled = false; ta.focus();
+  }
+  return [projectRow(), h("section", { class: "chat" },
+    h("div", { class: "picker" }, provSel, modelSel), log,
+    h("div", { class: "composer" }, ta, btn), h("div", { class: "saved", id: "saved" }))];
+}
+function msgEl(m) {
+  const e = h("div", { class: "msg" + (m.role === "user" ? " me" : "") + (m.err ? " err" : "") }, m.content);
+  if (m.meta) e.append(h("span", { class: "meta" },
+    `${m.meta.model} · $${m.meta.usd.toFixed(4)}${m.meta.priced ? "" : " ~"} · ${m.meta.tokens_in}+${m.meta.tokens_out} tok`));
+  return e;
+}
+
+function render() {
+  const main = $("#main"); main.innerHTML = "";
+  const path = PATHS.find(p => p.id === view);
+  let kids;
+  if (view === "start") kids = startView();
+  else if (view === "chat") kids = chatView();
+  else kids = [offCard(path.flag, path.sym, path.name, path.later)];
+  main.append(...kids);
+  $("#back").disabled = !trail.length && !(S && S.hermes_url);
+  store.set("view", view);
+}
+
+(async function boot() {
+  const r = await api("/api/state");
+  if (!r.ok) { $("#main").innerHTML = ""; $("#main").append(h("div", { class: "offcard" }, h("div", { class: "big" }, "🔌"), h("h2", {}, "The Lab server isn't answering."))); return; }
+  S = r; paintBar();
+  const v = store.get("view", "start");
+  if (PATHS.some(p => p.id === v)) { trail = ["start"]; view = v; }
+  render();
+})();
+</script>
+</body>
+</html>

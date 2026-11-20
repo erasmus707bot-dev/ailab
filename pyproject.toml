@@ -9,5 +9,8 @@ dependencies = []
 [project.optional-dependencies]
 keyring = ["keyring"]
 
+[tool.setuptools.package-data]
+ailab = ["web/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -9,7 +9,7 @@ It runs **standalone**, or **connected** to a Hermes install through the Hermes 
 | Part | State |
 |---|---|
 | Provider layer (OpenAI-compatible + Claude) | built (M2) |
-| UI + router chat | planned (M3) |
+| UI + router chat | built (M3) — `router` switched off |
 | Live preview | planned (M4) |
 | Agent loop | planned (M5) |
 
@@ -32,6 +32,17 @@ git clone <this repo> ailab && cd ailab
 python3 -m unittest discover -s tests      # or: python3 -m pytest -q
 python3 -m ailab status
 ```
+
+## Run the UI
+
+```bash
+python3 -m ailab serve            # http://127.0.0.1:8795/  (127.0.0.1 only)
+```
+
+Dark by default with a light toggle, full screen, phone-friendly. The start page offers paths
+(💬 Ask models · 👁 Live preview · 🤖 Agent · ⚖️ Compare). Each part stays **switched off** until it is
+turned on in `~/.config/ailab/config.json` → `"flags"`; the page has no switch for this on purpose.
+Typing is autosaved to a recovery log in `~/.config/ailab/recovery/`.
 
 ## Keys (standalone)
 
