@@ -123,6 +123,20 @@
     .pvpane { order: -1; position: sticky; top: 52px; height: 46dvh; z-index: 2; }   /* preview stays in view above the code */
     .code { min-height: 34vh; }
   }
+  /* agent */
+  .agent { display: flex; flex-direction: column; gap: 10px; }
+  .agent textarea { width: 100%; min-height: 90px; resize: vertical; border-radius: var(--r); border: 1px solid var(--line);
+    background: var(--panel); padding: 10px; }
+  .runbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .steps { display: flex; flex-direction: column; gap: 8px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 12px; }
+  .step .hd { display: flex; gap: 8px; align-items: baseline; }
+  .step .n { color: var(--dim); font-size: .8rem; min-width: 1.6em; }
+  .step .why { color: var(--dim); font-size: .9rem; }
+  .step pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; font-size: .82rem; max-height: 40vh; overflow: auto; }
+  .step.held { border-color: var(--warn); }
+  .step.err { border-color: var(--bad); }
+  .final { background: var(--calm); border-radius: var(--r); padding: 10px 12px; }
 </style>
 </head>
 <body>
@@ -407,15 +421,99 @@ async function capture(frame, pid, note) {
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && view === "preview" && pvPoll) pvPoll(); });
 
+/* ---------- agent (flag `agent`) ---------- */
+let agTimer = null;
+const ICON = { list: "📂", read: "📖", write: "📝", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
+const STATE = { running: "⏳ Working", done: "✅ Done", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
+                refused: "🔒 Refused", failed: "⚠️ Failed" };
+function agentView() {
+  if (!S.flags.agent) return [offCard("agent", "🤖", "Agent")];
+  const p = curProject();
+  const provs = S.providers.filter(x => !p.sensitive || x.local);
+  const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
+  const modelSel = h("select", { "aria-label": "Model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
+  const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
+    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
+  api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
+    modelSel.innerHTML = "";
+    if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
+    const want = store.get("model." + prov, r.models[0]);
+    r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, m)));
+  });
+  const task = h("textarea", { id: "agtask", "aria-label": "Task", placeholder: "🤖 What should the agent do? e.g. Add a footer with today's year, then check it's there." });
+  task.value = store.get("agtask." + p.id, "");
+  let t = null;
+  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t);
+    t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
+  const startBtn = h("button", { class: "btn pri", id: "agstart" }, "▶ Start");
+  const stopBtn = h("button", { class: "btn", id: "agstop", disabled: true }, "⏹ Stop");
+  const status = h("span", { class: "note", id: "agstatus", role: "status" });
+  const held = h("span", { class: "chip", id: "agheld", hidden: true });
+  const steps = h("div", { class: "steps", id: "agsteps", "aria-live": "polite" });
+  const final = h("div", { class: "final", id: "agfinal", hidden: true });
+
+  function paint(run) {
+    status.textContent = `${STATE[run.state] || run.state} · ${run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
+    steps.innerHTML = "";
+    run.steps.forEach(s => {
+      const r = s.result || {};
+      const cls = "step" + (r.held ? " held" : "") + (r.error ? " err" : "");
+      const line = s.action === "write" ? `${s.path} (${s.bytes || 0} bytes)` : s.action === "run" ? s.cmd
+        : s.action === "read" ? s.path : s.action === "hermes" ? s.tool : s.action === "done" ? (s.summary || "") : "";
+      const body = r.held ? `✋ Held for your approval — not written (${r.approval})`
+        : r.error ? `⚠️ ${r.error}` : r.output != null ? `exit ${r.exit}\n${r.output}` : r.text != null ? r.text.slice(0, 2000)
+        : JSON.stringify(r, null, 1).slice(0, 2000);
+      steps.append(h("div", { class: cls },
+        h("div", { class: "hd" }, h("span", { class: "n" }, s.n), h("span", { "aria-hidden": "true" }, r.held ? "✋" : ICON[s.action] || "•"),
+          h("b", {}, s.action), h("span", {}, line)),
+        s.why ? h("div", { class: "why" }, s.why) : null,
+        s.action === "done" ? null : h("details", {}, h("summary", {}, "output"), h("pre", {}, body))));
+    });
+    const running = run.state === "running";
+    startBtn.disabled = running; stopBtn.disabled = !running;
+    final.hidden = running || !run.why; final.textContent = run.why || "";
+    if (running) { clearTimeout(agTimer); agTimer = setTimeout(poll, 1000); }
+    else api("/api/agent/approvals").then(a => { const n = (a.items || []).length;
+      held.hidden = !n; held.textContent = `✋ ${n} waiting for your approval`; });
+  }
+  async function poll() {
+    const id = store.get("agrun." + p.id, null); if (!id || view !== "agent") return;
+    const r = await api(`/api/agent/run?id=${encodeURIComponent(id)}`);
+    if (!r.ok) { store.set("agrun." + p.id, null); status.textContent = ""; return; }
+    if (r.spend) { S.spend = r.spend; paintBar(); }
+    paint(r.run);
+  }
+  startBtn.onclick = async () => {
+    if (!task.value.trim()) { status.textContent = "✏️ Tell the agent what to do first."; return; }
+    startBtn.disabled = true;
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: task.value });
+    if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
+    store.set("agrun." + p.id, r.run.id); paint(r.run);
+  };
+  stopBtn.onclick = async () => {
+    const id = store.get("agrun." + p.id, null); if (!id) return;
+    stopBtn.disabled = true; const r = await api("/api/agent/stop", { id }); if (r.ok) paint(r.run);
+  };
+  poll();
+  return [projectRow(), h("section", { class: "agent" },
+    h("div", { class: "picker" }, provSel, modelSel), task,
+    h("div", { class: "runbar" }, startBtn, stopBtn, held,
+      S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
+    status, final, steps,
+    h("details", {}, h("summary", {}, "ℹ️ Limits"),
+      h("p", {}, "Runs in the sandbox (no internet, writes only in this project). Stops at the step cap, the $ cap, ⏹ Stop, or Hermes STOP_SHIFTS. Writes anywhere else wait for your approval.")))];
+}
+
 function render() {
   const main = $("#main"); main.innerHTML = "";
-  clearInterval(pvTimer); pvTimer = null; pvPoll = null;
+  clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer);
   main.classList.toggle("wide", view === "preview" && !!S.flags.preview);
   const path = PATHS.find(p => p.id === view);
   let kids;
   if (view === "start") kids = startView();
   else if (view === "chat") kids = chatView();
   else if (view === "preview") kids = previewView();
+  else if (view === "agent") kids = agentView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = !trail.length && !(S && S.hermes_url);

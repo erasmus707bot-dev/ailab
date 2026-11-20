@@ -1,0 +1,218 @@
+"""M5 acceptance — agent loop behind the `agent` flag: sandbox runs, caps, Stop, STOP_SHIFTS, approvals, MCP jobs."""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+
+from ailab import agent, config, preview, server, store
+from ailab.mcp_client import HermesRefused
+from ailab.providers.base import ChatResult
+from ailab.spend import SpendBlocked
+from tests.test_server import Srv
+
+HAS_SRT = bool(shutil.which("srt"))
+
+
+def act(**kw) -> str:
+    return json.dumps(kw)
+
+
+class Brain:
+    """Scripted model: returns the replies in order (last one repeats)."""
+
+    def __init__(self, replies, usd=0.001, gate=None):
+        self.replies, self.usd, self.gate, self.calls = list(replies), usd, gate, []
+
+    def chat(self, project, prov, model, msgs, max_tokens=1024, cap_usd=None, task=""):
+        self.calls.append(msgs[-1]["content"])
+        if self.gate:
+            self.gate.wait(5)
+        if cap_usd is not None and self.usd > cap_usd:
+            raise SpendBlocked(f"Estimated ${self.usd:.4f} is over this run's cap of ${cap_usd:.2f}.")
+        text = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        return ChatResult(text, prov, model, 10, 5, self.usd, True)
+
+
+class FakeMCP:
+    def __init__(self, stopped=False, refuse_stop=False):
+        self.stopped, self.refuse_stop, self.calls = stopped, refuse_stop, []
+
+    def call(self, tool, args=None):
+        self.calls.append(tool)
+        if tool == "shifts_stopped":
+            if self.refuse_stop:
+                raise HermesRefused("not_allowed", "not on allowlist")
+            return {"ok": True, "stopped": self.stopped, "why": "shifts stopped (STOP_SHIFTS)" if self.stopped else ""}
+        if tool == "addon_build":
+            return {"ok": True, "key": "addon:j1", "state": "queued"}
+        if tool == "job_wait":
+            return {"ok": True, "key": args["key"], "state": "done", "finished": True, "output": "dist/hello.zip"}
+        return {"ok": True}
+
+
+class Base(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["AILAB_HOME"] = self.tmp.name
+        if not HAS_SRT:
+            os.environ["AILAB_ALLOW_UNSANDBOXED"] = "1"
+        self.project = store.project("scratch")
+
+    def tearDown(self):
+        os.environ.pop("AILAB_HOME", None)
+        os.environ.pop("AILAB_ALLOW_UNSANDBOXED", None)
+        self.tmp.cleanup()
+
+    def run_agent(self, brain, mode="standalone", mcp=None, task="do it", **cfg):
+        brain.mcp = mcp
+        c = config.load({"mode": mode, **cfg})
+        r = agent.Run(brain, c, self.project, "openrouter", "m", task)
+        r.loop()
+        return r
+
+
+class Loop(Base):
+    @unittest.skipUnless(HAS_SRT, "srt not installed — acceptance owed on gandalf")
+    def test_acceptance_fixture_task_completes_in_srt(self):
+        site = preview.ensure_site("scratch")
+        html = (site / "index.html").read_text().replace("</main>", '<footer id="lab-footer">Made in the Lab</footer>\n</main>')
+        r = self.run_agent(Brain([
+            act(action="read", path="index.html", why="see the page"),
+            act(action="write", path="index.html", content=html, why="add footer"),
+            act(action="run", cmd="grep -c lab-footer index.html", why="check"),
+            act(action="done", summary="Footer added; grep found it once.")]))
+        self.assertEqual(r.state, "done", r.why)
+        run = next(s for s in r.steps if s["action"] == "run")
+        self.assertEqual((run["result"]["exit"], run["result"]["output"].strip()), (0, "1"))
+        self.assertIn("lab-footer", (site / "index.html").read_text())
+        self.assertTrue(r.log.exists())
+
+    @unittest.skipUnless(HAS_SRT, "srt not installed")
+    def test_sandboxed_run_cannot_escape(self):
+        site = preview.ensure_site("scratch").resolve()
+        target = Path.home() / f".ailab-escape-{os.getpid()}"
+        res = agent.run_in_sandbox(site, f"echo x > {target}; echo y > {site}/ok.txt; "
+                                         "python3 -c \"import urllib.request as u; u.urlopen('https://example.com', timeout=5)\" "
+                                         "&& echo NET || echo NONET")
+        self.assertFalse(target.exists())
+        self.assertTrue((site / "ok.txt").exists())                            # inside the folder is fine
+        self.assertIn("NONET", res["output"])
+
+    def test_write_outside_project_is_held_for_approval(self):
+        r = self.run_agent(Brain([
+            act(action="write", path="../outside.html", content="nope"),
+            act(action="write", path="/etc/agent.txt", content="nope"),
+            act(action="done", summary="tried")]))
+        self.assertEqual(r.state, "done")
+        self.assertTrue(all(s["result"].get("held") for s in r.steps[:2]))
+        self.assertFalse((Path(self.tmp.name) / "projects/scratch/outside.html").exists())
+        items = agent.approvals()
+        self.assertEqual([i["path"] for i in items], ["../outside.html", "/etc/agent.txt"])
+        self.assertTrue(all(i["state"] == "waiting" and i["kind"] == "write_outside_project" for i in items))
+
+    def test_step_cap(self):
+        r = self.run_agent(Brain([act(action="list")]), agent_step_cap=3)
+        self.assertEqual((r.state, len(r.steps)), ("capped", 3))
+
+    def test_run_dollar_cap(self):
+        r = self.run_agent(Brain([act(action="list")], usd=0.2), agent_cap_usd=0.5)
+        self.assertEqual(r.state, "capped")
+        self.assertLessEqual(r.usd, 0.5)
+        self.assertEqual(len(r.steps), 2)
+
+    def test_bad_reply_is_logged_and_loop_continues(self):
+        r = self.run_agent(Brain(["sure, I'll do that!", act(action="done", summary="ok")]))
+        self.assertEqual([s["action"] for s in r.steps], ["bad_reply", "done"])
+        self.assertEqual(r.state, "done")
+
+    def test_hermes_tools_need_connected_and_allowlist(self):
+        r = self.run_agent(Brain([act(action="hermes", tool="addon_build"), act(action="done", summary="x")]))
+        self.assertIn("connected mode", r.steps[0]["result"]["error"])
+        r = self.run_agent(Brain([act(action="hermes", tool="job_cancel", args={"key": "k"}),
+                                  act(action="done", summary="x")]), mode="connected", mcp=FakeMCP())
+        self.assertIn("isn't on the agent's Hermes list", r.steps[0]["result"]["error"])
+
+    def test_stop_button(self):
+        gate = threading.Event()
+        brain = Brain([act(action="list")], gate=gate)
+        brain.mcp = None
+        r = agent.Run(brain, config.load(), self.project, "openrouter", "m", "loop")
+        t = threading.Thread(target=r.loop)
+        t.start()
+        time.sleep(0.2)
+        r.stop()
+        gate.set()
+        t.join(5)
+        self.assertEqual(r.state, "stopped")
+        self.assertIn("Stopped by you", r.why)
+        self.assertLessEqual(len(r.steps), 1)
+
+
+class Connected(Base):
+    def test_connected_run_starts_studio_job_and_collects_output(self):
+        mcp = FakeMCP()
+        r = self.run_agent(Brain([
+            act(action="hermes", tool="addon_build", args={"template": "hello"}),
+            act(action="hermes", tool="job_wait", args={"key": "addon:j1", "max_s": 45}),
+            act(action="done", summary="built")]), mode="connected", mcp=mcp)
+        self.assertEqual(r.state, "done")
+        self.assertEqual(r.steps[0]["result"]["key"], "addon:j1")
+        self.assertEqual(r.steps[1]["result"]["output"], "dist/hello.zip")
+        self.assertEqual(mcp.calls.count("shifts_stopped"), 6)                  # before + after every model call
+        self.assertIn("addon_build", mcp.calls)
+
+    def test_stop_shifts_stops_before_any_model_call(self):
+        brain = Brain([act(action="list")])
+        r = self.run_agent(brain, mode="connected", mcp=FakeMCP(stopped=True))
+        self.assertEqual(r.state, "stopped")
+        self.assertIn("STOP_SHIFTS", r.why)
+        self.assertEqual(brain.calls, [])
+
+    def test_kill_switch_unreadable_means_stop(self):
+        brain = Brain([act(action="list")])
+        r = self.run_agent(brain, mode="connected", mcp=FakeMCP(refuse_stop=True))
+        self.assertEqual(r.state, "stopped")
+        self.assertEqual(brain.calls, [])
+
+
+class AgentOff(Srv):
+    flags = {"router": False}
+
+    def test_all_agent_routes_403(self):
+        for path, body in (("/api/agent/start", {"project": "scratch", "task": "x"}), ("/api/agent/stop", {"id": "x"}),
+                           ("/api/agent/run?id=x", None), ("/api/agent/approvals", None)):
+            code, r, _ = self.req(path, body)
+            self.assertEqual((code, r["code"], r["flag"]), (403, "not_switched_on", "agent"), path)
+
+
+class AgentOn(Srv):
+    flags = {"agent": True}
+
+    def setUp(self):
+        super().setUp()
+        self.lab.chat = Brain([act(action="list"), act(action="done", summary="looked")]).chat
+        self.lab.mcp = None
+
+    def test_start_poll_done_and_one_run_per_project(self):
+        code, r, _ = self.req("/api/agent/start", {"project": "scratch", "provider": "ollama", "model": "m", "task": "look"})
+        self.assertEqual(code, 200, r)
+        rid = r["run"]["id"]
+        for _ in range(50):
+            v = self.req(f"/api/agent/run?id={rid}")[1]["run"]
+            if v["state"] != "running":
+                break
+            time.sleep(0.05)
+        self.assertEqual(v["state"], "done")
+        self.assertEqual([s["action"] for s in v["steps"]], ["list", "done"])
+        code, r, _ = self.req("/api/agent/start", {"project": "scratch", "task": ""})
+        self.assertEqual(r["code"], "bad_args")
+
+
+if __name__ == "__main__":
+    unittest.main()

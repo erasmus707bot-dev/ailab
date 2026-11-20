@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, config, preview, store
+from . import __version__, agent, config, preview, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -112,6 +112,38 @@ class App:
             return _off("preview")
         return 200, preview.save_capture(self._pid(b.get("project")), str(b.get("png") or ""))
 
+    # ---- agent (flag `agent`) ----
+    @property
+    def agents(self):
+        if getattr(self, "_agents", None) is None:
+            self._agents = agent.Agents()
+        return self._agents
+
+    def agent_start(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        proj = store.project(self._pid(b.get("project")))
+        run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""),
+                                str(b.get("task") or ""))
+        return 200, {"ok": True, "run": run.view()}
+
+    def agent_run(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        return 200, {"ok": True, "run": self.agents.get((q.get("id") or [""])[0]).view(), "spend": self.spend()}
+
+    def agent_stop(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        r = self.agents.get(str(b.get("id") or ""))
+        r.stop()
+        return 200, {"ok": True, "run": r.view()}
+
+    def agent_approvals(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        return 200, {"ok": True, "items": agent.approvals()}
+
     def chat(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["router"]:
             return _off("router")
@@ -202,6 +234,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_read, q)
             if u.path == "/api/preview/version":
                 return self._run(app.preview_version, q)
+            if u.path == "/api/agent/run":
+                return self._run(app.agent_run, q)
+            if u.path == "/api/agent/approvals":
+                return self._run(app.agent_approvals, q)
             if u.path == "/api/recover":
                 return self._run(lambda: (200, {"ok": True, "fields": store.recover((q.get("project") or [""])[0])}))
             return self._send(404, {"ok": False, "code": "not_found"})
@@ -226,6 +262,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_save, b)
             if p == "/api/preview/capture":
                 return self._run(app.preview_capture, b)
+            if p == "/api/agent/start":
+                return self._run(app.agent_start, b)
+            if p == "/api/agent/stop":
+                return self._run(app.agent_stop, b)
             if p == "/api/autosave":
                 return self._run(lambda: (200, store.autosave(str(b.get("project")), str(b.get("field") or "draft"),
                                                               str(b.get("text") or ""))))
@@ -255,6 +295,8 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        if getattr(app, "_agents", None):
+            app._agents.stop_all()
         if getattr(app, "_pv", None):
             app._pv.close()                                         # stop sandboxed preview servers
     return 0
