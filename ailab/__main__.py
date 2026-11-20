@@ -1,4 +1,4 @@
-"""python3 -m ailab status | models <provider> [--refresh] | serve [--port N] [--host 127.0.0.1]"""
+"""python3 -m ailab status | doctor | models <provider> [--refresh] | serve [--port N] [--host 127.0.0.1]"""
 from __future__ import annotations
 
 import json
@@ -15,6 +15,15 @@ def main(argv: list[str] | None = None) -> int:
         port = int(a[a.index("--port") + 1]) if "--port" in a else None
         host = a[a.index("--host") + 1] if "--host" in a else "127.0.0.1"
         return serve(host, port)
+    if cmd == "doctor":
+        from .preview import Preview                               # noqa: PLC0415
+        pv = Preview()
+        try:
+            r = pv.doctor()
+        finally:
+            pv.close()
+        print(("✅ preview sandbox OK " if r["ok"] else "❌ preview sandbox FAILED ") + json.dumps(r))
+        return 0 if r["ok"] else 1
     lab = Lab()
     if cmd == "status":
         print(json.dumps(lab.status(), indent=1))

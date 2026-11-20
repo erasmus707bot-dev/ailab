@@ -10,7 +10,7 @@ dependencies = []
 keyring = ["keyring"]
 
 [tool.setuptools.package-data]
-ailab = ["web/*.html", "fixtures/hello/*", "sandbox/*.py"]
+ailab = ["web/*.html", "web/*.svg", "fixtures/hello/*", "sandbox/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

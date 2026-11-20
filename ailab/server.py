@@ -190,6 +190,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._send(403, {"ok": False, "code": "cross_origin"})
             if u.path in ("/", "/index.html"):
                 return self._send(200, index, "text/html; charset=utf-8")
+            if u.path == "/icon.svg":
+                return self._send(200, (WEB / "icon.svg").read_bytes(), "image/svg+xml")
             if u.path == "/api/state":
                 return self._run(lambda: (200, app.state()))
             if u.path == "/api/models":

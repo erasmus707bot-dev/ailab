@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=AI Lab
+Comment=Open the AI Lab (starts it if it isn't running)
+Exec=/home/gandalf/ailab/tools/ailab-open.sh
+Icon=/home/gandalf/ailab/ailab/web/icon.svg
+Terminal=false
+Categories=Development;
+StartupNotify=false

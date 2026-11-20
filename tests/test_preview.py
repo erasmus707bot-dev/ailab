@@ -84,7 +84,9 @@ class PreviewOn(Srv):
         secret.write_text("nope")
         try:
             cfg = Path(self.tmp.name) / "s.json"
-            cfg.write_text(json.dumps(preview.srt_settings(root.resolve())))
+            scratch = Path(self.tmp.name) / "scratch"
+            scratch.mkdir()
+            cfg.write_text(json.dumps(preview.srt_settings(root.resolve(), scratch)))
             r = subprocess.run(["srt", "-s", str(cfg), "sh", "-c",
                                 f"cat {secret}; echo x > {root}/w.txt; cat {root}/index.html | head -c 15"],
                                capture_output=True, text=True, timeout=60, cwd="/tmp",
@@ -142,6 +144,14 @@ class PreviewOn(Srv):
             code, text, _ = self.req("/preview/scratch/")
             self.assertEqual(code, 503)
             popen.assert_not_called()
+
+    def test_runtime_prefix_under_home_is_readable(self):
+        npm = str(Path.home() / ".npm-global/lib/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js")
+        self.assertEqual(preview._prefix(npm), Path.home() / ".npm-global")
+        self.assertEqual(preview._prefix("/usr/bin/python3"), Path("/usr"))
+        s = preview.srt_settings(Path("/x"))
+        self.assertNotIn(str(Path.home()), s["filesystem"]["allowRead"])         # never the whole home
+        self.assertIn("/x", s["filesystem"]["denyWrite"])
 
     def test_dead_sandbox_restarts(self):
         self.req("/preview/scratch/")

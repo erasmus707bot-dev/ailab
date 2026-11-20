@@ -127,12 +127,37 @@ def sandbox_kind() -> str:
     return "srt" if shutil.which("srt") else "missing"
 
 
-def srt_settings(root: Path) -> dict:
-    """Deny-by-default for $HOME, allow reading only the project + the pipe script; no writes, no network."""
+def _prefix(exe: str | None) -> Path | None:
+    """Install folder of a program (srt, node, python) — needed when it lives under $HOME (~/.npm-global, nvm)."""
+    if not exe:
+        return None
+    r = Path(exe).resolve()
+    parts = r.parts
+    if "node_modules" in parts:                         # …/<prefix>/lib/node_modules/@scope/pkg/dist/cli.js
+        i = parts.index("node_modules")
+        return Path(*parts[:max(i - 1, 1)])
+    return r.parent.parent                              # …/<prefix>/bin/node
+
+
+def runtime_reads() -> list[str]:
+    home, out = Path.home().resolve(), []
+    for exe in (shutil.which("srt"), shutil.which("node"), sys.executable):
+        pre = _prefix(exe)
+        if pre and pre.is_relative_to(home) and pre != home:
+            out.append(str(pre))
+    for pre in {Path(sys.prefix).resolve(), Path(sys.base_prefix).resolve()}:
+        if pre.is_relative_to(home) and pre != home:
+            out.append(str(pre))
+    return sorted(set(out))
+
+
+def srt_settings(root: Path, scratch: Path | None = None) -> dict:
+    """$HOME unreadable except the project, the pipe script and the runtimes' own install folders.
+    Writes only to an empty per-sandbox scratch dir (srt needs one); no network."""
     return {"network": {"allowedDomains": [], "deniedDomains": []},
             "filesystem": {"denyRead": [str(Path.home()), "/etc/ssh", "/root"],
-                           "allowRead": [str(root), str(PIPE.parent)],
-                           "allowWrite": [], "denyWrite": []}}
+                           "allowRead": [str(root), str(PIPE.parent), *runtime_reads()],
+                           "allowWrite": [str(scratch)] if scratch else [], "denyWrite": [str(root)]}}
 
 
 class Sandbox:
@@ -149,13 +174,13 @@ class Sandbox:
             raise PreviewError("The sandbox (srt) isn't installed, so the preview won't run code. "
                                "Nothing ran outside the sandbox.", "no_sandbox", "🧱")
         cmd = [sys.executable, "-I", "-B", str(PIPE), str(self.root)]
+        cwd = tempfile.mkdtemp(prefix="ailab-", dir="/tmp")      # short path: srt bridge sockets
         if self.kind == "srt":
             run = config.home() / "run"
             run.mkdir(parents=True, exist_ok=True)
             cfg = run / f"srt-{self.pid}.json"
-            cfg.write_text(json.dumps(srt_settings(self.root)))
+            cfg.write_text(json.dumps(srt_settings(self.root, Path(cwd))))
             cmd = ["srt", "-s", str(cfg), *cmd]
-        cwd = tempfile.mkdtemp(prefix="ailab-", dir="/tmp")      # short path: srt bridge sockets
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      cwd=cwd, text=True, bufsize=1, start_new_session=True)
 
@@ -231,6 +256,15 @@ class Preview:
 
     def version(self, pid: str) -> str:
         return self.box(pid).ask({"op": "version"}).get("v", "")
+
+    def doctor(self, pid: str = "scratch") -> dict:
+        """One-shot health check: start the sandbox, fetch index.html, report the real error if any."""
+        b = self.box(pid)
+        try:
+            r = b.ask({"op": "get", "path": "index.html"})
+            return {"ok": bool(r.get("ok")), "sandbox": b.kind, "status": r.get("status"), "reads": runtime_reads()}
+        except PreviewError as e:
+            return {"ok": False, "sandbox": b.kind, "error": e.message, "reads": runtime_reads()}
 
     def status(self, pid: str) -> dict:
         b = self.box(pid)
