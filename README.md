@@ -36,7 +36,7 @@ python3 -m ailab status
 ## Run the UI
 
 ```bash
-python3 -m ailab serve            # http://127.0.0.1:8795/  (127.0.0.1 only)
+python3 -m ailab serve            # http://127.0.0.1:8850/  (127.0.0.1 only)
 ```
 
 Dark by default with a light toggle, full screen, phone-friendly. The start page offers paths

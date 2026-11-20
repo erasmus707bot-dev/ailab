@@ -156,7 +156,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
 
 def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
     app = App()
-    srv = make_server(app, host, port or app.cfg["port"])
+    port = port or app.cfg["port"]
+    try:
+        srv = make_server(app, host, port)
+    except OSError as e:
+        print(f"⚠️ Port {port} is already in use by another program ({e.strerror}). The Lab did not start.\n"
+              f"   Pick another: python3 -m ailab serve --port <N>, or set \"port\" in {config.home()}/config.json",
+              file=sys.stderr)
+        return 2
     on = [k for k, v in app.cfg["flags"].items() if v] or ["none"]
     print(f"AI Lab on http://{host}:{srv.server_address[1]}/  mode={app.cfg['mode']}  on={','.join(on)}",
           file=sys.stderr)

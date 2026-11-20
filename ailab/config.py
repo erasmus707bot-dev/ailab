@@ -22,7 +22,7 @@ DEFAULTS: dict = {
     "base_urls": {},                      # override any provider's base URL
     # Feature flags. Switched on one at a time by Scott (M7). There is deliberately no API to flip them.
     "flags": {"router": False, "preview": False, "agent": False},
-    "port": 8795,                         # UNVERIFIED free on gandalf
+    "port": 8850,                         # 8795 is Hermes SiteGen; 8850 unused in ~/hermes (2026-11-20)
     "hermes_url": "",                     # connected mode: where the ⌂ Hermes button goes
 }
 

@@ -121,6 +121,15 @@ class RouterOff(Srv):
         code, r, _ = self.req("/api/autosave", {"project": "../etc", "text": "x"})
         self.assertEqual(code, 400)
 
+    def test_busy_port_says_so_and_does_not_start(self):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = server.serve("127.0.0.1", self.srv.server_address[1])
+        self.assertEqual(rc, 2)
+        self.assertIn("already in use", err.getvalue())
+
     def test_binds_localhost_only(self):
         self.assertEqual(self.srv.server_address[0], "127.0.0.1")
 
