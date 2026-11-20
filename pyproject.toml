@@ -1,0 +1,13 @@
+[project]
+name = "ailab"
+version = "0.2.0"
+description = "Multi-model coding lab — standalone or connected to Hermes via MCP"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = []
+
+[project.optional-dependencies]
+keyring = ["keyring"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
