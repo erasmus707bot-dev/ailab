@@ -59,18 +59,25 @@ def hold_for_approval(pid: str, run_id: str, path: str, content: str) -> dict:
     return item
 
 
-def approvals(state: str = "waiting") -> list[dict]:
+def approvals(state: str | None = "waiting") -> list[dict]:
+    """Latest record per item (M6: Apply / Reject append a new state line; nothing is rewritten)."""
     f = _approvals() / "items.jsonl"
-    rows = []
+    merged: dict[str, dict] = {}
     if f.exists():
         for line in f.read_text().splitlines():
             try:
                 r = json.loads(line)
             except ValueError:
                 continue
-            if not state or r.get("state") == state:
-                rows.append(r)
+            if r.get("id"):
+                merged[r["id"]] = {**merged.get(r["id"], {}), **r}
+    rows = [r for r in merged.values() if not state or r.get("state") == state]
     return rows[-200:]
+
+
+def set_approval_state(aid: str, state: str, **extra) -> None:
+    with open(_approvals() / "items.jsonl", "a") as fh:
+        fh.write(json.dumps({"id": aid, "state": state, "decided_at": time.time(), **extra}) + "\n")
 
 
 def parse_action(text: str) -> dict:
@@ -118,6 +125,8 @@ class Run:
         self.stop_flag = threading.Event()
         self.log = config.home() / "projects" / project["id"] / "agent" / f"{self.id}.jsonl"
         self.log.parent.mkdir(parents=True, exist_ok=True)
+        # M6: 📋 Review lists the models used from these
+        self.log.with_suffix(".meta.json").write_text(json.dumps({"provider": provider, "model": model, "at": time.time()}))
         self.connected = cfg.get("mode") == "connected"
 
     # ---- public view ----

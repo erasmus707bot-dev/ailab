@@ -135,6 +135,7 @@
   .step .why { color: var(--dim); font-size: .9rem; }
   .step pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; font-size: .82rem; max-height: 40vh; overflow: auto; }
   .step.held { border-color: var(--warn); }
+  .step .hd b { overflow-wrap: anywhere; }
   .step.err { border-color: var(--bad); }
   .final { background: var(--calm); border-radius: var(--r); padding: 10px 12px; }
 </style>
@@ -189,6 +190,7 @@ const PATHS = [
   { id: "chat", flag: "router", sym: "💬", name: "Ask models", tip: "Pick a model, ask, see the cost of every answer." },
   { id: "preview", flag: "preview", sym: "👁", name: "Live preview", tip: "Code on one side, the running page on the other." },
   { id: "agent", flag: "agent", sym: "🤖", name: "Agent", tip: "Plan → write → run → check, step by step, with a Stop button." },
+  { id: "review", flag: null, sym: "📋", name: "Review", tip: "Send a demo to Hermes for your OK; apply or reject held agent writes." },
   { id: "compare", flag: null, sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side.", later: "M8" },
 ];
 let S = null;                          // server state
@@ -256,7 +258,7 @@ function offCard(flag, sym, name, later) {
 }
 function startView() {
   return [projectRow(), h("div", { class: "paths" }, PATHS.map(p => {
-    const on = p.flag && S.flags[p.flag];
+    const on = p.flag ? S.flags[p.flag] : !p.later;
     return h("button", { class: "path" + (on ? "" : " off"), onclick: () => go(p.id), "data-path": p.id },
       h("span", { class: "sym", "aria-hidden": "true" }, p.sym), h("span", { class: "name" }, p.name),
       h("span", {}, p.tip), h("span", { class: "st" }, on ? "🟢 On" : "⏸ Not switched on yet"));
@@ -448,7 +450,7 @@ function agentView() {
   const startBtn = h("button", { class: "btn pri", id: "agstart" }, "▶ Start");
   const stopBtn = h("button", { class: "btn", id: "agstop", disabled: true }, "⏹ Stop");
   const status = h("span", { class: "note", id: "agstatus", role: "status" });
-  const held = h("span", { class: "chip", id: "agheld", hidden: true });
+  const held = h("button", { class: "chip", id: "agheld", hidden: true, onclick: () => go("review") });
   const steps = h("div", { class: "steps", id: "agsteps", "aria-live": "polite" });
   const final = h("div", { class: "final", id: "agfinal", hidden: true });
 
@@ -474,7 +476,7 @@ function agentView() {
     final.hidden = running || !run.why; final.textContent = run.why || "";
     if (running) { clearTimeout(agTimer); agTimer = setTimeout(poll, 1000); }
     else api("/api/agent/approvals").then(a => { const n = (a.items || []).length;
-      held.hidden = !n; held.textContent = `✋ ${n} waiting for your approval`; });
+      held.hidden = !n; held.textContent = `✋ ${n} waiting for your approval — 📋 open`; });
   }
   async function poll() {
     const id = store.get("agrun." + p.id, null); if (!id || view !== "agent") return;
@@ -504,6 +506,85 @@ function agentView() {
       h("p", {}, "Runs in the sandbox (no internet, writes only in this project). Stops at the step cap, the $ cap, ⏹ Stop, or Hermes STOP_SHIFTS. Writes anywhere else wait for your approval.")))];
 }
 
+/* ---------- 📋 Review (M6): demos → Hermes; held writes → Apply / Reject ---------- */
+const RSTATE = { waiting: "✋ waiting for Scott", approved: "✓ approved (dry run)", published: "🌐 published",
+                 rejected: "✗ rejected", kept: "🏝 kept here" };
+function reviewView() {
+  const p = curProject();
+  const box = h("section", { class: "agent", id: "review" });
+  const title = h("input", { type: "text", id: "rvtitle", maxlength: 80, placeholder: "Demo title", "aria-label": "Demo title",
+    style: "width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel)" });
+  const wu = h("textarea", { id: "rvwriteup", "aria-label": "Write-up", placeholder: "📝 What it is, what the model did, how you checked it." });
+  const models = h("input", { type: "text", id: "rvmodels", "aria-label": "Models used", placeholder: "Models used (comma separated)",
+    style: "width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel)" });
+  title.value = store.get("rvtitle." + p.id, ""); wu.value = store.get("rvwu." + p.id, "");
+  let t = null;
+  const keep = () => { store.set("rvtitle." + p.id, title.value); store.set("rvwu." + p.id, wu.value); clearTimeout(t);
+    t = setTimeout(() => api("/api/autosave", { project: p.id, field: "review-writeup", text: title.value + "\n\n" + wu.value }), 700); };
+  title.oninput = keep; wu.oninput = keep;
+  const capNote = h("p", { class: "note", id: "rvcap" }, "⏳");
+  const sendBtn = h("button", { class: "btn pri", id: "rvsend" }, S.mode === "connected" ? "📤 Send to Hermes Review" : "💾 Keep for Review");
+  const out = h("p", { class: "note", id: "rvout", role: "status" });
+  const sentBox = h("div", { class: "steps", id: "rvsent" });
+  const heldBox = h("div", { class: "steps", id: "rvheld" });
+  sendBtn.onclick = async () => {
+    sendBtn.disabled = true; out.textContent = "⏳";
+    const ms = models.value.split(",").map(x => x.trim()).filter(Boolean);
+    const r = await api("/api/review/send", { project: p.id, title: title.value, writeup: wu.value, models: ms });
+    sendBtn.disabled = false;
+    out.textContent = r.ok ? (r.where === "hermes" ? "📤 Sent — it waits in Hermes 📋 Review for Scott's OK." : "💾 " + r.note)
+      : `${r.icon || "⚠️"} ${r.message || "Not sent."}`;
+    if (r.ok) load();
+  };
+  async function load() {
+    const r = await api(`/api/review?project=${encodeURIComponent(p.id)}`);
+    if (!r.ok) { out.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't load Review."}`; return; }
+    if (!models.value && r.project) models.value = (r.project.models || []).join(", ");
+    capNote.textContent = r.project && r.project.capture ? `📸 Screenshot: ${r.project.capture} (the latest capture)`
+      : "📸 No capture yet — take one in 👁 Live preview (desktop), or send without a screenshot.";
+    sentBox.innerHTML = "";
+    if (!r.sent.length) sentBox.append(h("p", { class: "note" }, "Nothing sent yet."));
+    r.sent.forEach(x => sentBox.append(h("div", { class: "step" },
+      h("div", { class: "hd" }, h("b", {}, x.title), h("span", { class: "chip" }, RSTATE[x.state] || x.state)),
+      h("div", { class: "why" }, `${x.project} · ${new Date(x.at * 1000).toLocaleString()} · ${(x.models || []).join(", ") || "models not recorded"}`),
+      x.url ? h("div", { class: "why" }, "→ " + x.url) : null, x.why ? h("div", { class: "why" }, x.why) : null,
+      x.note ? h("div", { class: "why" }, x.note) : null)));
+    heldBox.innerHTML = "";
+    if (!r.held.length) heldBox.append(h("p", { class: "note" }, "No held writes."));
+    r.held.forEach(x => {
+      const cf = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply",
+        style: "padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);max-width:9rem" });
+      const note = h("span", { class: "note" });
+      const ok = h("button", { class: "btn pri", onclick: async () => {
+        const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
+        note.textContent = a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`;
+        if (a.ok) setTimeout(load, 900);
+      } }, "✅ Apply");
+      const no = h("button", { class: "btn", onclick: async () => {
+        const a = await api("/api/review/reject", { id: x.id });
+        note.textContent = a.ok ? "✗ rejected (kept, not deleted)" : `⚠️ ${a.message}`; if (a.ok) setTimeout(load, 900);
+      } }, "✗ Reject");
+      heldBox.append(h("div", { class: "step held" },
+        h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, "✋"), h("b", {}, x.target)),
+        h("div", { class: "why" }, `From the agent in ${x.project} · ${x.bytes} bytes · outside the project folder`),
+        h("details", {}, h("summary", {}, "what would be written"), h("pre", {}, x.preview)),
+        h("div", { class: "runbar" }, cf, ok, no, note)));
+    });
+  }
+  load();
+  box.append(...[
+    h("h2", { style: "margin:4px 0" }, "📤 Send a demo"),
+    p.sensitive ? h("p", { class: "warnbox" }, "🔒 This project is sensitive — it can't go to Review.") : null,
+    title, wu, models, capNote, h("div", { class: "runbar" }, sendBtn), out,
+    h("details", {}, h("summary", {}, "ℹ️ What happens"),
+      h("p", {}, S.mode === "connected"
+        ? "Hermes holds it in 📋 Review. Scott approves with his owner PIN on the 🧪 AI Lab card. Approve runs a dry run unless he types publish; then it goes to scottchristensen.dev/lab/…"
+        : "Standalone: the demo is kept on this computer. Publishing only happens through Hermes Review (connected mode).")),
+    h("h2", { style: "margin:10px 0 4px" }, "📨 Sent"), sentBox,
+    h("h2", { style: "margin:10px 0 4px" }, "✋ Held agent writes"), heldBox].filter(Boolean));
+  return [projectRow(), box];
+}
+
 function render() {
   const main = $("#main"); main.innerHTML = "";
   clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer);
@@ -514,6 +595,7 @@ function render() {
   else if (view === "chat") kids = chatView();
   else if (view === "preview") kids = previewView();
   else if (view === "agent") kids = agentView();
+  else if (view === "review") kids = reviewView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = !trail.length && !(S && S.hermes_url);

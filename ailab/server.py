@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, config, preview, store
+from . import __version__, agent, config, preview, review, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -144,6 +144,29 @@ class App:
             return _off("agent")
         return 200, {"ok": True, "items": agent.approvals()}
 
+    # ---- 📋 Review (M6). Not behind a flag: it sends nothing to a model and spends nothing. ----
+    def review_list(self, q: dict) -> tuple[int, dict]:
+        pid = (q.get("project") or [""])[0]
+        out = {"ok": True, "mode": self.cfg["mode"], "held": review.held(),
+               "sent": review.sent(self.lab if self.cfg["mode"] == "connected" else None, self.cfg)}
+        if pid:
+            pid = self._pid(pid)
+            cap = review.latest_capture(pid)
+            out["project"] = {"id": pid, "models": review.models_used(pid), "capture": cap.name if cap else ""}
+        return 200, out
+
+    def review_send(self, b: dict) -> tuple[int, dict]:
+        models = b.get("models")
+        models = [str(m) for m in models] if isinstance(models, list) else None
+        return 200, review.send(self.lab, self.cfg, self._pid(b.get("project")), str(b.get("title") or ""),
+                                str(b.get("writeup") or ""), models)
+
+    def review_apply(self, b: dict) -> tuple[int, dict]:
+        return 200, review.apply(str(b.get("id") or ""), str(b.get("sha") or ""), str(b.get("confirm") or ""))
+
+    def review_reject(self, b: dict) -> tuple[int, dict]:
+        return 200, review.reject(str(b.get("id") or ""))
+
     def chat(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["router"]:
             return _off("router")
@@ -189,6 +212,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 code = {"no_sandbox": 503, "sandbox_failed": 502, "outside": 403, "not_found": 404,
                         "too_big": 413}.get(e.code, 400)
                 body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
+            except review.ReviewError as e:
+                code = {"sensitive": 403, "outside_home": 403, "dotfile": 403, "symlink": 403, "too_big": 413,
+                        "stale": 409, "state": 409, "secret": 422}.get(e.code, 400)
+                body = {"ok": False, "code": e.code, "icon": e.icon, "message": str(e)[:400]}
             except tuple(e[0] for e in ERRORS) as e:
                 code, kind, icon = next((c, k, i) for t, c, k, i in ERRORS if isinstance(e, t))
                 msg = getattr(e, "message", None) or str(e)
@@ -236,6 +263,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_version, q)
             if u.path == "/api/agent/run":
                 return self._run(app.agent_run, q)
+            if u.path == "/api/review":
+                return self._run(app.review_list, q)
             if u.path == "/api/agent/approvals":
                 return self._run(app.agent_approvals, q)
             if u.path == "/api/recover":
@@ -266,6 +295,12 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_start, b)
             if p == "/api/agent/stop":
                 return self._run(app.agent_stop, b)
+            if p == "/api/review/send":
+                return self._run(app.review_send, b)
+            if p == "/api/review/apply":
+                return self._run(app.review_apply, b)
+            if p == "/api/review/reject":
+                return self._run(app.review_reject, b)
             if p == "/api/autosave":
                 return self._run(lambda: (200, store.autosave(str(b.get("project")), str(b.get("field") or "draft"),
                                                               str(b.get("text") or ""))))
