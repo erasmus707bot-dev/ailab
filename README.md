@@ -47,7 +47,7 @@ The Lab refuses a key file that other users can read, or one inside the repo.
 ## Caps
 
 - Standalone: local ledger at `~/.config/ailab/ledger.json`, **$2/day** by default.
-- Connected: every call is checked and recorded through Hermes (`spend_check` / `spend_record`, category `ailab`), so there is one budget.
+- Connected: hosted calls are made **by Hermes** (`llm_call`): Hermes checks the cap, uses its own stored key and records the cost (category `ailab`), so there is one budget and the Lab never holds a key. Ollama still runs locally.
 - A single comparison run is capped at **$0.50**.
 - Before each hosted call the Lab estimates the cost (deliberately on the high side) and refuses if the cap would be crossed. Models with no known price use a high fallback price.
 

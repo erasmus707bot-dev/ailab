@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 
 from ailab import config, privacy
-from ailab.keys import HermesKeys, KeyMissing, LocalKeys
+from ailab.keys import KeyMissing, LocalKeys
 from ailab.lab import Lab
-from ailab.mcp_client import HermesMCP
+from ailab.mcp_client import HermesMCP, HermesRefused
 from ailab.models import ModelCache
 from ailab.spend import LocalLedger, SpendBlocked
 
@@ -148,14 +148,19 @@ class Connected(Base):
     def mcp_route(self, body):
         name, args = body["params"]["name"], body["params"]["arguments"]
         self.hermes["tools"].append(name)
-        if name == "spend_check":
-            ok = self.hermes["spent"] + args["usd"] <= self.hermes["cap"]
-            sc = {"ok": True, "allowed": ok, "why": "" if ok else "ailab daily cap reached"}
-        elif name == "spend_record":
-            self.hermes["spent"] += args["usd"]
-            sc = {"ok": True, "today_usd": self.hermes["spent"]}
-        elif name == "provider_key":
-            sc = {"ok": True, "key": SECRET}
+        self.hermes.setdefault("args", []).append(args)
+        if name == "llm_call":
+            est = args["max_tokens"] * 75 / 1e6
+            if args.get("sensitive"):
+                sc = {"ok": False, "code": "sensitive", "message": "sensitive"}
+            elif self.hermes["spent"] + est > self.hermes["cap"]:
+                sc = {"ok": False, "code": "over_cap", "message": "ailab daily cap reached"}
+            else:
+                self.hermes["spent"] += 0.0012
+                sc = {"ok": True, "text": "via hermes", "model": args["model"], "tokens_in": 10, "tokens_out": 5,
+                      "usd": 0.0012, "priced": True, "today_usd": self.hermes["spent"]}
+        elif name == "llm_providers":
+            sc = {"ok": True, "providers": [{"provider": "claude", "models": ["claude-x"], "has_key": True}]}
         elif name == "spend_status":
             sc = {"ok": True, "categories": {"ailab": {"today_usd": self.hermes["spent"]}}}
         else:
@@ -163,41 +168,49 @@ class Connected(Base):
         return {"jsonrpc": "2.0", "id": body["id"], "result": {"structuredContent": sc, "isError": not sc["ok"]}}
 
     def clab(self):
-        return self.lab({"/mcp": self.mcp_route, "/chat/completions": OR_CHAT}, mode="connected",
+        return self.lab({"/mcp": self.mcp_route, "/chat/completions": OLLAMA_CHAT}, mode="connected",
                         hermes_token_file=str(self.tok))
 
-    def test_connected_records_into_hermes_ledger(self):
+    def test_connected_hosted_call_goes_through_hermes_without_a_key(self):
         lab, http = self.clab()
-        lab.chat({"name": "demo"}, "openrouter", "x/m", [{"role": "user", "content": "x"}], 100)
-        self.assertEqual(self.hermes["tools"], ["spend_check", "provider_key", "spend_record"])
-        self.assertAlmostEqual(self.hermes["spent"], 0.0012)
+        r = lab.chat({"name": "demo"}, "openrouter", "x/m", [{"role": "user", "content": "x"}], 100)
+        self.assertEqual((r.text, r.usd), ("via hermes", 0.0012))
+        self.assertEqual(self.hermes["tools"], ["llm_call"])          # Hermes checks + records; no key asked
+        self.assertEqual(self.hermes["args"][0]["category"], "ailab")
+        self.assertFalse(any("openrouter.ai" in c["url"] for c in http.calls))
+        self.assertTrue(all(c["headers"]["Authorization"] == "Bearer hermes-token-xyz" for c in http.calls))
         self.assertAlmostEqual(lab.status()["spent_today_usd"], 0.0012)
-        mcp_calls = [c for c in http.calls if c["url"].endswith("/mcp")]
-        self.assertTrue(all(c["headers"]["Authorization"] == "Bearer hermes-token-xyz" for c in mcp_calls))
-        rec = [c for c in mcp_calls if c["body"]["params"]["name"] == "spend_record"][0]["body"]["params"]["arguments"]
-        self.assertEqual(rec["category"], "ailab")
 
     def test_connected_cap_blocks(self):
         self.hermes["spent"] = 1.9999
         lab, http = self.clab()
         with self.assertRaises(SpendBlocked):
-            lab.chat({}, "openrouter", "x/m", [{"role": "user", "content": "x"}], 1000)
-        self.assertFalse(any(c["url"].endswith("/chat/completions") for c in http.calls))
+            lab.chat({}, "claude", "c", [{"role": "user", "content": "x"}], 1000)
 
-    def test_connected_sensitive_still_refused_before_hermes(self):
+    def test_connected_sensitive_refused_before_hermes(self):
         lab, http = self.clab()
         with self.assertRaises(privacy.PrivacyRefused):
             lab.chat({"sensitive": True}, "claude", "c", [{"role": "user", "content": "x"}])
         self.assertEqual(http.calls, [])
 
-    def test_hermes_refusal_is_plain_key_missing(self):
-        def route(body):
-            return {"jsonrpc": "2.0", "id": body["id"], "result": {"isError": True, "structuredContent": {
-                "ok": False, "code": "unknown_tool", "message": "There is no tool called 'provider_key'."}}}
-        keys = HermesKeys(HermesMCP("http://127.0.0.1:8790/mcp", str(self.tok), FakeHTTP({"/mcp": route})))
-        with self.assertRaises(KeyMissing) as e:
-            keys.get("openrouter")
-        self.assertIn("provider_key", str(e.exception))
+    def test_connected_ollama_stays_local(self):
+        lab, http = self.clab()
+        r = lab.chat({"sensitive": True}, "ollama", "qwen3.5:9b", [{"role": "user", "content": "x"}])
+        self.assertEqual(r.text, "local")
+        self.assertEqual(self.hermes["tools"], [])
+
+    def test_connected_models_come_from_hermes(self):
+        lab, http = self.clab()
+        r = lab.list_models("claude")
+        self.assertEqual((r["source"], r["models"][0]["id"]), ("hermes", "claude-x"))
+        with self.assertRaises(HermesRefused):
+            lab.list_models("kimi")
+
+    def test_hermes_refusal_is_plain(self):
+        lab, http = self.clab()
+        with self.assertRaises(HermesRefused) as e:
+            lab.mcp.call("provider_key", {"provider": "x"})
+        self.assertEqual(e.exception.code, "not_allowed")
 
     def test_mcp_repr_hides_token(self):
         m = HermesMCP("http://127.0.0.1:8790/mcp", str(self.tok), None)

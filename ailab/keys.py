@@ -1,4 +1,5 @@
-"""Where provider keys come from. The Lab never reads Hermes Vault directly."""
+"""Standalone key lookup. In connected mode Hermes holds the keys and makes hosted calls (llm_call);
+the Lab never sees Vault or a Hermes key."""
 from __future__ import annotations
 
 import os
@@ -53,19 +54,3 @@ class LocalKeys:
             raise KeyMissing(f"No {name} key. Set {env} in {self.env_file} (chmod 600) or the OS keyring.")
         return v
 
-
-class HermesKeys:
-    """Connected: Hermes hands over the key through its MCP server (tool 'provider_key')."""
-
-    def __init__(self, mcp):
-        self.mcp = mcp
-
-    def get(self, name: str) -> str:
-        from .mcp_client import HermesRefused                     # noqa: PLC0415
-        try:
-            v = self.mcp.call("provider_key", {"provider": name}).get("key")
-        except HermesRefused as e:
-            raise KeyMissing(f"Hermes did not give a {name} key: {e.message}") from None
-        if not v:
-            raise KeyMissing(f"Hermes has no {name} key.")
-        return v

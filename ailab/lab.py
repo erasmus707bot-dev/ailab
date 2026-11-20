@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from . import config as _config
 from . import privacy, providers
-from .keys import HermesKeys, LocalKeys
-from .mcp_client import HermesMCP
+from .keys import LocalKeys
+from .mcp_client import HermesMCP, HermesRefused
 from .models import ModelCache
 from .providers.base import ChatResult
 from .spend import HermesSpend, LocalLedger, SpendBlocked
@@ -19,8 +19,10 @@ class Lab:
         self.models = ModelCache(_config.cache_dir(), self.cfg["models_ttl_s"])
         self.connected = self.cfg["mode"] == "connected"
         if self.connected:
+            # Hosted calls go through Hermes llm_call: Hermes holds the keys, checks the cap and records the cost.
+            # Local Ollama still runs direct and needs no key.
             self.mcp = mcp or HermesMCP(self.cfg["hermes_mcp_url"], self.cfg["hermes_token_file"], self.t)
-            self.keys = keys or HermesKeys(self.mcp)
+            self.keys = keys
             self.spend = spend or HermesSpend(self.mcp, self.cfg["category"])
         else:
             self.mcp = None
@@ -35,7 +37,29 @@ class Lab:
     def list_models(self, name: str, project: dict | None = None, refresh: bool = False) -> dict:
         p = self.provider(name)
         privacy.check(project or {}, p)
+        if self.connected and not p.local:
+            for e in self.mcp.call("llm_providers").get("providers", []):
+                if e["provider"] == name:
+                    return {"provider": name, "source": "hermes", "has_key": e.get("has_key"),
+                            "models": [{"id": m} for m in e.get("models", [])]}
+            raise HermesRefused("not_enabled", f"Hermes has {name} turned off.",
+                                "Turn it on in Hermes Settings → API keys.")
         return self.models.get(p, self.keys.get(p.key_name) if p.key_name else None, refresh)
+
+    def _chat_via_hermes(self, project: dict, p, model, messages, max_tokens, task) -> ChatResult:
+        try:
+            r = self.mcp.call("llm_call", {"provider": p.name, "model": model, "messages": messages,
+                                           "max_tokens": max_tokens, "category": self.cfg["category"],
+                                           "task": task or project.get("name", ""),
+                                           "sensitive": bool(project.get("sensitive"))})
+        except HermesRefused as e:
+            if e.code == "over_cap":
+                raise SpendBlocked(e.message) from None
+            if e.code in ("sensitive", "blocked_host"):
+                raise privacy.PrivacyRefused(e.message) from None
+            raise
+        return ChatResult(r.get("text", ""), p.name, r.get("model", model), int(r.get("tokens_in") or 0),
+                          int(r.get("tokens_out") or 0), float(r.get("usd") or 0), bool(r.get("priced", True)), r)
 
     def chat(self, project: dict, provider: str, model: str, messages: list[dict], max_tokens: int = 1024,
              cap_usd: float | None = None, task: str = "") -> ChatResult:
@@ -45,6 +69,8 @@ class Lab:
         est = p.estimate_usd(model, messages, max_tokens, listed)
         if cap_usd is not None and est > cap_usd:
             raise SpendBlocked(f"Estimated ${est:.4f} is over this run's cap of ${cap_usd:.2f}.")
+        if self.connected and not p.local:
+            return self._chat_via_hermes(project, p, model, messages, max_tokens, task)
         if not p.local:
             ok, why = self.spend.check(est)
             if not ok:
