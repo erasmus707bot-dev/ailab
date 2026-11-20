@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, config, store
+from . import __version__, config, preview, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -21,6 +21,11 @@ from .transport import HttpError
 
 WEB = Path(__file__).resolve().parent / "web"
 MAX_BODY = 1_000_000
+MAX_CAPTURE_BODY = 12_000_000
+# Preview pages run untrusted generated code: opaque origin (CSP sandbox), may not frame elsewhere.
+PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'self' data: blob:; "
+               "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+               "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
 PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙"}
 OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent"}
 
@@ -55,7 +60,7 @@ class App:
 
     def state(self) -> dict:
         return {"ok": True, "version": __version__, "mode": self.cfg["mode"], "flags": self.cfg["flags"],
-                "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "",
+                "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "sandbox": preview.sandbox_kind(),
                 "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama"} for n in sorted(NAMES, key=lambda n: n != "ollama")]}
 
     # ---- routes: (status, body) ----
@@ -66,6 +71,46 @@ class App:
         r = self.lab.list_models(prov, store.project(pid) or {})
         return 200, {"ok": True, "provider": prov, "source": r.get("source"),
                      "models": [m["id"] for m in r.get("models", [])][:500]}
+
+    # ---- preview (flag `preview`) ----
+    @property
+    def pv(self):
+        if getattr(self, "_pv", None) is None:
+            self._pv = preview.Preview()
+        return self._pv
+
+    def _pid(self, v) -> str:
+        pid = str((v[0] if isinstance(v, list) else v) or "scratch")
+        if not store.project(pid):
+            raise preview.PreviewError("No such project.", "bad_args", "❓")
+        return pid
+
+    def preview_files(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["preview"]:
+            return _off("preview")
+        pid = self._pid(q.get("project"))
+        return 200, {"ok": True, "files": preview.list_files(pid), **self.pv.status(pid)}
+
+    def preview_read(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["preview"]:
+            return _off("preview")
+        pid, rel = self._pid(q.get("project")), (q.get("path") or [""])[0]
+        return 200, {"ok": True, "path": rel, "text": preview.read_file(pid, rel)}
+
+    def preview_save(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["preview"]:
+            return _off("preview")
+        return 200, preview.save_file(self._pid(b.get("project")), str(b.get("path") or ""), str(b.get("text") or ""))
+
+    def preview_version(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["preview"]:
+            return _off("preview")
+        return 200, {"ok": True, "v": self.pv.version(self._pid(q.get("project")))}
+
+    def preview_capture(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["preview"]:
+            return _off("preview")
+        return 200, preview.save_capture(self._pid(b.get("project")), str(b.get("png") or ""))
 
     def chat(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["router"]:
@@ -92,14 +137,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
         def log_message(self, *a):
             pass
 
-        def _send(self, code: int, body, ctype: str = "application/json") -> None:
+        def _send(self, code: int, body, ctype: str = "application/json", csp: str | None = None) -> None:
             data = body if isinstance(body, bytes) else json.dumps(body, default=str).encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")               # never show a stale layout
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy",
+            self.send_header("Content-Security-Policy", csp or
                              "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
                              "img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'")
             self.end_headers()
@@ -108,6 +153,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
         def _run(self, fn, *args):
             try:
                 code, body = fn(*args)
+            except preview.PreviewError as e:
+                code = {"no_sandbox": 503, "sandbox_failed": 502, "outside": 403, "not_found": 404,
+                        "too_big": 413}.get(e.code, 400)
+                body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
             except tuple(e[0] for e in ERRORS) as e:
                 code, kind, icon = next((c, k, i) for t, c, k, i in ERRORS if isinstance(e, t))
                 msg = getattr(e, "message", None) or str(e)
@@ -117,32 +166,64 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                                    "message": f"{type(e).__name__}: {e}"[:300]}
             self._send(code, body)
 
+        def _foreign(self) -> bool:
+            """Requests from a sandboxed preview frame (opaque origin) are cross-site: no API for them."""
+            return self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none")
+
+        def _preview_page(self, rest: str):
+            if not app.cfg["flags"]["preview"]:
+                return self._send(403, b"Live preview is not switched on yet.", "text/plain; charset=utf-8")
+            pid, _, rel = rest.partition("/")
+            try:
+                pid = app._pid(pid)
+                code, ctype, data = app.pv.get(pid, rel)
+            except preview.PreviewError as e:
+                code, ctype, data = 503, "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
+            return self._send(code, data, ctype, csp=PREVIEW_CSP)
+
         def do_GET(self):                                                # noqa: N802
             u = urlparse(self.path)
             q = parse_qs(u.query)
+            if u.path.startswith("/preview/"):
+                return self._preview_page(u.path[len("/preview/"):])
+            if u.path.startswith("/api/") and self._foreign():
+                return self._send(403, {"ok": False, "code": "cross_origin"})
             if u.path in ("/", "/index.html"):
                 return self._send(200, index, "text/html; charset=utf-8")
             if u.path == "/api/state":
                 return self._run(lambda: (200, app.state()))
             if u.path == "/api/models":
                 return self._run(app.models, q)
+            if u.path == "/api/preview/files":
+                return self._run(app.preview_files, q)
+            if u.path == "/api/preview/file":
+                return self._run(app.preview_read, q)
+            if u.path == "/api/preview/version":
+                return self._run(app.preview_version, q)
             if u.path == "/api/recover":
                 return self._run(lambda: (200, {"ok": True, "fields": store.recover((q.get("project") or [""])[0])}))
             return self._send(404, {"ok": False, "code": "not_found"})
 
         def do_POST(self):                                               # noqa: N802
             n = int(self.headers.get("Content-Length") or 0)
-            if n > MAX_BODY:
+            p = urlparse(self.path).path
+            if n > (MAX_CAPTURE_BODY if p == "/api/preview/capture" else MAX_BODY):
                 return self._send(413, {"ok": False, "code": "too_big"})
-            if self.headers.get("Origin") and urlparse(self.headers["Origin"]).netloc != self.headers.get("Host"):
+            if (self.headers.get("Origin") and urlparse(self.headers["Origin"]).netloc != self.headers.get("Host")) \
+                    or self._foreign():
                 return self._send(403, {"ok": False, "code": "cross_origin"})
+            if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+                return self._send(415, {"ok": False, "code": "json_only"})     # no plain <form> posts
             try:
                 b = json.loads(self.rfile.read(n) or b"{}")
             except ValueError:
                 return self._send(400, {"ok": False, "code": "bad_json"})
-            p = urlparse(self.path).path
             if p == "/api/chat":
                 return self._run(app.chat, b)
+            if p == "/api/preview/file":
+                return self._run(app.preview_save, b)
+            if p == "/api/preview/capture":
+                return self._run(app.preview_capture, b)
             if p == "/api/autosave":
                 return self._run(lambda: (200, store.autosave(str(b.get("project")), str(b.get("field") or "draft"),
                                                               str(b.get("text") or ""))))
@@ -171,4 +252,7 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        if getattr(app, "_pv", None):
+            app._pv.close()                                         # stop sandboxed preview servers
     return 0

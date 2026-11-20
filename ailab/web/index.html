@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>🧪 AI Lab</title>
+<link rel="icon" href="data:,">
 <script>
   // Theme before first paint (dark by default) — no flash of the wrong mode.
   try { var t = localStorage.getItem('ailab.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
@@ -99,6 +100,28 @@
     .chips { gap: 4px; }
     .chip { padding: 4px 8px; }
     .msg { max-width: 94%; }
+  }
+  /* live preview: code ↔ steady preview */
+  main.wide { max-width: none; }
+  .split { height: calc(100dvh - 150px); min-height: 420px; display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.2fr); gap: var(--gap); min-height: 0; }
+  .pane { display: flex; flex-direction: column; gap: 8px; min-height: 0; background: var(--panel);
+    border: 1px solid var(--line); border-radius: var(--r); padding: 10px; }
+  .bar2 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 6px 10px; font-size: .9rem; }
+  .tab[aria-pressed="true"] { border-color: var(--accent); font-weight: 650; }
+  .tab .dot { color: var(--warn); }
+  .code { flex: 1; min-height: 40vh; width: 100%; resize: none; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); padding: 10px; font: 15px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 2; }
+  .pvpane { min-height: 0; }
+  .pane a.ib { color: inherit; display: inline-grid; place-items: center; text-decoration: none; }
+  .frame { flex: 1; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; min-height: 0; }
+  .note { font-size: .82rem; color: var(--dim); min-height: 1.2em; }
+  #pvsave { margin-left: auto; }
+  .warnbox { background: var(--calm); border-radius: 10px; padding: 8px 10px; font-size: .9rem; }
+  @media (max-width: 760px) {
+    .split { grid-template-columns: 1fr; height: auto; }
+    .pvpane { order: -1; position: sticky; top: 52px; height: 46dvh; z-index: 2; }   /* preview stays in view above the code */
+    .code { min-height: 34vh; }
   }
 </style>
 </head>
@@ -279,12 +302,120 @@ function msgEl(m) {
   return e;
 }
 
+/* ---------- live preview (flag `preview`) ---------- */
+let pvTimer = null, pvPoll = null, pvFile = store.get("pvfile", "index.html");
+function previewView() {
+  if (!S.flags.preview) return [offCard("preview", "👁", "Live preview")];
+  const p = curProject(), src = `/preview/${encodeURIComponent(p.id)}/`;
+  const note = h("span", { class: "note", id: "pvnote", role: "status" });
+  const tabs = h("div", { class: "bar2", id: "pvtabs", role: "group", "aria-label": "Files" }, "⏳");
+  const ed = h("textarea", { class: "code", id: "pvcode", spellcheck: "false", "aria-label": "Code",
+    oninput: () => edited(), onkeydown: e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); }
+      else if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); ed.setRangeText("  ", ed.selectionStart, ed.selectionEnd, "end"); edited(); }
+    } });
+  const saveBtn = h("button", { class: "btn pri", id: "pvsave", title: "Save (Ctrl+S) — the preview reloads", onclick: save }, "💾 Save");
+  const restore = h("div", { class: "warnbox", id: "pvrestore", hidden: true });
+  const frame = h("iframe", { sandbox: "allow-scripts allow-forms allow-modals", referrerpolicy: "no-referrer",
+    class: "frame", id: "pvframe", title: "Live preview", src });
+  let disk = "", lastV = "", t = null;
+  const key = () => `pvdraft.${p.id}.${pvFile}`;
+
+  function edited() {
+    const dirty = ed.value !== disk;
+    store.set(key(), dirty ? ed.value : null);                   // instant local copy
+    note.textContent = dirty ? "✏️ not saved yet" : "";
+    clearTimeout(t);
+    if (dirty) t = setTimeout(() => api("/api/autosave", { project: p.id, field: "file:" + pvFile, text: ed.value })
+      .then(r => { if (ed.value !== disk) note.textContent = r.ok ? "✏️ not saved yet · 💾 draft kept" : "✏️ not saved · ⚠️ draft only on this device"; }), 700);
+    paintTabs();
+  }
+  async function save() {
+    saveBtn.disabled = true;
+    const r = await api("/api/preview/file", { project: p.id, path: pvFile, text: ed.value });
+    saveBtn.disabled = false;
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message || "Not saved."}`; return; }
+    disk = ed.value; store.set(key(), null); note.textContent = "✅ saved — reloading"; paintTabs(); poll();
+  }
+  let files = [];
+  function paintTabs() {
+    tabs.innerHTML = "";
+    files.filter(f => f.editable).forEach(f => {
+      const dirty = store.get(`pvdraft.${p.id}.${f.path}`, null) != null;
+      tabs.append(h("button", { class: "tab", "aria-pressed": String(f.path === pvFile), onclick: () => open(f.path) },
+        f.path, dirty ? h("span", { class: "dot", title: "not saved" }, " ●") : null));
+    });
+  }
+  async function open(path) {
+    pvFile = path; store.set("pvfile", path);
+    const r = await api(`/api/preview/file?project=${encodeURIComponent(p.id)}&path=${encodeURIComponent(path)}`);
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
+    disk = r.text; ed.value = r.text;
+    const draft = store.get(key(), null);
+    restore.hidden = draft == null || draft === disk; restore.innerHTML = "";
+    if (!restore.hidden) restore.append("↩ You have an unsaved edit of this file. ",
+      h("button", { class: "btn", onclick: () => { ed.value = draft; restore.hidden = true; edited(); } }, "Bring it back"),
+      " ", h("button", { class: "btn", onclick: () => { store.set(key(), null); restore.hidden = true; paintTabs(); } }, "✕ Drop it"));
+    note.textContent = ""; paintTabs();
+  }
+  async function poll() {
+    if (view !== "preview" || document.hidden) return;
+    const r = await api(`/api/preview/version?project=${encodeURIComponent(p.id)}`);
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
+    if (lastV && r.v !== lastV) { frame.src = `${src}?v=${r.v}`; if (note.textContent.startsWith("✅")) note.textContent = "✅ saved · 🔄 reloaded"; }
+    lastV = r.v;
+  }
+  api(`/api/preview/files?project=${encodeURIComponent(p.id)}`).then(r => {
+    if (!r.ok) { tabs.textContent = `${r.icon || "⚠️"} ${r.message}`; ed.disabled = saveBtn.disabled = true; return; }
+    files = r.files; if (!files.some(f => f.path === pvFile && f.editable)) pvFile = (files.find(f => f.editable) || {}).path;
+    if (pvFile) open(pvFile); else tabs.textContent = "📭 no editable files";
+  });
+  pvPoll = poll; clearInterval(pvTimer); pvTimer = setInterval(poll, 1200); poll();
+  const tools = h("div", { class: "bar2" },
+    h("span", { "aria-hidden": "true" }, "👁"),
+    h("button", { class: "ib", title: "Reload", "aria-label": "Reload preview", onclick: () => { frame.src = `${src}?r=${Date.now()}`; } }, "↻"),
+    h("button", { class: "ib", id: "pvcap", title: "Screen capture", "aria-label": "Screen capture", onclick: () => capture(frame, p.id, note) }, "📸"),
+    h("a", { class: "ib", href: src, target: "_blank", rel: "noopener", title: "Open in its own tab", "aria-label": "Open in its own tab" }, "↗"),
+    h("span", { class: "note", id: "pvcapnote" }));
+  return [projectRow(), h("section", { class: "split" },
+    h("div", { class: "pane" }, h("div", { class: "bar2" }, tabs, saveBtn), note, restore, ed),
+    h("div", { class: "pane pvpane" }, tools, frame))];
+}
+
+/* 📸 the browser asks which tab to share; we grab one frame and crop it to the preview */
+async function capture(frame, pid, note) {
+  const out = $("#pvcapnote");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    out.textContent = "📸 Use the phone's own screenshot here — capture needs a desktop browser."; return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" }, audio: false,
+      preferCurrentTab: true, selfBrowserSurface: "include" });
+  } catch (e) { out.textContent = "📸 Capture cancelled."; return; }
+  try {
+    const v = h("video", { muted: true, playsinline: true }); v.srcObject = stream; await v.play();
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const b = frame.getBoundingClientRect(), sx = v.videoWidth / innerWidth, sy = v.videoHeight / innerHeight;
+    const c = h("canvas", { width: Math.round(b.width * sx), height: Math.round(b.height * sy) });
+    c.getContext("2d").drawImage(v, b.left * sx, b.top * sy, b.width * sx, b.height * sy, 0, 0, c.width, c.height);
+    const png = c.toDataURL("image/png");
+    const a = h("a", { href: png, download: `preview-${pid}-${Date.now()}.png` }); a.click();
+    const r = await api("/api/preview/capture", { project: pid, png });
+    out.textContent = r.ok ? `📸 saved ${r.file}` : `📸 downloaded · ⚠️ ${r.message || "not kept in the project"}`;
+  } finally { stream.getTracks().forEach(t => t.stop()); }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && view === "preview" && pvPoll) pvPoll(); });
+
 function render() {
   const main = $("#main"); main.innerHTML = "";
+  clearInterval(pvTimer); pvTimer = null; pvPoll = null;
+  main.classList.toggle("wide", view === "preview" && !!S.flags.preview);
   const path = PATHS.find(p => p.id === view);
   let kids;
   if (view === "start") kids = startView();
   else if (view === "chat") kids = chatView();
+  else if (view === "preview") kids = previewView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = !trail.length && !(S && S.hermes_url);
