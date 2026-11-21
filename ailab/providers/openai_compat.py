@@ -27,6 +27,10 @@ class OpenAICompat(Provider):
         if self.name == "openrouter":
             # Zero data retention + no training providers + return real cost in usage.
             return {"provider": {"zdr": True, "data_collection": "deny"}, "usage": {"include": True}}
+        if self.name == "ollama":
+            # 2026-11-21 real run: qwen3.5 on gandalf's CPU spent minutes "thinking" before the first word and
+            # timed out. Ollama's /v1 endpoint honours reasoning_effort "none" (it ignores think:false there).
+            return {"reasoning_effort": "none"}
         return {}
 
     def list_models(self, key: str | None) -> list[dict]:

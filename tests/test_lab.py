@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -262,3 +263,36 @@ class RepoHygiene(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransportTimeouts(unittest.TestCase):
+    """2026-11-21 real run: qwen3.5:4b's first call took > 60 s and surfaced as a raw TimeoutError."""
+
+    def test_local_gets_longer_timeout_and_timeout_is_a_plain_http_error(self):
+        import socket
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from ailab import transport
+
+        class Slow(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                time.sleep(1.5)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"{}")
+        srv = HTTPServer(("127.0.0.1", 0), Slow)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            url = f"http://127.0.0.1:{srv.server_address[1]}/x"
+            with self.assertRaises(transport.HttpError) as e:
+                transport.http_json("GET", url, timeout=0.3)
+            self.assertIn("no answer within", str(e.exception))
+            self.assertNotIsInstance(e.exception, socket.timeout)
+            self.assertEqual(transport.http_json("GET", url), {})          # default local timeout is long
+            self.assertGreater(transport.LOCAL_TIMEOUT_S, transport.HOSTED_TIMEOUT_S)
+        finally:
+            srv.shutdown()
+            srv.server_close()

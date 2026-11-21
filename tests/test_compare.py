@@ -319,3 +319,20 @@ class CompareOn(Srv):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealRunFixes(Base):
+    """2026-11-21 real run on gandalf: both local lanes timed out; the summary still said 'All lanes finished'."""
+
+    def test_summary_says_when_models_did_not_finish(self):
+        class Boom(Brains):
+            def chat(self, *a, **k):
+                if a[2] == "bad":
+                    raise TimeoutError("timed out")
+                return super().chat(*a, **k)
+        c = self.cmp(Boom({"good": LAZY, "bad": LAZY}), [{"provider": "ollama", "model": "good"}, {"provider": "ollama", "model": "bad"}])
+        self.assertEqual([ln["state"] for ln in c.lanes], ["done", "failed"])
+        self.assertIn("1 of 2", c.why)
+
+    def test_ollama_asks_for_no_thinking(self):
+        self.assertEqual(providers.build(config.load(), None)["ollama"].extra_body(), {"reasoning_effort": "none"})

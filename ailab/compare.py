@@ -148,7 +148,10 @@ class Comparison:
                 self.save()
             self.state = "stopped" if self.stop_flag.is_set() else "done"
             if self.state == "done":
-                self.why = "✅ All lanes finished."
+                ok = sum(1 for ln in self.lanes if ln["state"] == "done")
+                self.why = ("✅ All lanes finished." if ok == len(self.lanes) else
+                            f"⚠️ {ok} of {len(self.lanes)} models finished — open ℹ️ on each card." if ok else
+                            "⚠️ No model finished the task — open ℹ️ on each card.")
         except Exception as e:                                      # noqa: BLE001 — report, never crash the Lab
             self.state, self.why = "failed", f"⚠️ {type(e).__name__}: {str(e)[:300]}"
         finally:
