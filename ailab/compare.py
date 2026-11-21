@@ -94,6 +94,15 @@ class Comparison:
         self.save()
 
     def view(self) -> dict:
+        cur = self.cur
+        if cur is not None:                               # live numbers for the lane that is working now
+            for ln in self.lanes:
+                if ln["state"] == "running" and ln["run"] == cur.id:
+                    v = cur.view()
+                    last = v["steps"][-1] if v["steps"] else {}
+                    ln.update(steps=len(v["steps"]), usd=round(v["usd"], 6), tokens_in=v["tokens_in"],
+                              tokens_out=v["tokens_out"],
+                              why=f"⏳ step {len(v['steps']) + 1} of {v['step_cap']} — last: {last.get('action', 'thinking…')}")
         return {"id": self.id, "project": self.project["id"], "task": self.task, "checks": self.checks,
                 "state": self.state, "why": self.why, "cap_usd": self.cap_usd, "lane_cap_usd": self.lane_cap,
                 "usd": round(sum(ln["usd"] for ln in self.lanes), 6), "created": self.created,

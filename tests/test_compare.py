@@ -336,3 +336,29 @@ class RealRunFixes(Base):
 
     def test_ollama_asks_for_no_thinking(self):
         self.assertEqual(providers.build(config.load(), None)["ollama"].extra_body(), {"reasoning_effort": "none"})
+
+
+class LiveProgress(Base):
+    def test_running_lane_shows_live_steps(self):
+        gate = threading.Event()
+        b = Brains({"a": [act(action="list"), act(action="list"), act(action="done")], "b": LAZY})
+        orig = b.chat
+
+        def slow(*a, **k):
+            if len(b.calls) >= 2:
+                gate.wait(5)
+            return orig(*a, **k)
+        b.chat = slow
+        c = compare.Comparison(b, config.load(), self.project, "x", [{"provider": "ollama", "model": m} for m in "ab"], [])
+        t = threading.Thread(target=c.loop)
+        t.start()
+        for _ in range(50):
+            if c.view()["lanes"][0]["steps"] >= 2:
+                break
+            time.sleep(0.05)
+        v = c.view()["lanes"][0]
+        self.assertEqual((v["state"], v["steps"]), ("running", 2))
+        self.assertIn("step 3", v["why"])
+        gate.set()
+        t.join(10)
+        self.assertEqual(c.view()["lanes"][0]["state"], "done")
