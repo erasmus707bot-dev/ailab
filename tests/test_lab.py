@@ -16,7 +16,7 @@ from ailab.mcp_client import HermesMCP, HermesRefused
 from ailab.models import ModelCache
 from ailab.spend import LocalLedger, SpendBlocked
 
-SECRET = "sk-test-SHOULD-NEVER-APPEAR-0000"
+SECRET = "sk-test-SHOULD-NEVER-APPEAR-0000"  # secretscan: test-fixture
 
 
 class FakeHTTP:

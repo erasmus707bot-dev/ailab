@@ -70,8 +70,11 @@ def _path(pid: str, rel: str, *, editing: bool = True) -> Path:
 
 
 def list_files(pid: str) -> list[dict]:
-    root = ensure_site(pid)
-    out = []
+    return list_root(ensure_site(pid))
+
+
+def list_root(root: Path) -> list[dict]:
+    root, out = Path(root), []
     for p in sorted(root.rglob("*")):
         rel = p.relative_to(root).as_posix()
         if p.is_file() and not p.is_symlink() and not any(s.startswith(".") for s in rel.split("/")):
@@ -163,8 +166,9 @@ def srt_settings(root: Path, scratch: Path | None = None) -> dict:
 class Sandbox:
     """One pipe server per project, started on first use, restarted if it dies."""
 
-    def __init__(self, pid: str):
-        self.pid, self.root = pid, ensure_site(pid).resolve()
+    def __init__(self, pid: str, root: Path | None = None):
+        """pid = sandbox key; root given = a ⚖️ Compare lane copy (M8), else the project's site."""
+        self.pid, self.root = pid, (Path(root) if root else ensure_site(pid)).resolve()
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
         self.kind = sandbox_kind()
@@ -242,14 +246,14 @@ class Preview:
         self.boxes: dict[str, Sandbox] = {}
         self.lock = threading.Lock()
 
-    def box(self, pid: str) -> Sandbox:
+    def box(self, pid: str, root: Path | None = None) -> Sandbox:
         with self.lock:
             if pid not in self.boxes:
-                self.boxes[pid] = Sandbox(pid)
+                self.boxes[pid] = Sandbox(pid, root)
             return self.boxes[pid]
 
-    def get(self, pid: str, rel: str) -> tuple[int, str, bytes]:
-        r = self.box(pid).ask({"op": "get", "path": rel})
+    def get(self, pid: str, rel: str, root: Path | None = None) -> tuple[int, str, bytes]:
+        r = self.box(pid, root).ask({"op": "get", "path": rel})
         if not r.get("ok"):
             return int(r.get("status") or 404), "text/plain; charset=utf-8", b"Not found in this project."
         return 200, r["ctype"], base64.b64decode(r["b64"])

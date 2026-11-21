@@ -21,12 +21,10 @@ import uuid
 from pathlib import Path
 
 from . import agent, config, preview, store
+from .secretscan import SECRET_RX, has_secret  # noqa: F401 — SECRET_RX kept importable
 
 TEXT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".svg", ".md", ".txt", ".xml", ".webmanifest"}
 MAX_FILE, MAX_TOTAL, MAX_FILES, MAX_SHOT = 300_000, 2_000_000, 40, 4_000_000
-SECRET_RX = re.compile(
-    r"(sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{10,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}"
-    r"|AKIA[0-9A-Z]{16}|hf_[A-Za-z0-9]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)")
 APPLY_WORD = "apply"
 
 
@@ -89,7 +87,7 @@ def package(pid: str, title: str, writeup: str, models: list | None = None) -> d
         raise ReviewError("The project needs an index.html.", "bad_args", "❓")
     if len(files) > MAX_FILES or total > MAX_TOTAL:
         raise ReviewError(f"Too big for Review (max {MAX_FILES} files, {MAX_TOTAL // 1_000_000} MB).", "too_big", "📦")
-    hits = [k for k, v in files.items() if SECRET_RX.search(v)] + (["write-up"] if SECRET_RX.search(writeup) else [])
+    hits = [k for k, v in files.items() if has_secret(v)] + (["write-up"] if has_secret(writeup) else [])
     if hits:
         raise ReviewError("Something that looks like a key is in: " + ", ".join(hits[:5]) + ". Remove it first.",
                           "secret", "🔑")

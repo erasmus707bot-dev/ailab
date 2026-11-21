@@ -1,4 +1,4 @@
-"""python3 -m ailab status | doctor | models <provider> [--refresh] | serve [--port N] [--host 127.0.0.1]"""
+"""python3 -m ailab status | doctor | secretscan [path] | models <provider> [--refresh] | serve [--port N] [--host 127.0.0.1]"""
 from __future__ import annotations
 
 import json
@@ -23,6 +23,16 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             pv.close()
         print(("✅ preview sandbox OK " if r["ok"] else "❌ preview sandbox FAILED ") + json.dumps(r))
+        return 0 if r["ok"] else 1
+    if cmd == "secretscan":
+        from pathlib import Path                                   # noqa: PLC0415
+        from .config import REPO                                   # noqa: PLC0415
+        from .secretscan import scan                               # noqa: PLC0415
+        r = scan(Path(a[1]) if len(a) > 1 else REPO)
+        for hit in r["hits"]:
+            print(f"🔑 {hit['where']} — {hit['why']}")
+        print(("✅ secret scan clean" if r["ok"] else f"❌ {len(r['hits'])} possible secret(s) — nothing was printed")
+              + f" ({r['files']} files + git history)")
         return 0 if r["ok"] else 1
     lab = Lab()
     if cmd == "status":

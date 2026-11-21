@@ -114,16 +114,21 @@ def run_in_sandbox(root: Path, cmd: str, timeout: int = RUN_TIMEOUT_S) -> dict:
 
 
 class Run:
-    def __init__(self, lab, cfg: dict, project: dict, provider: str, model: str, task: str):
+    def __init__(self, lab, cfg: dict, project: dict, provider: str, model: str, task: str,
+                 root: Path | None = None, log_dir: Path | None = None, cap_usd: float | None = None,
+                 autosave_field: str = "agent-last"):
+        """root/log_dir/cap_usd: ⚖️ Compare (M8) runs one lane in its own copy of the project."""
         self.id = uuid.uuid4().hex[:10]
         self.lab, self.cfg, self.project = lab, cfg, project
         self.provider, self.model, self.task = provider, model, task.strip()[:4000]
-        self.root = preview.ensure_site(project["id"]).resolve()
+        self.root = (root or preview.ensure_site(project["id"])).resolve()
         self.step_cap = int(cfg.get("agent_step_cap", 12))
-        self.cap_usd = float(cfg.get("agent_cap_usd", 0.50))
+        self.cap_usd = float(cfg.get("agent_cap_usd", 0.50) if cap_usd is None else cap_usd)
         self.usd, self.steps, self.state, self.why = 0.0, [], "running", ""
+        self.tokens_in = self.tokens_out = 0
+        self.autosave_field = autosave_field
         self.stop_flag = threading.Event()
-        self.log = config.home() / "projects" / project["id"] / "agent" / f"{self.id}.jsonl"
+        self.log = (log_dir or config.home() / "projects" / project["id"] / "agent") / f"{self.id}.jsonl"
         self.log.parent.mkdir(parents=True, exist_ok=True)
         # M6: 📋 Review lists the models used from these
         self.log.with_suffix(".meta.json").write_text(json.dumps({"provider": provider, "model": model, "at": time.time()}))
@@ -133,6 +138,7 @@ class Run:
     def view(self) -> dict:
         return {"id": self.id, "state": self.state, "why": self.why, "task": self.task, "steps": self.steps,
                 "step_cap": self.step_cap, "usd": round(self.usd, 6), "cap_usd": self.cap_usd,
+                "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
                 "project": self.project["id"], "provider": self.provider, "model": self.model}
 
     def stop(self, why: str = "⏹ Stopped by you") -> None:
@@ -172,7 +178,7 @@ class Run:
     def act(self, a: dict) -> dict:
         kind = str(a.get("action"))
         if kind == "list":
-            return {"files": [f["path"] for f in preview.list_files(self.project["id"])]}
+            return {"files": [f["path"] for f in preview.list_root(self.root)]}
         if kind == "read":
             p = self._inside(str(a.get("path") or ""))
             if not p or not p.is_file():
@@ -211,7 +217,7 @@ class Run:
     def loop(self) -> None:
         msgs = [{"role": "system", "content": SYSTEM},
                 {"role": "user", "content": f"Task: {self.task}\nFiles: "
-                 + ", ".join(f["path"] for f in preview.list_files(self.project["id"]))}]
+                 + ", ".join(f["path"] for f in preview.list_root(self.root))}]
         try:
             while True:
                 self._check_stop()
@@ -225,6 +231,8 @@ class Run:
                 r = self.lab.chat(self.project, self.provider, self.model, msgs, 2048, cap_usd=left,
                                   task=f"lab-agent:{self.project['id']}")
                 self.usd += float(r.usd or 0)
+                self.tokens_in += int(r.tokens_in or 0)
+                self.tokens_out += int(r.tokens_out or 0)
                 self._check_stop()                                    # Stop pressed while the model thought
                 msgs.append({"role": "assistant", "content": r.text})
                 try:
@@ -254,7 +262,7 @@ class Run:
         except Exception as e:                                        # noqa: BLE001 — report, never crash the Lab
             self.state, self.why = "failed", f"⚠️ {type(e).__name__}: {str(e)[:300]}"
         finally:
-            store.autosave(self.project["id"], "agent-last", json.dumps(self.view())[:100_000])
+            store.autosave(self.project["id"], self.autosave_field, json.dumps(self.view())[:100_000])
 
 
 class Agents:

@@ -89,6 +89,7 @@
   dialog input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); }
   .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
   .btn { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 8px 14px; }
+  a.btn { color: inherit; text-decoration: none; display: inline-block; }
   .btn.pri { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 
   @media (max-width: 640px) {
@@ -138,6 +139,17 @@
   .step .hd b { overflow-wrap: anywhere; }
   .step.err { border-color: var(--bad); }
   .final { background: var(--calm); border-radius: var(--r); padding: 10px 12px; }
+  /* ⚖️ Compare (M8) */
+  .lanes { display: flex; flex-direction: column; gap: 8px; }
+  .lanerow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px; }
+  .lanerow select { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; max-width: 100%; flex: 1 1 150px; }
+  .cmpgrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .lanecard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .lanecard h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+  .lanecard .m { display: flex; justify-content: space-between; gap: 8px; }
+  .lanecard iframe { width: 100%; height: 240px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .lanecard.best { border-color: var(--accent); }
+  .cmpform input { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
 </style>
 </head>
 <body>
@@ -191,7 +203,7 @@ const PATHS = [
   { id: "preview", flag: "preview", sym: "👁", name: "Live preview", tip: "Code on one side, the running page on the other." },
   { id: "agent", flag: "agent", sym: "🤖", name: "Agent", tip: "Plan → write → run → check, step by step, with a Stop button." },
   { id: "review", flag: null, sym: "📋", name: "Review", tip: "Send a demo to Hermes for your OK; apply or reject held agent writes." },
-  { id: "compare", flag: null, sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side.", later: "M8" },
+  { id: "compare", flag: "compare", sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side." },
 ];
 let S = null;                          // server state
 let view = "start", trail = [];        // ← retraces this trail
@@ -254,7 +266,7 @@ function offCard(flag, sym, name, later) {
     h("p", {}, "Nothing is sent and nothing is spent."),
     h("details", {}, h("summary", {}, "ℹ️ Why?"),
       h("p", {}, later ? `This part arrives in build step ${later}.`
-        : "Each part is switched on by Scott, one at a time, after it is tested (step M7). Order: 💬 Ask models → 👁 Live preview → 🤖 Agent.")));
+        : "Each part is switched on by Scott, one at a time, after it is tested (step M7). Order: 💬 Ask models → 👁 Live preview → 🤖 Agent → ⚖️ Compare.")));
 }
 function startView() {
   return [projectRow(), h("div", { class: "paths" }, PATHS.map(p => {
@@ -399,8 +411,8 @@ function previewView() {
 }
 
 /* 📸 the browser asks which tab to share; we grab one frame and crop it to the preview */
-async function capture(frame, pid, note) {
-  const out = $("#pvcapnote");
+async function capture(frame, pid, note, lane) {
+  const out = note || $("#pvcapnote");
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
     out.textContent = "📸 Use the phone's own screenshot here — capture needs a desktop browser."; return;
   }
@@ -417,8 +429,9 @@ async function capture(frame, pid, note) {
     c.getContext("2d").drawImage(v, b.left * sx, b.top * sy, b.width * sx, b.height * sy, 0, 0, c.width, c.height);
     const png = c.toDataURL("image/png");
     const a = h("a", { href: png, download: `preview-${pid}-${Date.now()}.png` }); a.click();
-    const r = await api("/api/preview/capture", { project: pid, png });
-    out.textContent = r.ok ? `📸 saved ${r.file}` : `📸 downloaded · ⚠️ ${r.message || "not kept in the project"}`;
+    const r = lane ? await api("/api/compare/capture", { project: pid, id: lane.id, lane: lane.k, png })
+                   : await api("/api/preview/capture", { project: pid, png });
+    out.textContent = r.ok ? `📸 saved ${r.file || "for this model"}` : `📸 downloaded · ⚠️ ${r.message || "not kept in the project"}`;
   } finally { stream.getTracks().forEach(t => t.stop()); }
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && view === "preview" && pvPoll) pvPoll(); });
@@ -426,7 +439,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && vi
 /* ---------- agent (flag `agent`) ---------- */
 let agTimer = null;
 const ICON = { list: "📂", read: "📖", write: "📝", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
-const STATE = { running: "⏳ Working", done: "✅ Done", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
+const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
                 refused: "🔒 Refused", failed: "⚠️ Failed" };
 function agentView() {
   if (!S.flags.agent) return [offCard("agent", "🤖", "Agent")];
@@ -504,6 +517,151 @@ function agentView() {
     status, final, steps,
     h("details", {}, h("summary", {}, "ℹ️ Limits"),
       h("p", {}, "Runs in the sandbox (no internet, writes only in this project). Stops at the step cap, the $ cap, ⏹ Stop, or Hermes STOP_SHIFTS. Writes anywhere else wait for your approval.")))];
+}
+
+/* ---------- ⚖️ Compare (flag `compare`, M8) ---------- */
+let cmpTimer = null;
+const modelCache = {};
+function modelsFor(prov, pid) {
+  const k = prov + "|" + pid;
+  if (!modelCache[k]) modelCache[k] = api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(pid)}`);
+  return modelCache[k];
+}
+function compareView() {
+  if (!S.flags.compare) return [offCard("compare", "⚖️", "Compare models")];
+  if (!S.flags.agent) return [h("div", { class: "offcard", role: "status" }, h("div", { class: "big" }, "⏸"),
+    h("h2", {}, "⚖️ Compare needs 🤖 Agent switched on first"), h("p", {}, "Each model runs the agent loop. Nothing is sent and nothing is spent."))];
+  const p = curProject();
+  const provs = S.providers.filter(x => !p.sensitive || x.local);
+  let lanes = store.get("cmplanes." + p.id, null) || [{ provider: provs[0].id, model: "" }, { provider: provs[0].id, model: "" }];
+  const laneBox = h("div", { class: "lanes", id: "cmplanes" });
+  function saveLanes() { store.set("cmplanes." + p.id, lanes); }
+  function paintLanes() {
+    laneBox.innerHTML = "";
+    lanes.forEach((ln, i) => {
+      if (!provs.some(x => x.id === ln.provider)) ln.provider = provs[0].id;
+      const ms = h("select", { "aria-label": `Model ${i + 1}`, onchange: e => { ln.model = e.target.value; saveLanes(); } }, h("option", {}, "⏳"));
+      const ps = h("select", { "aria-label": `Provider ${i + 1}`, onchange: e => { ln.provider = e.target.value; ln.model = ""; saveLanes(); paintLanes(); } },
+        provs.map(x => h("option", { value: x.id, selected: x.id === ln.provider }, `${x.icon} ${x.id}`)));
+      modelsFor(ln.provider, p.id).then(r => {
+        ms.innerHTML = "";
+        if (!r.ok) { ms.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
+        if (!ln.model || !r.models.includes(ln.model)) { ln.model = r.models[0] || ""; saveLanes(); }
+        r.models.forEach(m => ms.append(h("option", { value: m, selected: m === ln.model }, m)));
+      });
+      laneBox.append(h("div", { class: "lanerow" }, h("b", {}, `${i + 1}`), ps, ms,
+        lanes.length > 2 ? h("button", { class: "ib", title: "Remove", "aria-label": `Remove model ${i + 1}`,
+          onclick: () => { lanes.splice(i, 1); saveLanes(); paintLanes(); } }, "✕") : null));
+    });
+    addBtn.hidden = lanes.length >= 4;
+  }
+  const addBtn = h("button", { class: "btn", id: "cmpadd", onclick: () => { lanes.push({ provider: provs[0].id, model: "" }); saveLanes(); paintLanes(); } }, "➕ Add a model");
+  const task = h("textarea", { id: "cmptask", "aria-label": "Task", placeholder: "⚖️ The task every model gets, e.g. Add a footer with today's year." });
+  const checks = h("textarea", { id: "cmpchecks", "aria-label": "Checks", style: "min-height:60px",
+    placeholder: "🧪 Checks, one per line (optional) — e.g. grep -q footer index.html" });
+  task.value = store.get("cmptask." + p.id, ""); checks.value = store.get("cmpchecks." + p.id, "");
+  let t = null;
+  const keep = () => { store.set("cmptask." + p.id, task.value); store.set("cmpchecks." + p.id, checks.value); clearTimeout(t);
+    t = setTimeout(() => api("/api/autosave", { project: p.id, field: "compare-task", text: task.value + "\n---checks---\n" + checks.value }), 700); };
+  task.oninput = keep; checks.oninput = keep;
+  const startBtn = h("button", { class: "btn pri", id: "cmpstart" }, "▶ Compare");
+  const stopBtn = h("button", { class: "btn", id: "cmpstop", disabled: true }, "⏹ Stop");
+  const status = h("span", { class: "note", id: "cmpstatus", role: "status" });
+  const final = h("div", { class: "final", id: "cmpfinal", hidden: true });
+  const grid = h("div", { class: "cmpgrid", id: "cmpgrid", "aria-live": "polite" });
+  const after = h("div", { id: "cmpafter", hidden: true });
+  const hist = h("div", { id: "cmphist" });
+
+  function paint(c) {
+    const running = c.state === "running";
+    status.textContent = `${STATE[c.state] || c.state} · $${c.usd.toFixed(4)} / $${c.cap_usd.toFixed(2)} (≤ $${c.lane_cap_usd.toFixed(2)} per model)`;
+    startBtn.disabled = running; stopBtn.disabled = !running;
+    final.hidden = running || !c.why; final.textContent = c.why || "";
+    const n = c.checks.length;
+    const best = c.lanes.filter(l => l.state !== "waiting" && l.state !== "skipped")
+      .sort((a, b) => (b.passed - a.passed) || (a.usd - b.usd))[0];
+    grid.innerHTML = "";
+    c.lanes.forEach(l => {
+      const note = h("span", { class: "note" });
+      const card = h("article", { class: "lanecard" + (!running && best && n && best.k === l.k ? " best" : ""), "data-lane": l.k },
+        h("h3", {}, `${l.provider} · ${l.model}`),
+        h("div", { class: "m" }, h("span", {}, STATE[l.state] || l.state), !running && best && n && best.k === l.k ? h("b", {}, "🏅 best") : null),
+        h("div", { class: "m" }, h("span", {}, "⏱ Time"), h("span", {}, l.secs == null ? "—" : `${l.secs} s`)),
+        h("div", { class: "m" }, h("span", {}, "💲 Cost"), h("span", {}, `$${l.usd.toFixed(4)}`)),
+        h("div", { class: "m" }, h("span", {}, "🔤 Tokens"), h("span", {}, `${l.tokens_in} in · ${l.tokens_out} out`)),
+        h("div", { class: "m" }, h("span", {}, "👣 Steps"), h("span", {}, String(l.steps))),
+        h("div", { class: "m" }, h("span", {}, "🧪 Checks"), h("span", {}, n ? `${l.passed}/${n} passed` : "none set")),
+        l.checks.length ? h("details", {}, h("summary", {}, "check results"),
+          l.checks.map(x => h("div", {}, `${x.ok ? "✅" : "❌"} ${x.cmd}`))) : null,
+        l.why ? h("details", {}, h("summary", {}, "ℹ️ how it ended"), h("p", {}, l.why)) : null);
+      if (!running && l.state !== "waiting" && l.state !== "skipped") {
+        const fr = h("iframe", { sandbox: "allow-scripts allow-forms allow-modals", referrerpolicy: "no-referrer", title: `Result of ${l.model}`, src: `/compare-page/${p.id}/${c.id}/lanes/${l.k}/index.html` });
+        card.append(fr, h("div", { class: "runbar" },
+          h("button", { class: "ib", title: "Screen capture", "aria-label": `Screen capture of ${l.model}`,
+            onclick: () => capture(fr, p.id, note, { id: c.id, k: l.k }) }, l.shot ? "📸✓" : "📸"), note));
+      }
+      grid.append(card);
+    });
+    after.hidden = running || c.state === "failed";
+    if (running) { clearTimeout(cmpTimer); cmpTimer = setTimeout(poll, 1500); }
+    else loadHist();
+  }
+  async function poll() {
+    const id = store.get("cmp." + p.id, null); if (!id || view !== "compare") return;
+    const r = await api(`/api/compare?project=${encodeURIComponent(p.id)}&id=${encodeURIComponent(id)}`);
+    if (!r.ok) { store.set("cmp." + p.id, null); status.textContent = ""; return; }
+    if (r.spend) { S.spend = r.spend; paintBar(); }
+    paint(r.comparison); paintAfter(r.comparison);
+  }
+  function paintAfter(c) {
+    after.innerHTML = "";
+    const title = h("input", { type: "text", id: "cmptitle", maxlength: 80, placeholder: "Title for Review", "aria-label": "Title" });
+    const wu = h("textarea", { id: "cmpwu", "aria-label": "Write-up", placeholder: "📝 What you compared and what you learned." });
+    title.value = store.get("cmptitle." + c.id, ""); wu.value = store.get("cmpwu." + c.id, "");
+    title.oninput = () => store.set("cmptitle." + c.id, title.value);
+    wu.oninput = () => store.set("cmpwu." + c.id, wu.value);
+    const out = h("span", { class: "note", role: "status" });
+    const send = h("button", { class: "btn pri", id: "cmpsend" }, "📋 Send to Review");
+    send.onclick = async () => {
+      send.disabled = true;
+      const r = await api("/api/compare/review", { project: p.id, id: c.id, title: title.value, writeup: wu.value });
+      send.disabled = false;
+      out.textContent = r.ok ? (r.where === "hermes" ? "📋 Sent — waiting for your OK in Hermes." : "🏝 Kept here (standalone).")
+        : `${r.icon || "⚠️"} ${r.message || "Not sent."}`;
+    };
+    after.append(h("div", { class: "runbar" },
+      h("a", { class: "btn", href: `/compare-page/${p.id}/${c.id}/`, target: "_blank", rel: "noopener" }, "📄 Open saved page")),
+      h("details", { class: "cmpform" }, h("summary", {}, "📋 Send to Review as a portfolio piece"), title, wu,
+        h("div", { class: "runbar" }, send, out)));
+  }
+  async function loadHist() {
+    const r = await api(`/api/compare?project=${encodeURIComponent(p.id)}`);
+    hist.innerHTML = "";
+    if (!r.ok || !r.items.length) return;
+    hist.append(h("details", {}, h("summary", {}, `🗂 Past comparisons (${r.items.length})`),
+      r.items.map(it => h("button", { class: "btn", style: "display:block;width:100%;text-align:left;margin-top:6px",
+        onclick: () => { store.set("cmp." + p.id, it.id); poll(); } },
+        `${STATE[it.state] || it.state} · ${it.models.length} models · $${(it.usd || 0).toFixed(4)} · ${it.task}`))));
+  }
+  startBtn.onclick = async () => {
+    if (!task.value.trim()) { status.textContent = "✏️ Write the task first."; return; }
+    startBtn.disabled = true;
+    const r = await api("/api/compare/start", { project: p.id, task: task.value, lanes,
+      checks: checks.value.split("\n").map(x => x.trim()).filter(Boolean) });
+    if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
+    store.set("cmp." + p.id, r.comparison.id); paint(r.comparison);
+  };
+  stopBtn.onclick = async () => {
+    const id = store.get("cmp." + p.id, null); if (!id) return;
+    stopBtn.disabled = true; const r = await api("/api/compare/stop", { id }); if (r.ok) paint(r.comparison);
+  };
+  paintLanes();
+  if (store.get("cmp." + p.id, null)) poll(); else loadHist();
+  return [projectRow(), h("section", { class: "agent", id: "compare" },
+    task, laneBox, h("div", { class: "runbar" }, addBtn), checks,
+    h("div", { class: "runbar" }, startBtn, stopBtn), status, final, grid, after, hist,
+    h("details", {}, h("summary", {}, "ℹ️ Limits"),
+      h("p", {}, "Each model gets its own copy of the project and runs in the sandbox (no internet), one after another. One $ cap for the whole comparison, split evenly, inside the daily cap. ⏹ Stop ends the current model and skips the rest.")))];
 }
 
 /* ---------- 📋 Review (M6): demos → Hermes; held writes → Apply / Reject ---------- */
@@ -587,7 +745,7 @@ function reviewView() {
 
 function render() {
   const main = $("#main"); main.innerHTML = "";
-  clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer);
+  clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer); clearTimeout(cmpTimer);
   main.classList.toggle("wide", view === "preview" && !!S.flags.preview);
   const path = PATHS.find(p => p.id === view);
   let kids;
@@ -596,6 +754,7 @@ function render() {
   else if (view === "preview") kids = previewView();
   else if (view === "agent") kids = agentView();
   else if (view === "review") kids = reviewView();
+  else if (view === "compare") kids = compareView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = !trail.length && !(S && S.hermes_url);

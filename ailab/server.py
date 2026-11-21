@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, config, preview, review, store
+from . import __version__, agent, compare, config, preview, review, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -27,7 +27,10 @@ PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'sel
                "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
 PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙"}
-OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent"}
+OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models"}
+# Static comparison page: our own escaped HTML; only an inline theme-toggle script, images inline.
+PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
+            "frame-ancestors 'self'; form-action 'none'")
 
 
 def _off(flag: str) -> tuple[int, dict]:
@@ -144,6 +147,60 @@ class App:
             return _off("agent")
         return 200, {"ok": True, "items": agent.approvals()}
 
+    # ---- ⚖️ Compare (flag `compare`, M8). Lanes run the agent loop, so 🤖 Agent must be on too. ----
+    @property
+    def cmps(self):
+        if getattr(self, "_cmps", None) is None:
+            self._cmps = compare.Comparisons()
+        return self._cmps
+
+    def _cmp_res(self, pid: str, cid: str) -> dict:
+        live = self.cmps.get(cid)
+        return live.view() if live is not None and live.project["id"] == pid else compare.load(pid, cid)
+
+    def compare_start(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["compare"]:
+            return _off("compare")
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        proj = store.project(self._pid(b.get("project")))
+        c = self.cmps.start(self.lab, self.cfg, proj, str(b.get("task") or ""), b.get("lanes"), b.get("checks"))
+        return 200, {"ok": True, "comparison": c.view()}
+
+    def compare_get(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["compare"]:
+            return _off("compare")
+        pid = self._pid(q.get("project"))
+        cid = (q.get("id") or [""])[0]
+        if not cid:
+            return 200, {"ok": True, "items": compare.listing(pid)}
+        return 200, {"ok": True, "comparison": self._cmp_res(pid, cid), "spend": self.spend()}
+
+    def compare_stop(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["compare"]:
+            return _off("compare")
+        c = self.cmps.get(str(b.get("id") or ""))
+        if c is None:
+            raise compare.CompareError("That comparison isn't running.", "state", "⏹")
+        c.stop()
+        return 200, {"ok": True, "comparison": c.view()}
+
+    def compare_capture(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["compare"]:
+            return _off("compare")
+        pid, cid = self._pid(b.get("project")), str(b.get("id") or "")
+        live = self.cmps.get(cid)
+        return 200, compare.save_capture(pid, cid, str(b.get("lane")), str(b.get("png") or ""),
+                                         live if live is not None and live.project["id"] == pid else None)
+
+    def compare_review(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["compare"]:
+            return _off("compare")
+        pid, cid = self._pid(b.get("project")), str(b.get("id") or "")
+        live = self.cmps.get(cid)
+        return 200, compare.to_review(self.lab, self.cfg, pid, cid, str(b.get("title") or ""),
+                                      str(b.get("writeup") or ""), live if live is not None and live.project["id"] == pid else None)
+
     # ---- 📋 Review (M6). Not behind a flag: it sends nothing to a model and spends nothing. ----
     def review_list(self, q: dict) -> tuple[int, dict]:
         pid = (q.get("project") or [""])[0]
@@ -212,6 +269,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 code = {"no_sandbox": 503, "sandbox_failed": 502, "outside": 403, "not_found": 404,
                         "too_big": 413}.get(e.code, 400)
                 body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
+            except compare.CompareError as e:
+                code = {"sensitive": 403, "too_big": 413, "busy": 409, "state": 409, "secret": 422,
+                        "not_found": 404}.get(e.code, 400)
+                body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
             except review.ReviewError as e:
                 code = {"sensitive": 403, "outside_home": 403, "dotfile": 403, "symlink": 403, "too_big": 413,
                         "stale": 409, "state": 409, "secret": 422}.get(e.code, 400)
@@ -240,11 +301,38 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 code, ctype, data = 503, "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
             return self._send(code, data, ctype, csp=PREVIEW_CSP)
 
+        def _compare_page(self, rest: str):
+            """/compare-page/<pid>/<cid>/ → saved page · …/lanes/<k>/<rel> → that lane, served from its srt sandbox."""
+            if not app.cfg["flags"]["compare"]:
+                return self._send(403, b"Compare is not switched on yet.", "text/plain; charset=utf-8")
+            parts = rest.split("/", 4)
+            try:
+                pid, cid = app._pid(parts[0]), parts[1] if len(parts) > 1 else ""
+                d = compare.cdir(pid, cid)
+                if len(parts) <= 3 and (len(parts) < 3 or parts[2] in ("", "index.html")):
+                    f = d / "result.html"
+                    if not f.exists():
+                        return self._send(404, b"No such comparison.", "text/plain; charset=utf-8")
+                    return self._send(200, f.read_bytes(), "text/html; charset=utf-8", csp=PAGE_CSP)
+                if parts[2] != "lanes" or len(parts) < 4:
+                    return self._send(404, b"Not found.", "text/plain; charset=utf-8")
+                root = compare.lane_dir(pid, cid, parts[3]) / "site"
+                if not root.is_dir():
+                    return self._send(404, b"No such lane.", "text/plain; charset=utf-8")
+                code, ctype, data = app.pv.get(compare.lane_key(pid, cid, parts[3]),
+                                               parts[4] if len(parts) > 4 else "", root)
+            except (preview.PreviewError, compare.CompareError) as e:
+                code, ctype, data = 503 if getattr(e, "code", "") in ("no_sandbox", "sandbox_failed") else 400, \
+                    "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
+            return self._send(code, data, ctype, csp=PREVIEW_CSP)
+
         def do_GET(self):                                                # noqa: N802
             u = urlparse(self.path)
             q = parse_qs(u.query)
             if u.path.startswith("/preview/"):
                 return self._preview_page(u.path[len("/preview/"):])
+            if u.path.startswith("/compare-page/"):
+                return self._compare_page(u.path[len("/compare-page/"):])
             if u.path.startswith("/api/") and self._foreign():
                 return self._send(403, {"ok": False, "code": "cross_origin"})
             if u.path in ("/", "/index.html"):
@@ -265,6 +353,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_run, q)
             if u.path == "/api/review":
                 return self._run(app.review_list, q)
+            if u.path == "/api/compare":
+                return self._run(app.compare_get, q)
             if u.path == "/api/agent/approvals":
                 return self._run(app.agent_approvals, q)
             if u.path == "/api/recover":
@@ -274,7 +364,7 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
         def do_POST(self):                                               # noqa: N802
             n = int(self.headers.get("Content-Length") or 0)
             p = urlparse(self.path).path
-            if n > (MAX_CAPTURE_BODY if p == "/api/preview/capture" else MAX_BODY):
+            if n > (MAX_CAPTURE_BODY if p in ("/api/preview/capture", "/api/compare/capture") else MAX_BODY):
                 return self._send(413, {"ok": False, "code": "too_big"})
             if (self.headers.get("Origin") and urlparse(self.headers["Origin"]).netloc != self.headers.get("Host")) \
                     or self._foreign():
@@ -295,6 +385,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_start, b)
             if p == "/api/agent/stop":
                 return self._run(app.agent_stop, b)
+            if p == "/api/compare/start":
+                return self._run(app.compare_start, b)
+            if p == "/api/compare/stop":
+                return self._run(app.compare_stop, b)
+            if p == "/api/compare/capture":
+                return self._run(app.compare_capture, b)
+            if p == "/api/compare/review":
+                return self._run(app.compare_review, b)
             if p == "/api/review/send":
                 return self._run(app.review_send, b)
             if p == "/api/review/apply":
@@ -332,6 +430,8 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
     finally:
         if getattr(app, "_agents", None):
             app._agents.stop_all()
+        if getattr(app, "_cmps", None):
+            app._cmps.stop_all()
         if getattr(app, "_pv", None):
             app._pv.close()                                         # stop sandboxed preview servers
     return 0
