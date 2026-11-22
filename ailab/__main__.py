@@ -1,4 +1,4 @@
-"""python3 -m ailab status | doctor | secretscan [path] | models <provider> [--refresh] | serve [--port N] [--host 127.0.0.1]"""
+"""python3 -m ailab status | doctor | secretscan [path] | models <provider> [--refresh] | roster | serve [--port N] [--host 127.0.0.1]"""
 from __future__ import annotations
 
 import json
@@ -43,6 +43,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{r['provider']}: {len(r['models'])} models ({r['source']})")
         for m in r["models"][:200]:
             print(" ", m["id"])
+        return 0
+    if cmd == "roster":
+        from .roster import status                                 # noqa: PLC0415
+        for r in status(lab):
+            mark = "✅" if r["state"].startswith("ready") else "⬇️" if r["provider"] == "ollama" else "🔑"
+            print(f"{mark} {r['provider']:10} {r['model']:34} {r['state']}" + (f" — {r['todo']}" if r["todo"] else ""))
+            print(f"   {r['job']} · {r['price']}")
         return 0
     print(__doc__)
     return 2

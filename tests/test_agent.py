@@ -240,3 +240,42 @@ class GoalTools(Base):
         self.assertIn("linux_app_build", seen["system"])
         self.run_agent(Spy([act(action="done", summary="x")]))
         self.assertNotIn("linux_app_build", seen["system"])
+
+
+class GameCode(Base):
+    """2026-11-22: edit one spot in a big file; pull the game source in and push a proposal out without the text
+    passing through the model."""
+
+    def test_edit_needs_exactly_one_match(self):
+        root = preview.ensure_site("scratch")
+        (root / "big.js").write_text("const a = 1;\nconst b = 1;\n")
+        r = self.run_agent(Brain([act(action="edit", path="big.js", find="= 1;", replace="= 2;"),
+                                  act(action="edit", path="big.js", find="const a = 1;", replace="const a = 5;"),
+                                  act(action="edit", path="../x", find="a", replace="b"),
+                                  act(action="done", summary="ok")]))
+        self.assertIn("matched 2 times", r.steps[0]["result"]["error"])
+        self.assertEqual(r.steps[1]["result"]["edited"], "big.js")
+        self.assertIn("error", r.steps[2]["result"])
+        self.assertEqual((root / "big.js").read_text(), "const a = 5;\nconst b = 1;\n")
+
+    def test_pidima_source_lands_on_disk_and_propose_reads_from_disk(self):
+        class MCP(FakeMCP):
+            def call(self, tool, args=None):
+                self.calls.append(tool)
+                if tool == "pidima_source":
+                    return {"ok": True, "files": {"engine.js": "ENGINE", "../evil.js": "x", ".hidden": "x"}, "test": "node bot.js"}
+                if tool == "pidima_propose":
+                    self.sent = args
+                    return {"ok": True, "id": "p1", "state": "waiting"}
+                return super().call(tool, args)
+        mcp = MCP()
+        r = self.run_agent(Brain([act(action="hermes", tool="pidima_source", args={}),
+                                  act(action="edit", path="engine.js", find="ENGINE", replace="ENGINE2"),
+                                  act(action="hermes", tool="pidima_propose", args={"files": ["engine.js"], "note": "n"}),
+                                  act(action="hermes", tool="pidima_propose", args={"files": ["nope.js"]}),
+                                  act(action="done", summary="ok")]), mode="connected", mcp=mcp)
+        self.assertEqual(r.steps[0]["result"]["wrote"], ["engine.js"])               # nothing outside / hidden is written
+        self.assertNotIn("files", r.steps[0]["result"])                                # the text never reaches the model
+        self.assertEqual(mcp.sent, {"files": {"engine.js": "ENGINE2"}, "note": "n"})
+        self.assertIn("not found", r.steps[3]["result"]["error"])
+        self.assertIn("pidima_source", agent.HERMES_GUIDE)

@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, compare, config, preview, review, store
+from . import __version__, agent, compare, config, preview, review, roster, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -72,8 +72,15 @@ class App:
             return _off("router")
         pid, prov = (q.get("project") or ["scratch"])[0], (q.get("provider") or [""])[0]
         r = self.lab.list_models(prov, store.project(pid) or {})
-        return 200, {"ok": True, "provider": prov, "source": r.get("source"),
-                     "models": [m["id"] for m in r.get("models", [])][:500]}
+        ids, picks = roster.arrange(prov, [m["id"] for m in r.get("models", [])], r.get("source") != "hermes",
+                                    (self.cfg.get("extra_models") or {}).get(prov))
+        return 200, {"ok": True, "provider": prov, "source": r.get("source"), "models": ids[:500], "picks": picks}
+
+    def roster(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["router"]:
+            return _off("router")
+        pid = (q.get("project") or ["scratch"])[0]
+        return 200, {"ok": True, "rows": roster.status(self.lab, store.project(pid) or {})}
 
     # ---- preview (flag `preview`) ----
     @property
@@ -343,6 +350,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(lambda: (200, app.state()))
             if u.path == "/api/models":
                 return self._run(app.models, q)
+            if u.path == "/api/roster":
+                return self._run(app.roster, q)
             if u.path == "/api/preview/files":
                 return self._run(app.preview_files, q)
             if u.path == "/api/preview/file":

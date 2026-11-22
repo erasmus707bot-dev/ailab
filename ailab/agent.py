@@ -26,14 +26,17 @@ AGENT_TOOLS = ("jobs_list", "job_get", "job_wait", "addon_build", "print3d_submi
                "recipes_search", "lessons_search",
                # 2026-11-22 goal tools: a fresh Mario-type level, and a Linux app through Linux App Studio
                "mario_level_spec", "mario_level_check", "mario_level_make",
-               "linux_app_describe", "linux_app_change", "linux_app_get", "linux_app_build", "linux_app_package")
+               "linux_app_describe", "linux_app_change", "linux_app_get", "linux_app_build", "linux_app_package",
+               # 2026-11-22 game work: pull Pidima's source into the project, change + test it here, send it back as a proposal
+               "pidima_status", "pidima_source", "pidima_propose")
 MAX_OUT = 4000
 RUN_TIMEOUT_S = 60
 SYSTEM = """You are the AI Lab agent. You work on ONE small web project folder. Reply with exactly ONE JSON
 object per turn and nothing else. Actions:
 {"action":"list"}
 {"action":"read","path":"index.html"}
-{"action":"write","path":"index.html","content":"<full file text>"}
+{"action":"write","path":"index.html","content":"<full file text>"}      (new or small files)
+{"action":"edit","path":"game.js","find":"<exact text now in the file, found once>","replace":"<new text>"}   (big files: change one spot)
 {"action":"run","cmd":"grep -c footer index.html"}      (sh, inside the folder, no network, 60 s)
 {"action":"hermes","tool":"addon_build","args":{"template":"hello"}}   (connected mode only)
 {"action":"done","summary":"what changed and how you checked it"}
@@ -48,7 +51,12 @@ the game after a test bot finishes it (or {"name","seed","length","difficulty"} 
 check it, fix the problems it lists, then make it.
 Linux app: linux_app_describe {"text":"what the app does","name":"..."} -> id. linux_app_change {"id","text":"add a button
 called Save"} (plain words, one change per call). linux_app_build {"id"} -> verdict + problems (takes minutes).
-linux_app_package {"id"} -> the .deb, only after verdict "pass". Installing is Scott's step, never yours."""
+linux_app_package {"id"} -> the .deb, only after verdict "pass". Installing is Scott's step, never yours.
+Pidima game code: pidima_source {} copies engine.js, game.js, index.html, levels.js and bot.js into this project folder (you get
+the file names back, not the text — read what you need). Change the files with "edit". Test with run "node --check game.js" and
+run "node bot.js --js 10" (exit 0 = the test bot finished 10 fresh levels on your engine). When the tests pass:
+pidima_propose {"files":["engine.js","game.js"],"note":"what changed"} sends those files from this folder to Scott as a proposal.
+He applies it; you never do. pidima_status {} -> version, levels, proposals waiting."""
 
 
 class Stopped(Exception):
@@ -211,6 +219,22 @@ class Run:
             tmp.write_text(content)
             tmp.replace(p)
             return {"wrote": rel, "bytes": len(content.encode())}
+        if kind == "edit":
+            p = self._inside(str(a.get("path") or ""))
+            find, rep = str(a.get("find") or ""), str(a.get("replace") or "")
+            if not p or not p.is_file():
+                return {"error": "No such file inside the project."}
+            text = p.read_text(errors="replace")
+            n = text.count(find) if find else 0
+            if n != 1:
+                return {"error": f"\"find\" must match exactly once; it matched {n} times. Read the file and copy the exact text."}
+            text = text.replace(find, rep)
+            if len(text.encode()) > preview.MAX_EDIT:
+                return {"error": "File too big."}
+            tmp = p.with_name(f".{p.name}.agent")
+            tmp.write_text(text)
+            tmp.replace(p)
+            return {"edited": str(a.get("path")), "bytes": len(text.encode())}
         if kind == "run":
             return run_in_sandbox(self.root, str(a.get("cmd") or "true")[:2000])
         if kind == "hermes":
@@ -219,8 +243,25 @@ class Run:
             tool = str(a.get("tool") or "")
             if tool not in AGENT_TOOLS:
                 return {"error": f"{tool!r} isn't on the agent's Hermes list: {', '.join(AGENT_TOOLS)}"}
+            args = a.get("args") if isinstance(a.get("args"), dict) else {}
             try:
-                return self.lab.mcp.call(tool, a.get("args") if isinstance(a.get("args"), dict) else {})
+                if tool == "pidima_propose":                  # file NAMES in, file text read from the project folder
+                    names = args.get("files") if isinstance(args.get("files"), list) else []
+                    paths = {str(n): self._inside(str(n)) for n in names}
+                    missing = [n for n, p in paths.items() if not p or not p.is_file()]
+                    if not names or missing:
+                        return {"error": "files must be a list of file names in this project" + (f"; not found: {missing}" if missing else "")}
+                    args = {"files": {n: p.read_text(errors="replace") for n, p in paths.items()}, "note": str(args.get("note") or "")}
+                res = self.lab.mcp.call(tool, args)
+                if tool == "pidima_source" and isinstance(res.get("files"), dict):    # text goes to disk, not through the model
+                    wrote = []
+                    for n, text in res["files"].items():
+                        p = self._inside(str(n))
+                        if p and isinstance(text, str) and len(text.encode()) <= preview.MAX_EDIT:
+                            p.write_text(text)
+                            wrote.append(n)
+                    res = {**{k: v for k, v in res.items() if k != "files"}, "wrote": wrote}
+                return res
             except HermesRefused as e:
                 return {"error": f"Hermes refused ({e.code}): {e.message}"}
         if kind == "done":
@@ -241,7 +282,7 @@ class Run:
                 if left <= 0:
                     self.state, self.why = "capped", f"💲 Run cap reached (${self.cap_usd:.2f})."
                     return
-                r = self.lab.chat(self.project, self.provider, self.model, msgs, 2048, cap_usd=left,
+                r = self.lab.chat(self.project, self.provider, self.model, msgs, int(self.cfg.get("agent_max_tokens", 4096)), cap_usd=left,
                                   task=f"lab-agent:{self.project['id']}")
                 self.usd += float(r.usd or 0)
                 self.tokens_in += int(r.tokens_in or 0)
@@ -256,7 +297,7 @@ class Run:
                     msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res)})
                     continue
                 res = self.act(a)
-                shown = {k: v for k, v in a.items() if k != "content"}
+                shown = {k: (v if k not in ("find", "replace") else str(v)[:300]) for k, v in a.items() if k != "content"}
                 if "content" in a:
                     shown["bytes"] = len(str(a["content"]).encode())
                 self._record({**shown, "result": res, "usd": r.usd})
