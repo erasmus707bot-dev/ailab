@@ -216,3 +216,27 @@ class AgentOn(Srv):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GoalTools(Base):
+    """2026-11-22: Mario level + Linux app tools are on the agent's list and explained only in connected mode."""
+
+    def test_goal_tools_on_list_and_guide_only_when_connected(self):
+        for t in ("mario_level_spec", "mario_level_check", "mario_level_make", "linux_app_describe",
+                  "linux_app_change", "linux_app_build", "linux_app_package", "linux_app_get"):
+            self.assertIn(t, agent.AGENT_TOOLS)
+        seen = {}
+
+        class Spy(Brain):
+            def chat(self, project, prov, model, msgs, *a, **k):
+                seen["system"] = msgs[0]["content"]
+                return super().chat(project, prov, model, msgs, *a, **k)
+
+        mcp = FakeMCP()
+        r = self.run_agent(Spy([act(action="hermes", tool="mario_level_make", args={"name": "x", "seed": 1}),
+                                act(action="done", summary="made")]), mode="connected", mcp=mcp)
+        self.assertEqual(r.state, "done")
+        self.assertIn("mario_level_make", mcp.calls)
+        self.assertIn("linux_app_build", seen["system"])
+        self.run_agent(Spy([act(action="done", summary="x")]))
+        self.assertNotIn("linux_app_build", seen["system"])

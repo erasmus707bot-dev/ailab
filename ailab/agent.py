@@ -23,7 +23,10 @@ from .spend import SpendBlocked
 
 # Hermes tools the agent may call (connected mode). Studio jobs show up in the Hermes ⏳ Running list.
 AGENT_TOOLS = ("jobs_list", "job_get", "job_wait", "addon_build", "print3d_submit", "capabilities_list",
-               "recipes_search", "lessons_search")
+               "recipes_search", "lessons_search",
+               # 2026-11-22 goal tools: a fresh Mario-type level, and a Linux app through Linux App Studio
+               "mario_level_spec", "mario_level_check", "mario_level_make",
+               "linux_app_describe", "linux_app_change", "linux_app_get", "linux_app_build", "linux_app_package")
 MAX_OUT = 4000
 RUN_TIMEOUT_S = 60
 SYSTEM = """You are the AI Lab agent. You work on ONE small web project folder. Reply with exactly ONE JSON
@@ -36,6 +39,15 @@ object per turn and nothing else. Actions:
 {"action":"done","summary":"what changed and how you checked it"}
 Add "why" (one short line) to every action. Paths are relative to the project folder. Check your work with
 "run" before "done"."""
+# Added to the system prompt in connected mode only (standalone has no Hermes tools).
+HERMES_GUIDE = """
+Hermes studio tools (use with {"action":"hermes","tool":...,"args":{...}}):
+Mario-type level (game SMB1R): mario_level_spec {} -> rules, squares, example map. mario_level_check {"rows":[13 strings]}
+-> playable + problems. mario_level_make {"name":"...","rows":[...]} -> writes the level file (or {"name","seed","length",
+"difficulty"} to have Hermes make one). Design your own map, check it, fix the problems it lists, then make it.
+Linux app: linux_app_describe {"text":"what the app does","name":"..."} -> id. linux_app_change {"id","text":"add a button
+called Save"} (plain words, one change per call). linux_app_build {"id"} -> verdict + problems (takes minutes).
+linux_app_package {"id"} -> the .deb, only after verdict "pass". Installing is Scott's step, never yours."""
 
 
 class Stopped(Exception):
@@ -215,7 +227,7 @@ class Run:
         return {"error": f"Unknown action {kind!r}."}
 
     def loop(self) -> None:
-        msgs = [{"role": "system", "content": SYSTEM},
+        msgs = [{"role": "system", "content": SYSTEM + (HERMES_GUIDE if self.connected else "")},
                 {"role": "user", "content": f"Task: {self.task}\nFiles: "
                  + ", ".join(f["path"] for f in preview.list_root(self.root))}]
         try:
