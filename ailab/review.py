@@ -159,8 +159,13 @@ def held(state: str | None = "waiting") -> list[dict]:
     for r in agent.approvals(state):
         f = _content(r["id"])
         text = f.read_text(errors="replace") if f.exists() else ""
+        t = target(r)
+        try:                                                  # what is there now → a diff for the workbench
+            cur = t.read_text(errors="replace") if t.is_file() and t.stat().st_size <= 400_000 else None
+        except OSError:
+            cur = None
         rows.append({**r, "sha": hashlib.sha256(text.encode()).hexdigest(), "preview": text[:4000],
-                     "target": str(target(r))})
+                     "target": str(t), "new": cur is None, "diff": agent.make_diff(t.name, cur, text)})
     return rows
 
 

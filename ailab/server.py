@@ -149,6 +149,16 @@ class App:
         r.stop()
         return 200, {"ok": True, "run": r.view()}
 
+    def agent_undo(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        r = self.agents.get(str(b.get("id") or ""))
+        try:
+            n = int(b.get("n") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        return 200, {"ok": True, **r.undo_step(n), "run": r.view()}
+
     def agent_approvals(self, q: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
@@ -394,6 +404,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_start, b)
             if p == "/api/agent/stop":
                 return self._run(app.agent_stop, b)
+            if p == "/api/agent/undo":
+                return self._run(app.agent_undo, b)
             if p == "/api/compare/start":
                 return self._run(app.compare_start, b)
             if p == "/api/compare/stop":

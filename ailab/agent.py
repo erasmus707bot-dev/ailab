@@ -7,6 +7,7 @@ Commands run under srt with no network, writing only inside the project folder.
 """
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import subprocess
@@ -101,6 +102,13 @@ def set_approval_state(aid: str, state: str, **extra) -> None:
         fh.write(json.dumps({"id": aid, "state": state, "decided_at": time.time(), **extra}) + "\n")
 
 
+def make_diff(name: str, before: str | None, after: str, cap: int = 12000) -> str:
+    """Unified diff for the workbench's Changes list. before=None means a new file. Never sent to the model."""
+    d = "\n".join(difflib.unified_diff((before or "").splitlines(), after.splitlines(),
+                                       "/dev/null" if before is None else f"a/{name}", f"b/{name}", lineterm="", n=3))
+    return d if len(d) <= cap else d[:cap] + "\n… (diff cut — open the file to see the rest)"
+
+
 def parse_action(text: str) -> dict:
     t = re.sub(r"^```(?:json)?\s*|\s*```$", "", (text or "").strip())
     i = t.find("{")
@@ -148,6 +156,8 @@ class Run:
         self.usd, self.steps, self.state, self.why = 0.0, [], "running", ""
         self.tokens_in = self.tokens_out = 0
         self.autosave_field = autosave_field
+        self.undo: dict[int, tuple] = {}       # step n -> (path, text before | None, text after); memory only
+        self._change = None
         self.stop_flag = threading.Event()
         self.log = (log_dir or config.home() / "projects" / project["id"] / "agent") / f"{self.id}.jsonl"
         self.log.parent.mkdir(parents=True, exist_ok=True)
@@ -161,6 +171,28 @@ class Run:
                 "step_cap": self.step_cap, "usd": round(self.usd, 6), "cap_usd": self.cap_usd,
                 "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
                 "project": self.project["id"], "provider": self.provider, "model": self.model}
+
+    def undo_step(self, n: int) -> dict:
+        """↩ Undo one write/edit step (workbench Changes). Only if the file still holds exactly what that step wrote.
+        A new file is renamed to .<name>.undone (hidden), never deleted."""
+        if self.state == "running":
+            raise ValueError("The agent is still working. Stop it first, then undo.")
+        ch = self.undo.get(n)
+        if not ch:
+            raise ValueError("That step can't be undone any more (the Lab was restarted, or it wasn't a file change).")
+        rel, before, after = ch
+        p = self._inside(rel)
+        if not p or not p.is_file() or p.read_text(errors="replace") != after:
+            raise ValueError("The file changed after this step — not undone. Open it and fix it by hand.")
+        if before is None:
+            p.replace(p.with_name(f".{p.name}.undone"))
+        else:
+            tmp = p.with_name(f".{p.name}.agent")
+            tmp.write_text(before)
+            tmp.replace(p)
+        self.steps[n - 1]["undone"] = True
+        del self.undo[n]
+        return {"path": rel, "new_file": before is None}
 
     def stop(self, why: str = "⏹ Stopped by you") -> None:
         self.why = why
@@ -215,6 +247,7 @@ class Run:
             if len(content.encode()) > preview.MAX_EDIT:
                 return {"error": "File too big."}
             p.parent.mkdir(parents=True, exist_ok=True)
+            self._change = (rel, p.read_text(errors="replace") if p.is_file() else None, content)
             tmp = p.with_name(f".{p.name}.agent")
             tmp.write_text(content)
             tmp.replace(p)
@@ -228,9 +261,10 @@ class Run:
             n = text.count(find) if find else 0
             if n != 1:
                 return {"error": f"\"find\" must match exactly once; it matched {n} times. Read the file and copy the exact text."}
-            text = text.replace(find, rep)
+            before, text = text, text.replace(find, rep)
             if len(text.encode()) > preview.MAX_EDIT:
                 return {"error": "File too big."}
+            self._change = (str(a.get("path")), before, text)
             tmp = p.with_name(f".{p.name}.agent")
             tmp.write_text(text)
             tmp.replace(p)
@@ -300,7 +334,12 @@ class Run:
                 shown = {k: (v if k not in ("find", "replace") else str(v)[:300]) for k, v in a.items() if k != "content"}
                 if "content" in a:
                     shown["bytes"] = len(str(a["content"]).encode())
-                self._record({**shown, "result": res, "usd": r.usd})
+                step = {**shown, "result": res, "usd": r.usd}
+                ch, self._change = self._change, None
+                if ch:                                                # shown to Scott as a diff; ↩ Undo puts `before` back
+                    step["diff"] = make_diff(ch[0], ch[1], ch[2])
+                    self.undo[len(self.steps) + 1] = ch
+                self._record(step)
                 if res.get("done"):
                     self.state, self.why = "done", str(a.get("summary") or "✅ Done")[:600]
                     return

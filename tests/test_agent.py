@@ -279,3 +279,41 @@ class GameCode(Base):
         self.assertEqual(mcp.sent, {"files": {"engine.js": "ENGINE2"}, "note": "n"})
         self.assertIn("not found", r.steps[3]["result"]["error"])
         self.assertIn("pidima_source", agent.HERMES_GUIDE)
+
+
+class WorkbenchChanges(unittest.TestCase):
+    """2026-11-22 workbench: every agent write carries a diff; ↩ Undo puts the old text back."""
+
+    def test_make_diff_marks_new_file_and_caps(self):
+        from ailab import agent
+        d = agent.make_diff("a.txt", None, "one\ntwo")
+        self.assertIn("/dev/null", d)
+        self.assertIn("+two", d)
+        self.assertIn("-old", agent.make_diff("a.txt", "old", "new"))
+        self.assertIn("diff cut", agent.make_diff("a.txt", "", "x\n" * 9000, cap=500))
+
+    def test_undo_step_restores_only_untouched_files(self):
+        import tempfile
+        from pathlib import Path
+        from ailab import agent
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "a.txt").write_text("after")
+            (root / "new.txt").write_text("fresh")
+            r = agent.Run.__new__(agent.Run)
+            r.root, r.state = root, "done"
+            r.steps = [{"n": 1}, {"n": 2}, {"n": 3}]
+            r.undo = {1: ("a.txt", "before", "after"), 2: ("new.txt", None, "fresh"), 3: ("a.txt", "x", "something else")}
+            with self.assertRaises(ValueError):
+                r.undo_step(3)                                   # file no longer holds what step 3 wrote
+            self.assertEqual(r.undo_step(1)["path"], "a.txt")
+            self.assertEqual((root / "a.txt").read_text(), "before")
+            self.assertTrue(r.steps[0]["undone"])
+            self.assertTrue(r.undo_step(2)["new_file"])
+            self.assertFalse((root / "new.txt").exists())
+            self.assertEqual((root / ".new.txt.undone").read_text(), "fresh")   # kept, hidden — never deleted
+            with self.assertRaises(ValueError):
+                r.undo_step(1)                                   # already undone
+            r.state = "running"
+            with self.assertRaises(ValueError):
+                r.undo_step(2)

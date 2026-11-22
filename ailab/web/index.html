@@ -150,6 +150,56 @@
   .lanecard iframe { width: 100%; height: 240px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
   .lanecard.best { border-color: var(--accent); }
   .cmpform input { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+  /* 🛠 workbench (2026-11-22): the Lab's front page — Files · Code · Agent, changes first */
+  [hidden] { display: none !important; }
+  header .projsel { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 8px; min-width: 6.5rem; max-width: 40vw; flex: 0 1 15rem; }
+  header #waiting { border-color: var(--warn); }
+  .wbtabs { display: none; gap: 6px; }
+  .wbtabs .tab { flex: 1; padding: 10px 6px; font-size: 1rem; }
+  .wb { flex: 1; display: grid; grid-template-columns: minmax(170px, 230px) minmax(0, 1.35fr) minmax(320px, 1fr); gap: var(--gap);
+    height: calc(100dvh - 48px - 2 * var(--gap)); min-height: 0; }
+  .wb > .pane { overflow: auto; min-width: 0; }
+  .wb select, .wb textarea { max-width: 100%; min-width: 0; }
+  .wb h2 { margin: 0; font-size: 1rem; }
+  .wbfiles #pvtabs { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  .wbfiles .tab { text-align: left; overflow-wrap: anywhere; }
+  .wbcode .code { min-height: 200px; }
+  .wbcode .frame { min-height: 300px; }
+  .wbfile { font-weight: 650; overflow-wrap: anywhere; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-left: auto; }
+  .seg button { border: 0; background: var(--panel2); padding: 7px 12px; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .wbcode #pvsave { margin-left: 0; }
+  .wbagent textarea { min-height: 110px; }
+  .wbagent .step { background: var(--bg); }
+  .changes { display: flex; flex-direction: column; gap: 8px; }
+  .changes:empty { display: none; }
+  .chg { border: 1px solid var(--warn); border-radius: 10px; padding: 8px 10px; background: var(--bg); }
+  .chg .hd { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .chg .hd b { overflow-wrap: anywhere; }
+  .diff { margin: 6px 0; padding: 8px; border-radius: 8px; background: var(--panel2); font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-word; max-height: 38vh; overflow: auto; }
+  .diff .add { color: var(--ok); } .diff .del { color: var(--bad); } .diff .hunk { color: var(--dim); }
+  .chg input { padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); max-width: 9rem; }
+  .drawer { margin-top: 0; border-top: 1px solid var(--line); padding-top: 6px; }
+  .drawer pre { white-space: pre-wrap; word-break: break-word; font-size: .82rem; max-height: 30vh; overflow: auto; margin: 6px 0 0; }
+  .wbtools .btn.off { opacity: .6; }
+  @media (max-width: 980px) {
+    .title { display: none; }
+    .wbtabs { display: flex; position: sticky; top: 52px; z-index: 3; background: var(--bg); padding-bottom: 2px; }
+    .wb { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .wb > .pane { display: none; overflow: visible; }
+    header #full, header #mode { display: none; }
+  }
+  @media (max-width: 640px) {
+    header #projnew { display: none; }                      /* phone: "➕ New project…" is the last entry of the project list */
+    header .projsel { min-width: 5.5rem; flex: 1 1 5.5rem; max-width: none; }
+    .wb[data-tab="files"] > .wbfiles, .wb[data-tab="code"] > .wbcode, .wb[data-tab="agent"] > .wbagent { display: flex; }
+    .wbcode .code { min-height: 46vh; }
+    .wbcode .frame { min-height: 56vh; }
+  }
+  #navnote { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: min(92vw, 520px); padding: 12px 16px; border-radius: 12px; background: var(--panel); color: var(--ink, inherit); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #navnote.on { opacity: 1; }
 </style>
 </head>
 <body>
@@ -157,6 +207,10 @@
   <button class="ib" id="back" title="Back" aria-label="Back">←</button>
   <button class="ib" id="home" title="Home" aria-label="Home">⌂</button>
   <span class="title">🧪 <span class="full">AI Lab</span></span>
+  <label class="sr" for="projsel">Project</label>
+  <select class="projsel" id="projsel" title="Project"></select>
+  <button class="ib" id="projnew" title="New project" aria-label="New project">➕</button>
+  <button class="chip" id="waiting" title="Changes waiting for your OK" hidden></button>
   <span class="chips">
     <span class="chip" id="mode" title="Mode"></span>
     <span class="chip spend" id="spend" title="Spent today / daily cap"><span>💲</span><span id="spendtxt">–</span><span class="bar"><i id="spendbar"></i></span></span>
@@ -221,8 +275,32 @@ $("#full").onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   else document.documentElement.requestFullscreen?.().catch(() => {});
 };
-$("#back").onclick = () => { if (trail.length) { view = trail.pop(); render(); } else if (S && S.hermes_url) location.href = S.hermes_url; };
-$("#home").onclick = () => { if (view !== "start") { trail = []; view = "start"; render(); } else if (S && S.hermes_url) location.href = S.hermes_url; };
+/* Back / Home (2026-11-22 fix): inside the Lab they walk the trail; at the start page they return to Hermes.
+   Where Hermes is: config hermes_url, else the ?from= the Hermes card passes, else the page that linked here. */
+const okUrl = u => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) && x.origin !== location.origin ? x.href : ""; } catch (e) { return ""; } };
+(function rememberFrom() {
+  const q = new URLSearchParams(location.search), f = okUrl(q.get("from") || "") || okUrl(document.referrer || "");
+  if (f) store.set("from", f);
+  if (q.has("from")) { q.delete("from"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "")); }
+})();
+const backUrl = () => okUrl((S && S.hermes_url) || "") || okUrl(store.get("from", "") || "");
+const homeUrl = () => { const u = okUrl((S && S.hermes_url) || ""); if (u) return u; const f = okUrl(store.get("from", "") || ""); return f ? new URL(f).origin + "/" : ""; };
+function navNote(t) {
+  let n = $("#navnote"); if (!n) { n = h("div", { id: "navnote", role: "status" }); document.body.append(n); }
+  n.textContent = t; n.classList.add("on"); clearTimeout(navNote.t); navNote.t = setTimeout(() => n.classList.remove("on"), 2600);
+}
+function leave(u) { if (u) location.href = u; else navNote("This is the Lab's first page. Open the Lab from its Hermes card once and ← ⌂ will go back there."); }
+function goBack() { if (trail.length) { view = trail.pop(); render(); } else leave(backUrl()); }
+function goHome() { if (view !== "start") { trail = []; view = "start"; render(); } else leave(homeUrl()); }
+$("#back").onclick = goBack;
+$("#home").onclick = goHome;
+/* the phone's / browser's own Back button walks the same trail */
+try { history.replaceState({ lab: 1 }, ""); history.pushState({ lab: 2 }, ""); } catch (e) {}
+addEventListener("popstate", () => {
+  if (trail.length) { try { history.pushState({ lab: 2 }, ""); } catch (e) {} goBack(); }
+  else if (backUrl()) location.href = backUrl();
+  else history.back();
+});
 function go(v) { if (v !== view) { trail.push(view); view = v; render(); } }
 
 function paintBar() {
@@ -240,14 +318,25 @@ function paintBar() {
 
 /* ---------- project ---------- */
 const curProject = () => S.projects.find(p => p.id === store.get("project", "scratch")) || S.projects[0];
-function projectRow() {
-  const sel = h("select", { "aria-label": "Project", onchange: e => { store.set("project", e.target.value); chatLog = []; render(); } },
-    S.projects.map(p => h("option", { value: p.id, selected: p.id === curProject().id }, (p.sensitive ? "🔒 " : "📁 ") + p.name)));
+function projectRow() {            // the switcher lives in the top bar now; views keep only the 🔒 note
   const p = curProject();
-  return h("div", { class: "proj" }, h("span", { "aria-hidden": "true" }, "📂"), sel,
-    h("button", { class: "ib", title: "New project", "aria-label": "New project", onclick: newProject }, "➕"),
-    p.sensitive ? h("span", { class: "lock" }, "🔒 stays on this computer — Ollama only") : null);
+  return p.sensitive ? h("div", { class: "lock" }, "🔒 This project stays on this computer — Ollama only") : document.createDocumentFragment();
 }
+function paintProjects() {
+  const sel = $("#projsel"); sel.innerHTML = "";
+  S.projects.forEach(p => sel.append(h("option", { value: p.id, selected: p.id === curProject().id }, (p.sensitive ? "🔒 " : "📁 ") + p.name)));
+  sel.append(h("option", { value: "__new" }, "➕ New project…"));
+}
+$("#projsel").onchange = e => {
+  if (e.target.value === "__new") { paintProjects(); newProject(); return; }
+  store.set("project", e.target.value); chatLog = []; render();
+};
+$("#projnew").onclick = () => newProject();
+function paintWaiting(n) {
+  const c = $("#waiting"); c.hidden = !n; c.textContent = n ? `✋ ${n}` : "";
+  c.setAttribute("aria-label", n ? `${n} change${n === 1 ? "" : "s"} waiting for your OK` : "");
+}
+$("#waiting").onclick = () => { store.set("wbtab", "code"); if (view !== "start") { trail.push(view); view = "start"; } render(); };
 function newProject() {
   const d = $("#newproj"); $("#pname").value = ""; $("#psens").checked = false;
   d.onclose = async () => {
@@ -268,13 +357,111 @@ function offCard(flag, sym, name, later) {
       h("p", {}, later ? `This part arrives in build step ${later}.`
         : "Each part is switched on by Scott, one at a time, after it is tested (step M7). Order: 💬 Ask models → 👁 Live preview → 🤖 Agent → ⚖️ Compare.")));
 }
+function diffPre(text) {
+  const pre = h("pre", { class: "diff" });
+  String(text || "").split("\n").forEach(l => pre.append(h("span", { class:
+    l.startsWith("@@") ? "hunk" : l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : "" }, l + "\n")));
+  return pre;
+}
+/* 🛠 The workbench — front page. Left: files. Middle: code, changes waiting, preview, run output. Right: the task box + agent steps. */
 function startView() {
-  return [projectRow(), h("div", { class: "paths" }, PATHS.map(p => {
-    const on = p.flag ? S.flags[p.flag] : !p.later;
-    return h("button", { class: "path" + (on ? "" : " off"), onclick: () => go(p.id), "data-path": p.id },
-      h("span", { class: "sym", "aria-hidden": "true" }, p.sym), h("span", { class: "name" }, p.name),
-      h("span", {}, p.tip), h("span", { class: "st" }, on ? "🟢 On" : "⏸ Not switched on yet"));
-  }))];
+  const p = curProject();
+  let tab = store.get("wbtab", "agent"), mode = "code", curRun = null, sig = "", lastOut = 0, held = [];
+  const sec = h("section", { class: "wb", id: "wb", "data-tab": tab });
+  const tabBtns = [["files", "📂 Files"], ["code", "📝 Code"], ["agent", "🤖 Agent"]].map(([t, n]) =>
+    h("button", { class: "tab", "data-t": t, "aria-pressed": String(t === tab), onclick: () => setTab(t) }, n));
+  function setTab(t) { tab = t; store.set("wbtab", t); sec.dataset.tab = t; tabBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t))); }
+  const fileName = h("span", { class: "wbfile", id: "wbfile" }, "—");
+  const changes = h("div", { class: "changes", id: "wbchanges", "aria-live": "polite" });
+  const outSum = h("summary", {}, "▶ Run output"), outPre = h("pre", {}, "Nothing has run yet.");
+  const drawer = h("details", { class: "drawer", id: "wbout" }, outSum, outPre);
+
+  const pv = previewView({ onPick: () => setTab("code"), onOpen: path => { fileName.textContent = path; } });
+  const ag = agentView({ onRun, showChanges: () => { setTab("code"); changes.scrollIntoView({ block: "nearest" }); } });
+
+  /* ---- changes: agent edits in this project (↩ Undo) + writes held outside it (✅ Apply / ✗ Reject) ---- */
+  const keptKey = "wbkept." + p.id;
+  function chgCard(icon, title, sub, diff, open, ...controls) {
+    return h("div", { class: "chg" }, h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, icon), h("b", {}, title), h("span", { class: "note" }, sub)),
+      h("details", { open }, h("summary", {}, "what changed"), diffPre(diff)), h("div", { class: "runbar" }, ...controls));
+  }
+  function paintChanges() {
+    const kept = store.get(keptKey, []), rows = [];
+    held.forEach(x => {
+      const cf = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply" }), note = h("span", { class: "note" });
+      rows.push(chgCard("✋", x.target, `${x.new ? "new file" : "change"} outside the project · from ${x.project} · not written yet`, x.diff || x.preview, true, cf,
+        h("button", { class: "btn pri", onclick: async () => {
+          const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
+          note.textContent = a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
+        } }, "✅ Apply"),
+        h("button", { class: "btn", onclick: async () => {
+          const a = await api("/api/review/reject", { id: x.id }); note.textContent = a.ok ? "✗ rejected (kept, not deleted)" : `⚠️ ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
+        } }, "✗ Reject"), note));
+    });
+    if (curRun) curRun.steps.forEach(s => {
+      if (!s.diff || s.undone || kept.includes(curRun.id + ":" + s.n)) return;
+      const note = h("span", { class: "note" });
+      rows.push(chgCard("📝", s.path, `step ${s.n} · already written in this project`, s.diff, rows.length < 2,
+        h("button", { class: "btn pri", title: "Keep this change and clear it from the list", onclick: () => { store.set(keptKey, kept.concat(curRun.id + ":" + s.n).slice(-200)); paintChanges(); } }, "✓ Keep"),
+        h("button", { class: "btn", title: "Put the file back the way it was before this step", onclick: async () => {
+          const a = await api("/api/agent/undo", { id: curRun.id, n: s.n });
+          if (!a.ok) { note.textContent = `${a.icon || "⚠️"} ${a.message || "Not undone."}`; return; }
+          curRun = a.run; paintChanges(); if (pv) pv.refresh();
+        } }, "↩ Undo"),
+        pv ? h("button", { class: "btn", onclick: () => pv.pick(s.path) }, "📝 Open") : null, note));
+    });
+    changes.innerHTML = "";
+    if (rows.length) changes.append(h("h2", {}, `✋ ${rows.length} change${rows.length === 1 ? "" : "s"} to look at`), ...rows);
+    paintWaiting(rows.length);
+  }
+  async function loadHeld() {
+    const r = await api(`/api/review?project=${encodeURIComponent(p.id)}`);
+    held = r.ok ? (r.held || []) : []; paintChanges();
+  }
+  function onRun(run) {
+    curRun = run;
+    const nsig = `${run.id}:${run.steps.length}:${run.state}`;
+    if (nsig === sig) return;
+    const grew = sig.split(":")[0] !== run.id || +sig.split(":")[1] !== run.steps.length; sig = nsig;
+    const last = [...run.steps].reverse().find(s => s.action === "run" && s.result);
+    if (last) {
+      const r = last.result;
+      outSum.textContent = `▶ Run output · step ${last.n} · ${r.error ? "⚠️ error" : "exit " + r.exit}`;
+      outPre.textContent = `$ ${last.cmd || ""}\n${r.error || r.output || "(no output)"}`;
+      if (last.n !== lastOut && (r.error || r.exit)) drawer.open = true;     // a failing run opens itself
+      lastOut = last.n;
+    }
+    if (grew && pv && run.steps.some(s => s.diff)) pv.refresh();
+    if (run.state === "running") paintChanges(); else loadHeld();
+  }
+  loadHeld();
+
+  /* ---- panes ---- */
+  const TOOLS = [["chat", "router", "💬 Ask a model"], ["compare", "compare", "⚖️ Compare models"], ["review", null, "📋 Send a demo"], ["preview", "preview", "👁 Big preview"]];
+  const tools = h("div", { class: "runbar wbtools" }, TOOLS.map(([id, flag, name]) =>
+    h("button", { class: "btn" + (!flag || S.flags[flag] ? "" : " off"), onclick: () => go(id), "data-path": id }, name)));
+  const agentPane = h("div", { class: "pane wbagent agent" }, h("h2", {}, "🤖 What should I build or change?"),
+    ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.held), ag.status, ag.final,
+        h("details", {}, h("summary", {}, "✨ Starters"), ag.goals), ag.steps]
+      : [offCard("agent", "🤖", "Agent")]),
+    h("details", {}, h("summary", {}, "🧰 More tools"), tools));
+  let codePane, filesPane = null;
+  if (pv) {
+    const prevWrap = h("div", { style: "display:none;flex:1;flex-direction:column;gap:8px;min-height:0" }, pv.tools, pv.frame);
+    const segBtns = [["code", "📝 Code"], ["preview", "👁 Preview"]].map(([m, n]) =>
+      h("button", { "aria-pressed": String(m === mode), onclick: () => { mode = m;
+        segBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === m)));
+        pv.ed.style.display = m === "code" ? "" : "none"; prevWrap.style.display = m === "preview" ? "flex" : "none"; }, "data-m": m }, n));
+    codePane = h("div", { class: "pane wbcode" }, changes,
+      h("div", { class: "bar2" }, fileName, h("span", { class: "seg", role: "group", "aria-label": "Code or preview" }, segBtns), pv.saveBtn),
+      pv.note, pv.restore, pv.ed, prevWrap, drawer);
+    filesPane = h("div", { class: "pane wbfiles" }, h("h2", {}, "📂 Files"), pv.tabs);
+  } else {
+    codePane = h("div", { class: "pane wbcode" }, changes, offCard("preview", "👁", "Files & code"), drawer);
+    filesPane = h("div", { class: "pane wbfiles" }, h("h2", {}, "📂 Files"), h("p", { class: "note" }, "⏸ Not switched on yet."));
+  }
+  sec.append(filesPane, codePane, agentPane);
+  return [projectRow(), h("nav", { class: "wbtabs", "aria-label": "Workbench" }, tabBtns), sec];
 }
 
 let saveTimer = null;
@@ -348,8 +535,8 @@ function msgEl(m) {
 
 /* ---------- live preview (flag `preview`) ---------- */
 let pvTimer = null, pvPoll = null, pvFile = store.get("pvfile", "index.html");
-function previewView() {
-  if (!S.flags.preview) return [offCard("preview", "👁", "Live preview")];
+function previewView(wb) {
+  if (!S.flags.preview) return wb ? null : [offCard("preview", "👁", "Live preview")];
   const p = curProject(), src = `/preview/${encodeURIComponent(p.id)}/`;
   const note = h("span", { class: "note", id: "pvnote", role: "status" });
   const tabs = h("div", { class: "bar2", id: "pvtabs", role: "group", "aria-label": "Files" }, "⏳");
@@ -386,7 +573,7 @@ function previewView() {
     tabs.innerHTML = "";
     files.filter(f => f.editable).forEach(f => {
       const dirty = store.get(`pvdraft.${p.id}.${f.path}`, null) != null;
-      tabs.append(h("button", { class: "tab", "aria-pressed": String(f.path === pvFile), onclick: () => open(f.path) },
+      tabs.append(h("button", { class: "tab", "aria-pressed": String(f.path === pvFile), onclick: () => { open(f.path); if (wb) wb.onPick(); } },
         f.path, dirty ? h("span", { class: "dot", title: "not saved" }, " ●") : null));
     });
   }
@@ -400,10 +587,15 @@ function previewView() {
     if (!restore.hidden) restore.append("↩ You have an unsaved edit of this file. ",
       h("button", { class: "btn", onclick: () => { ed.value = draft; restore.hidden = true; edited(); } }, "Bring it back"),
       " ", h("button", { class: "btn", onclick: () => { store.set(key(), null); restore.hidden = true; paintTabs(); } }, "✕ Drop it"));
-    note.textContent = ""; paintTabs();
+    note.textContent = ""; paintTabs(); if (wb) wb.onOpen(path);
+  }
+  async function refresh() {                                  // the agent changed files: new list, and reload the open file unless you're mid-edit
+    const r = await api(`/api/preview/files?project=${encodeURIComponent(p.id)}`); if (!r.ok) return;
+    files = r.files; if (!files.some(f => f.path === pvFile && f.editable)) pvFile = (files.find(f => f.editable) || {}).path;
+    if (pvFile && (ed.value === disk || !disk)) open(pvFile); else paintTabs();
   }
   async function poll() {
-    if (view !== "preview" || document.hidden) return;
+    if (!(view === "preview" || (wb && view === "start")) || document.hidden) return;
     const r = await api(`/api/preview/version?project=${encodeURIComponent(p.id)}`);
     if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
     if (lastV && r.v !== lastV) { frame.src = `${src}?v=${r.v}`; if (note.textContent.startsWith("✅")) note.textContent = "✅ saved · 🔄 reloaded"; }
@@ -421,6 +613,8 @@ function previewView() {
     h("button", { class: "ib", id: "pvcap", title: "Screen capture", "aria-label": "Screen capture", onclick: () => capture(frame, p.id, note) }, "📸"),
     h("a", { class: "ib", href: src, target: "_blank", rel: "noopener", title: "Open in its own tab", "aria-label": "Open in its own tab" }, "↗"),
     h("span", { class: "note", id: "pvcapnote" }));
+  if (wb) return { tabs, saveBtn, note, restore, ed, tools, frame, refresh,
+    pick: path => { if (files.some(f => f.path === path && f.editable)) { open(path); wb.onPick(); } else note.textContent = "📦 That file can't be edited here."; } };
   return [projectRow(), h("section", { class: "split" },
     h("div", { class: "pane" }, h("div", { class: "bar2" }, tabs, saveBtn), note, restore, ed),
     h("div", { class: "pane pvpane" }, tools, frame))];
@@ -450,15 +644,15 @@ async function capture(frame, pid, note, lane) {
     out.textContent = r.ok ? `📸 saved ${r.file || "for this model"}` : `📸 downloaded · ⚠️ ${r.message || "not kept in the project"}`;
   } finally { stream.getTracks().forEach(t => t.stop()); }
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden && view === "preview" && pvPoll) pvPoll(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && (view === "preview" || view === "start") && pvPoll) pvPoll(); });
 
 /* ---------- agent (flag `agent`) ---------- */
 let agTimer = null;
-const ICON = { list: "📂", read: "📖", write: "📝", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
+const ICON = { list: "📂", read: "📖", write: "📝", edit: "✏️", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
 const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
                 refused: "🔒 Refused", failed: "⚠️ Failed" };
-function agentView() {
-  if (!S.flags.agent) return [offCard("agent", "🤖", "Agent")];
+function agentView(wb) {
+  if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
   const p = curProject();
   const provs = S.providers.filter(x => !p.sensitive || x.local);
   const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
@@ -471,7 +665,8 @@ function agentView() {
     const want = store.get("model." + prov, r.models[0]);
     r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
   });
-  const task = h("textarea", { id: "agtask", "aria-label": "Task", placeholder: "🤖 What should the agent do? e.g. Add a footer with today's year, then check it's there." });
+  const task = h("textarea", { id: "agtask", "aria-label": "Task", placeholder: "Say it in plain words. e.g. Add a footer with today's year, then check it's there.  (Ctrl+Enter starts)" });
+  task.onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); startBtn.click(); } };
   task.value = store.get("agtask." + p.id, "");
   let t = null;
   task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t);
@@ -488,7 +683,7 @@ function agentView() {
   const startBtn = h("button", { class: "btn pri", id: "agstart" }, "▶ Start");
   const stopBtn = h("button", { class: "btn", id: "agstop", disabled: true }, "⏹ Stop");
   const status = h("span", { class: "note", id: "agstatus", role: "status" });
-  const held = h("button", { class: "chip", id: "agheld", hidden: true, onclick: () => go("review") });
+  const held = h("button", { class: "chip", id: "agheld", hidden: true, onclick: () => wb ? wb.showChanges() : go("review") });
   const steps = h("div", { class: "steps", id: "agsteps", "aria-live": "polite" });
   const final = h("div", { class: "final", id: "agfinal", hidden: true });
 
@@ -499,7 +694,7 @@ function agentView() {
       const r = s.result || {};
       const cls = "step" + (r.held ? " held" : "") + (r.error ? " err" : "");
       const line = s.action === "write" ? `${s.path} (${s.bytes || 0} bytes)` : s.action === "run" ? s.cmd
-        : s.action === "read" ? s.path : s.action === "hermes" ? s.tool : s.action === "done" ? (s.summary || "") : "";
+        : s.action === "read" || s.action === "edit" ? s.path : s.action === "hermes" ? s.tool : s.action === "done" ? (s.summary || "") : "";
       const body = r.held ? `✋ Held for your approval — not written (${r.approval})`
         : r.error ? `⚠️ ${r.error}` : r.output != null ? `exit ${r.exit}\n${r.output}` : r.text != null ? r.text.slice(0, 2000)
         : JSON.stringify(r, null, 1).slice(0, 2000);
@@ -514,10 +709,11 @@ function agentView() {
     final.hidden = running || !run.why; final.textContent = run.why || "";
     if (running) { clearTimeout(agTimer); agTimer = setTimeout(poll, 1000); }
     else api("/api/agent/approvals").then(a => { const n = (a.items || []).length;
-      held.hidden = !n; held.textContent = `✋ ${n} waiting for your approval — 📋 open`; });
+      held.hidden = !n; held.textContent = wb ? `✋ ${n} waiting — look` : `✋ ${n} waiting for your approval — 📋 open`; });
+    if (wb) wb.onRun(run);
   }
   async function poll() {
-    const id = store.get("agrun." + p.id, null); if (!id || view !== "agent") return;
+    const id = store.get("agrun." + p.id, null); if (!id || !(view === "agent" || (wb && view === "start"))) return;
     const r = await api(`/api/agent/run?id=${encodeURIComponent(id)}`);
     if (!r.ok) { store.set("agrun." + p.id, null); status.textContent = ""; return; }
     if (r.spend) { S.spend = r.spend; paintBar(); }
@@ -535,6 +731,7 @@ function agentView() {
     stopBtn.disabled = true; const r = await api("/api/agent/stop", { id }); if (r.ok) paint(r.run);
   };
   poll();
+  if (wb) return { picker: h("div", { class: "picker" }, provSel, modelSel), task, goals, startBtn, stopBtn, held, status, final, steps };
   return [projectRow(), h("section", { class: "agent" },
     h("div", { class: "picker" }, provSel, modelSel), task, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, held,
@@ -771,7 +968,8 @@ function reviewView() {
 function render() {
   const main = $("#main"); main.innerHTML = "";
   clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer); clearTimeout(cmpTimer);
-  main.classList.toggle("wide", view === "preview" && !!S.flags.preview);
+  main.classList.toggle("wide", view === "start" || (view === "preview" && !!S.flags.preview));
+  paintProjects();
   const path = PATHS.find(p => p.id === view);
   let kids;
   if (view === "start") kids = startView();
@@ -782,7 +980,7 @@ function render() {
   else if (view === "compare") kids = compareView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
-  $("#back").disabled = !trail.length && !(S && S.hermes_url);
+  $("#back").disabled = false;
   store.set("view", view);
 }
 
@@ -790,8 +988,7 @@ function render() {
   const r = await api("/api/state");
   if (!r.ok) { $("#main").innerHTML = ""; $("#main").append(h("div", { class: "offcard" }, h("div", { class: "big" }, "🔌"), h("h2", {}, "The Lab server isn't answering."))); return; }
   S = r; paintBar();
-  const v = store.get("view", "start");
-  if (PATHS.some(p => p.id === v)) { trail = ["start"]; view = v; }
+  /* always opens on the 🛠 workbench, in the last project (2026-11-22) */
   render();
 })();
 </script>
