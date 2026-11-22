@@ -462,7 +462,7 @@ function agentView() {
     t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
   // 2026-11-22 goal starters: fill the task box (Hermes studio tools → connected mode only)
   const GOALS = [
-    ["🍄 Mario level", "Make a fresh Mario-type level for SMB1R. Steps: 1) hermes mario_level_spec. 2) Design your OWN map: 13 rows, 120 or more columns, with pits, block rows, enemies and a staircase before the flag. 3) hermes mario_level_check, fix every problem it lists, check again. 4) hermes mario_level_make with a short name. 5) Write the final map to level.txt. Then done."],
+    ["🍄 Mario level", "Make a fresh Mario-type level for Pidima. Steps: 1) hermes mario_level_spec. 2) Design your OWN map: 13 rows, 120 or more columns, with pits, block rows, enemies and a staircase before the flag. 3) hermes mario_level_check, fix every problem it lists, check again. 4) hermes mario_level_make with a short name. 5) Write the final map to level.txt. Then done."],
     ["🐧 Linux app", "Make a Linux app: (say here what it should do). Steps: 1) hermes linux_app_describe. 2) hermes linux_app_change for anything missing, one change per call. 3) hermes linux_app_build; if the verdict is not pass, read the problems, change, build again. 4) hermes linux_app_package. Then done, with the app id and the .deb file name."]];
   const goals = h("div", { class: "runbar", id: "aggoals" }, GOALS.map(([label, text]) =>
     h("button", { class: "btn", type: "button", title: S.mode === "connected" ? "Fill the task box" : "Needs 🔌 connected mode (Hermes studio tools)",
