@@ -35,7 +35,7 @@ RUN_TIMEOUT_S = 60
 SYSTEM = """You are the AI Lab agent. You work on ONE small web project folder. Reply with exactly ONE JSON
 object per turn and nothing else. Actions:
 {"action":"list"}
-{"action":"read","path":"index.html"}
+{"action":"read","path":"index.html"}      (big file: add "start":LINE,"lines":N — e.g. around a line "find" gave you)
 {"action":"write","path":"index.html","content":"<full file text>"}      (new or small files)
 {"action":"edit","path":"game.js","find":"<exact text now in the file, found once>","replace":"<new text>"}   (big files: change one spot)
 {"action":"run","cmd":"grep -c footer index.html"}      (sh, inside the folder, no network, 60 s)
@@ -152,6 +152,37 @@ def run_in_sandbox(root: Path, cmd: str, timeout: int = RUN_TIMEOUT_S) -> dict:
         return {"exit": r.returncode, "output": out[-MAX_OUT:]}
     except subprocess.TimeoutExpired:
         return {"exit": None, "output": f"⏱ stopped after {timeout} s"}
+
+
+READ_CHARS = 20000
+
+
+def read_range(text: str, start=None, lines=None) -> dict:
+    """read: whole file when it fits; otherwise a line range. A cut-off read always says so (2026-11-22: 49 Hermes
+    web pages are over 20 KB — a silent cut made the agent edit blind)."""
+    all_lines = text.splitlines(keepends=True)
+    total = len(all_lines)
+    try:
+        s = max(1, int(start)) if start is not None else 1
+        n = max(1, int(lines)) if lines is not None else total
+    except (TypeError, ValueError):
+        return {"error": "\"start\" and \"lines\" must be whole numbers."}
+    if s > max(total, 1):
+        return {"error": f"The file has {total} lines; start {s} is past the end."}
+    chunk = "".join(all_lines[s - 1:s - 1 + n])
+    cut = len(chunk) > READ_CHARS
+    chunk = chunk[:READ_CHARS]
+    shown = chunk.count("\n") + (0 if chunk.endswith("\n") or not chunk else 1)
+    end = s + shown - 1
+    out = {"text": chunk}
+    if start is not None or lines is not None or cut:
+        out.update(start=s, end=end, total_lines=total)
+    if cut or end < total and (start is not None or lines is not None or cut):
+        out["truncated"] = cut
+        if cut:
+            out["tip"] = (f"Only lines {s}–{end} of {total} fit. Use \"find\"/\"run\" grep -n to get a line number, "
+                          "then read with \"start\" and \"lines\" (e.g. 150).")
+    return out
 
 
 class Run:
@@ -297,7 +328,7 @@ class Run:
             p = self._inside(str(a.get("path") or ""))
             if not p or not p.is_file():
                 return {"error": "No such file inside the project."}
-            return {"text": p.read_text(errors="replace")[:20000]}
+            return read_range(p.read_text(errors="replace"), a.get("start"), a.get("lines"))
         if kind == "write":
             rel, content = str(a.get("path") or ""), str(a.get("content") or "")
             p = self._inside(rel)

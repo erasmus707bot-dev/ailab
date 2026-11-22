@@ -258,6 +258,25 @@ class GameCode(Base):
         self.assertIn("error", r.steps[2]["result"])
         self.assertEqual((root / "big.js").read_text(), "const a = 5;\nconst b = 1;\n")
 
+    def test_big_file_read_says_it_was_cut_and_ranges_work(self):
+        root = preview.ensure_site("scratch")
+        (root / "big.html").write_text("".join(f"<p>line {i} {'x' * 60}</p>\n" for i in range(1, 1001)))
+        r = self.run_agent(Brain([act(action="read", path="big.html"),
+                                  act(action="read", path="big.html", start=900, lines=3),
+                                  act(action="done", summary="ok")]))
+        first, part = r.steps[0]["result"], r.steps[1]["result"]
+        self.assertTrue(first["truncated"])
+        self.assertEqual(first["total_lines"], 1000)
+        self.assertIn("start", first["tip"])
+        self.assertEqual(part["text"].splitlines()[0][:13], "<p>line 900 x")
+        self.assertEqual((part["start"], part["end"]), (900, 902))
+        self.assertFalse(part["truncated"])
+
+    def test_small_file_read_unchanged_and_bad_range_is_an_error(self):
+        self.assertEqual(agent.read_range("a\nb\n"), {"text": "a\nb\n"})
+        self.assertIn("past the end", agent.read_range("a\n", start=9)["error"])
+        self.assertIn("whole numbers", agent.read_range("a\n", start="x")["error"])
+
     def test_pidima_source_lands_on_disk_and_propose_reads_from_disk(self):
         class MCP(FakeMCP):
             def call(self, tool, args=None):
