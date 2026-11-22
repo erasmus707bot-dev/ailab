@@ -27,6 +27,7 @@ DEFAULTS: dict = {
     "extra_models": {},                   # {"openrouter": ["vendor/model-id"]} — added to that provider's model list
     "agent_cap_usd": 0.50,                # $ per agent run (inside the daily cap)
     "port": 8850,                         # 8795 is Hermes SiteGen; 8850 unused in ~/hermes (2026-11-20)
+    "repos": {},                          # 🔗 linked code folders the agent may read + propose changes to: {"hermes": "~/hermes"}
     "hermes_url": "",                     # connected mode: where the ⌂ Hermes button goes
 }
 

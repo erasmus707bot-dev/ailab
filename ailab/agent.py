@@ -17,7 +17,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import config, preview, store
+from . import config, preview, repos, secretscan, store
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
 from .spend import SpendBlocked
@@ -60,6 +60,18 @@ pidima_propose {"files":["engine.js","game.js"],"note":"what changed"} sends tho
 He applies it; you never do. pidima_status {} -> version, levels, proposals waiting."""
 
 
+# Added to the system prompt only when Scott has linked code folders (python3 -m ailab link <name> <folder>).
+REPO_GUIDE = """
+Real code folders (linked by Scott): {names}. You can read them and PROPOSE changes; you never write them.
+{{"action":"repo","do":"find","repo":"NAME","pattern":"def complete_task","glob":"*.py"}}   -> paths + matching lines ("dir" narrows it)
+{{"action":"repo","do":"list","repo":"NAME","dir":"forge/ailab"}}
+{{"action":"repo","do":"pull","repo":"NAME","paths":["forge/ailab/card.py"]}}   -> copies into this project as repos/NAME/forge/ailab/card.py
+{{"action":"repo","do":"propose","repo":"NAME","paths":["forge/ailab/card.py"],"note":"what changed and why"}}
+Way of working: find the code, pull only the files you need, read them, change your copy with "edit" (one spot at a
+time), check it with "run" (python3 -m py_compile repos/NAME/x.py, or node --check), then propose the files you
+changed. Scott sees each as a diff and applies it himself. Keep changes small and matching the code around them."""
+
+
 class Stopped(Exception):
     pass
 
@@ -70,12 +82,12 @@ def _approvals() -> Path:
     return d
 
 
-def hold_for_approval(pid: str, run_id: str, path: str, content: str) -> dict:
+def hold_for_approval(pid: str, run_id: str, path: str, content: str, note: str = "") -> dict:
     """A write outside the project folder: kept, not applied. Scott decides (📋 Review, M6)."""
     aid = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     (_approvals() / f"{aid}.txt").write_text(content)
     item = {"id": aid, "at": time.time(), "kind": "write_outside_project", "project": pid, "run": run_id,
-            "path": path[:300], "bytes": len(content.encode()), "state": "waiting"}
+            "path": path[:300], "bytes": len(content.encode()), "state": "waiting", **({"note": note[:300]} if note else {})}
     with open(_approvals() / "items.jsonl", "a") as fh:
         fh.write(json.dumps(item) + "\n")
     return item
@@ -156,6 +168,7 @@ class Run:
         self.usd, self.steps, self.state, self.why = 0.0, [], "running", ""
         self.tokens_in = self.tokens_out = 0
         self.autosave_field = autosave_field
+        self.is_lane = root is not None        # ⚖️ Compare lanes work on copies: they may read linked code, never propose
         self.undo: dict[int, tuple] = {}       # step n -> (path, text before | None, text after); memory only
         self._change = None
         self.stop_flag = threading.Event()
@@ -228,6 +241,54 @@ class Run:
             return None
         return p
 
+    def _repo(self, a: dict) -> dict:
+        """🔗 linked code folders: find / list / pull are read-only; propose only HOLDS changes for Scott."""
+        try:
+            name, do = str(a.get("repo") or ""), str(a.get("do") or "")
+            root = repos.root_of(self.cfg, name)
+            if do == "find":
+                return repos.find(root, str(a.get("pattern") or ""), str(a.get("glob") or ""), str(a.get("dir") or ""))
+            if do == "list":
+                return repos.ls(root, str(a.get("dir") or ""))
+            if do == "pull":
+                return repos.pull(root, name, a.get("paths"), self.root)
+            if do != "propose":
+                return {"error": "repo \"do\" must be find, list, pull or propose."}
+            if self.is_lane:
+                return {"error": "Proposing is off in ⚖️ Compare — run the task in the workbench to propose."}
+            paths = a.get("paths") if isinstance(a.get("paths"), list) else []
+            if not paths:
+                return {"error": "paths must be a list of the files you changed (paths inside the linked folder)."}
+            note, proposed, skipped = str(a.get("note") or "")[:300], [], []
+            waiting = approvals()
+            for rel in [str(x) for x in paths][:repos.MAX_PULL]:
+                rel = rel.removeprefix(f"repos/{name}/")
+                try:
+                    target = repos.safe(root, rel)
+                except repos.RepoError as e:
+                    skipped.append(str(e))
+                    continue
+                mine = self._inside(f"repos/{name}/{rel}")
+                if not mine or not mine.is_file():
+                    skipped.append(f"{rel}: no copy in this project (repos/{name}/{rel}) — pull it or write it there first.")
+                    continue
+                text = mine.read_text(errors="replace")
+                if len(text.encode()) > preview.MAX_EDIT or secretscan.has_secret(text):
+                    skipped.append(f"{rel}: too big, or it holds something that looks like a key — not proposed.")
+                    continue
+                if target.is_file() and target.read_text(errors="replace") == text:
+                    skipped.append(f"{rel}: same as the real file — nothing to propose.")
+                    continue
+                for old in waiting:                               # a newer proposal for the same file replaces the waiting one
+                    if old.get("path") == str(target) and old.get("project") == self.project["id"]:
+                        set_approval_state(old["id"], "superseded")
+                item = hold_for_approval(self.project["id"], self.id, str(target), text, note=f"{name}: {note}" if note else name)
+                proposed.append({"path": rel, "approval": item["id"]})
+            return {"proposed": proposed, "skipped": skipped,
+                    "note": "Held for Scott — he sees each as a diff and applies it himself. Nothing was written to the real folder."}
+        except repos.RepoError as e:
+            return {"error": str(e)}
+
     def act(self, a: dict) -> dict:
         kind = str(a.get("action"))
         if kind == "list":
@@ -269,6 +330,8 @@ class Run:
             tmp.write_text(text)
             tmp.replace(p)
             return {"edited": str(a.get("path")), "bytes": len(text.encode())}
+        if kind == "repo":
+            return self._repo(a)
         if kind == "run":
             return run_in_sandbox(self.root, str(a.get("cmd") or "true")[:2000])
         if kind == "hermes":
@@ -303,7 +366,9 @@ class Run:
         return {"error": f"Unknown action {kind!r}."}
 
     def loop(self) -> None:
-        msgs = [{"role": "system", "content": SYSTEM + (HERMES_GUIDE if self.connected else "")},
+        linked = sorted(repos.linked(self.cfg))
+        msgs = [{"role": "system", "content": SYSTEM + (HERMES_GUIDE if self.connected else "")
+                 + (REPO_GUIDE.format(names=", ".join(linked)) if linked else "")},
                 {"role": "user", "content": f"Task: {self.task}\nFiles: "
                  + ", ".join(f["path"] for f in preview.list_root(self.root))}]
         try:

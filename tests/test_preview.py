@@ -102,7 +102,7 @@ class PreviewOn(Srv):
         outside = Path(self.tmp.name) / "outside"
         outside.mkdir()
         os.symlink(outside, preview.site_dir("scratch") / "link")
-        for bad in ("../x.html", "/etc/x.html", ".hidden.js", "run.py", "a/../../x.html", "link/x.html", ""):
+        for bad in ("../x.html", "/etc/x.html", ".hidden.js", "run.exe", "a/../../x.html", "link/x.html", ""):
             code, body, _ = self.req("/api/preview/file", {"project": "scratch", "path": bad, "text": "x"})
             self.assertFalse(body["ok"], bad)
             self.assertIn(code, (400, 403), bad)

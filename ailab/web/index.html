@@ -389,7 +389,7 @@ function startView() {
     const kept = store.get(keptKey, []), rows = [];
     held.forEach(x => {
       const cf = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply" }), note = h("span", { class: "note" });
-      rows.push(chgCard("✋", x.target, `${x.new ? "new file" : "change"} outside the project · from ${x.project} · not written yet`, x.diff || x.preview, true, cf,
+      rows.push(chgCard("✋", x.target, `${x.new ? "new file" : "change"} to real code · from ${x.project}${x.note ? " · " + x.note : ""} · not written yet`, x.diff || x.preview, true, cf,
         h("button", { class: "btn pri", onclick: async () => {
           const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
           note.textContent = a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
@@ -432,7 +432,7 @@ function startView() {
       lastOut = last.n;
     }
     if (grew && pv && run.steps.some(s => s.diff)) pv.refresh();
-    if (run.state === "running") paintChanges(); else loadHeld();
+    loadHeld();
   }
   loadHeld();
 
@@ -441,8 +441,8 @@ function startView() {
   const tools = h("div", { class: "runbar wbtools" }, TOOLS.map(([id, flag, name]) =>
     h("button", { class: "btn" + (!flag || S.flags[flag] ? "" : " off"), onclick: () => go(id), "data-path": id }, name)));
   const agentPane = h("div", { class: "pane wbagent agent" }, h("h2", {}, "🤖 What should I build or change?"),
-    ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.held), ag.status, ag.final,
-        h("details", {}, h("summary", {}, "✨ Starters"), ag.goals), ag.steps]
+    ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.held), ag.status, ag.final, ag.repoRow,
+        h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
     h("details", {}, h("summary", {}, "🧰 More tools"), tools));
   let codePane, filesPane = null;
@@ -648,7 +648,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && (v
 
 /* ---------- agent (flag `agent`) ---------- */
 let agTimer = null;
-const ICON = { list: "📂", read: "📖", write: "📝", edit: "✏️", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
+const ICON = { list: "📂", read: "📖", write: "📝", edit: "✏️", repo: "🔗", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
 const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
                 refused: "🔒 Refused", failed: "⚠️ Failed" };
 function agentView(wb) {
@@ -676,6 +676,11 @@ function agentView(wb) {
     ["🍄 Mario level", "Make a fresh Mario-type level for Pidima. Steps: 1) hermes mario_level_spec. 2) Design your OWN map: 13 rows, 120 or more columns, with pits, block rows, enemies and a staircase before the flag. 3) hermes mario_level_check, fix every problem it lists, check again. 4) hermes mario_level_make with a short name. 5) Write the final map to level.txt. Then done."],
     ["🎮 Game code", "Change the Pidima game: (say here what to change — e.g. make the jump a little higher, add a double jump, bigger touch buttons). Steps: 1) hermes pidima_source (copies the game files into this project). 2) read the file you need. 3) change it with edit, one spot at a time. 4) run: node --check engine.js && node --check game.js && node bot.js --js 10 — fix and repeat until exit 0. 5) hermes pidima_propose with the files you changed and a one-line note. Then done."],
     ["🐧 Linux app", "Make a Linux app: (say here what it should do). Steps: 1) hermes linux_app_describe. 2) hermes linux_app_change for anything missing, one change per call. 3) hermes linux_app_build; if the verdict is not pass, read the problems, change, build again. 4) hermes linux_app_package. Then done, with the app id and the .deb file name."]];
+  // 🔗 linked code folders (python3 -m ailab link hermes ~/hermes): one starter per folder — works in standalone too
+  const REPOS = (S.repos || []).map(n => [`🛠 Change ${n}`, `Change the ${n} code: (say here what to change). Steps: 1) repo find in "${n}" to locate the code. 2) repo pull only the files you need (they land in repos/${n}/…). 3) read them. 4) change your copy with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the files you changed, with a one-line note. Then done, saying what you changed and how you checked it.`]);
+  const repoRow = h("div", { class: "runbar", id: "agrepos" }, REPOS.map(([label, text]) =>
+    h("button", { class: "btn pri", type: "button", title: "Fill the task box", onclick: () => { task.value = text; task.oninput(); task.focus(); task.setSelectionRange(text.indexOf("("), text.indexOf(")") + 1); task.scrollTop = 0; } }, label)),
+    REPOS.length ? h("span", { class: "note" }, "reads the real code · changes wait for your ✅") : h("span", { class: "note" }, "🔗 No code folder linked yet — on gandalf: python3 -m ailab link hermes ~/hermes"));
   const goals = h("div", { class: "runbar", id: "aggoals" }, GOALS.map(([label, text]) =>
     h("button", { class: "btn", type: "button", title: S.mode === "connected" ? "Fill the task box" : "Needs 🔌 connected mode (Hermes studio tools)",
       onclick: () => { task.value = text; task.oninput(); task.focus(); } }, label)),
@@ -694,7 +699,8 @@ function agentView(wb) {
       const r = s.result || {};
       const cls = "step" + (r.held ? " held" : "") + (r.error ? " err" : "");
       const line = s.action === "write" ? `${s.path} (${s.bytes || 0} bytes)` : s.action === "run" ? s.cmd
-        : s.action === "read" || s.action === "edit" ? s.path : s.action === "hermes" ? s.tool : s.action === "done" ? (s.summary || "") : "";
+        : s.action === "read" || s.action === "edit" ? s.path : s.action === "hermes" ? s.tool
+        : s.action === "repo" ? `${s.do || ""} ${s.repo || ""} ${s.pattern || s.dir || (Array.isArray(s.paths) ? s.paths.join(", ") : "")}`.slice(0, 160) : s.action === "done" ? (s.summary || "") : "";
       const body = r.held ? `✋ Held for your approval — not written (${r.approval})`
         : r.error ? `⚠️ ${r.error}` : r.output != null ? `exit ${r.exit}\n${r.output}` : r.text != null ? r.text.slice(0, 2000)
         : JSON.stringify(r, null, 1).slice(0, 2000);
@@ -731,9 +737,9 @@ function agentView(wb) {
     stopBtn.disabled = true; const r = await api("/api/agent/stop", { id }); if (r.ok) paint(r.run);
   };
   poll();
-  if (wb) return { picker: h("div", { class: "picker" }, provSel, modelSel), task, goals, startBtn, stopBtn, held, status, final, steps };
+  if (wb) return { picker: h("div", { class: "picker" }, provSel, modelSel), task, goals, repoRow, startBtn, stopBtn, held, status, final, steps };
   return [projectRow(), h("section", { class: "agent" },
-    h("div", { class: "picker" }, provSel, modelSel), task, goals,
+    h("div", { class: "picker" }, provSel, modelSel), task, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     status, final, steps,

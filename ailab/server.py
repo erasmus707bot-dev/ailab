@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, compare, config, preview, review, roster, store
+from . import __version__, agent, compare, config, preview, repos, review, roster, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -63,7 +63,7 @@ class App:
 
     def state(self) -> dict:
         return {"ok": True, "version": __version__, "mode": self.cfg["mode"], "flags": self.cfg["flags"],
-                "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "sandbox": preview.sandbox_kind(),
+                "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "repos": sorted(repos.linked(self.cfg)), "sandbox": preview.sandbox_kind(),
                 "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama"} for n in sorted(NAMES, key=lambda n: n != "ollama")]}
 
     # ---- routes: (status, body) ----

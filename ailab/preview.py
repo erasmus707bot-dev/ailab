@@ -25,7 +25,9 @@ from . import config
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "hello"
 PIPE = Path(__file__).resolve().parent / "sandbox" / "pipe_server.py"
-EDIT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".svg", ".txt", ".md"}
+EDIT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".svg", ".txt", ".md",
+            # 2026-11-22 workbench: software work, not only web pages
+            ".py", ".sh", ".toml", ".yaml", ".yml", ".ini", ".cfg", ".ts", ".tsx", ".jsx", ".kt", ".java", ".gd", ".c", ".h", ".rs", ".go", ".sql", ".xml", ".csv"}
 MAX_EDIT = 500_000
 MAX_CAPTURE = 8_000_000
 REL = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*")
