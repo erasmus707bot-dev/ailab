@@ -33,3 +33,12 @@ Expect: ✓ playwright, ✓ browser path, ✓ flag live = on, connect script ✓
 ## Next
 Five fixes code-complete. After the live proof: memory import + prompt builder (decision doc parts 2–3) — needs a build prompt first.
 Continue phrase: `continue AI Lab five fixes from the 2026-11-23 handoff — live proof`
+
+## Live proof — 2026-11-23 15:45 (Claude in Scott's Chrome, after golive.sh)
+- Lab up: connected, sandbox srt, flags router/preview/agent/compare/live all on, `/api/state runs[]` present (new code loaded).
+- ⚙️ Keys: ✅ honest — openrouter "⛔ no key in Hermes" (listed, models deepseek-v4.1-flash + kimi-k3.1-pro); claude ✅ key, 2 models; hf/qwen/kimi off. **Fix 1 waits on Scott's OpenRouter key.**
+- Panes: ▶ swap and ◀ back work; clarity-pass titles show. Phone width NOT checked (window resize refused) — Argus touch test owed.
+- 🪞 Show & change: Hermes home renders in both Now and New frames (owner rule OK in the frame). Robot ran on its own: 🟡 when nothing pointed at.
+- Real run (claude-sonnet-5-5, $0.069, 5 steps): pointed at "Scan now", asked for "Scan everything" + green. Result: **"ℹ️ No files changed"** (fix 5 label, not ✅) and robot 🔴 "looks exactly the same" (fix 4). Both honesty fixes proven live.
+- Why nothing changed: Hermes home `index.html` = 580 KB, over the 500 KB file limit. Fixed `0b57716`: limit → 2 MB; `__pycache__`/.pyc no longer listed as "behind-the-scenes changes". **Loads at next Lab restart.**
+- Still UNVERIFIED: a change landing on the home page (New serves raw index.html; Hermes normally splits it via home_split); reboot-proof hermes-mcp (needs a reboot).
