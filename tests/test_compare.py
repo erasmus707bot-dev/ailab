@@ -83,7 +83,9 @@ class Acceptance(Base):
                          {"provider": "ollama", "model": "messy"}])
         v = c.view()
         self.assertEqual(v["state"], "done", v["why"])
-        self.assertEqual([ln["state"] for ln in v["lanes"]], ["done", "done", "done"])
+        # fix 5 (2026-11-23): a lane that says done but fails Scott's checks is "unproven", never ✅
+        self.assertEqual([ln["state"] for ln in v["lanes"]], ["done", "unproven", "unproven"])
+        self.assertIn("1 of 3", v["why"])
         self.assertEqual([ln["passed"] for ln in v["lanes"]], [1, 0, 0])
         self.assertEqual([ln["steps"] for ln in v["lanes"]], [3, 1, 3])
         self.assertEqual(v["lanes"][0]["tokens_in"], 300)
@@ -330,7 +332,7 @@ class RealRunFixes(Base):
                 if a[2] == "bad":
                     raise TimeoutError("timed out")
                 return super().chat(*a, **k)
-        c = self.cmp(Boom({"good": LAZY, "bad": LAZY}), [{"provider": "ollama", "model": "good"}, {"provider": "ollama", "model": "bad"}])
+        c = self.cmp(Boom({"good": LAZY, "bad": LAZY}), [{"provider": "ollama", "model": "good"}, {"provider": "ollama", "model": "bad"}], checks=())
         self.assertEqual([ln["state"] for ln in c.lanes], ["done", "failed"])
         self.assertIn("1 of 2", c.why)
 

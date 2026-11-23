@@ -102,7 +102,8 @@ class Comparison:
                     last = v["steps"][-1] if v["steps"] else {}
                     ln.update(steps=len(v["steps"]), usd=round(v["usd"], 6), tokens_in=v["tokens_in"],
                               tokens_out=v["tokens_out"],
-                              why=f"⏳ step {len(v['steps']) + 1} of {v['step_cap']} — last: {last.get('action', 'thinking…')}")
+                              why=(f"🟠 stuck — nothing new for {v['quiet_s'] // 60} min" if v.get("stuck") else
+                                   f"⏳ step {len(v['steps']) + 1} of {v['step_cap']} — last: {last.get('action', 'thinking…')}"))
         return {"id": self.id, "project": self.project["id"], "task": self.task, "checks": self.checks,
                 "state": self.state, "why": self.why, "cap_usd": self.cap_usd, "lane_cap_usd": self.lane_cap,
                 "usd": round(sum(ln["usd"] for ln in self.lanes), 6), "created": self.created,
@@ -154,11 +155,16 @@ class Comparison:
                 if not self.stop_flag.is_set():
                     ln["checks"] = self._run_checks(d / "site")
                     ln["passed"] = sum(1 for c in ln["checks"] if c["ok"])
+                    if ln["state"] == "done" and ln["checks"] and ln["passed"] < len(ln["checks"]):   # fix 5: checks decide
+                        ln["state"] = "unproven"
+                        ln["why"] = (f"⚠️ Said it finished, but {len(ln['checks']) - ln['passed']} of {len(ln['checks'])} "
+                                     "of your checks failed. " + ln["why"])[:600]
                 self.save()
             self.state = "stopped" if self.stop_flag.is_set() else "done"
             if self.state == "done":
                 ok = sum(1 for ln in self.lanes if ln["state"] == "done")
-                self.why = ("✅ All lanes finished." if ok == len(self.lanes) else
+                self.why = (("✅ Every model finished and passed your checks." if self.checks else
+                             "✅ Every model finished and proved its own work (you gave no checks).") if ok == len(self.lanes) else
                             f"⚠️ {ok} of {len(self.lanes)} models finished — open ℹ️ on each card." if ok else
                             "⚠️ No model finished the task — open ℹ️ on each card.")
         except Exception as e:                                      # noqa: BLE001 — report, never crash the Lab
@@ -256,7 +262,8 @@ def save_capture(pid: str, cid: str, k, data_url: str, live: Comparison | None =
 
 # ------------------------------------------------------------------ the page
 STATE = {"waiting": "⏳ waiting", "running": "⏳ working", "done": "✅ done", "stopped": "⏹ stopped",
-         "capped": "🧢 hit a limit", "refused": "🔒 refused", "failed": "⚠️ failed", "skipped": "⏭ skipped"}
+         "capped": "🧢 hit a limit", "refused": "🔒 refused", "failed": "⚠️ failed", "skipped": "⏭ skipped",
+         "unproven": "⚠️ not proven"}
 
 
 def page_html(res: dict, shots: dict | None = None, demo_links: bool = True) -> str:

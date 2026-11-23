@@ -32,6 +32,12 @@ AGENT_TOOLS = ("jobs_list", "job_get", "job_wait", "addon_build", "print3d_submi
                "pidima_status", "pidima_source", "pidima_propose")
 MAX_OUT = 4000
 RUN_TIMEOUT_S = 60
+STUCK_AFTER_S = 600        # 2026-11-23 fix 5: no new step for this long = stuck (cfg "stuck_after_s")
+# Hermes tool results that prove the work (fix 5). Anything else is not a check.
+PROOF_TOOLS = {"mario_level_check": lambda r: r.get("playable") is True,
+               "mario_level_make": lambda r: not r.get("error") and r.get("ok", True) is not False,
+               "linux_app_build": lambda r: str(r.get("verdict")) == "pass"}
+CHANGE_ACTIONS = ("write", "edit")
 SYSTEM = """You are the AI Lab agent. You work on ONE small web project folder. Reply with exactly ONE JSON
 object per turn and nothing else. Actions:
 {"action":"list"}
@@ -42,7 +48,7 @@ object per turn and nothing else. Actions:
 {"action":"hermes","tool":"addon_build","args":{"template":"hello"}}   (connected mode only)
 {"action":"done","summary":"what changed and how you checked it"}
 Add "why" (one short line) to every action. Paths are relative to the project folder. Check your work with
-"run" before "done"."""
+"run" before "done". "done" is refused until a check you ran AFTER your last change exited 0."""
 # Added to the system prompt in connected mode only (standalone has no Hermes tools).
 HERMES_GUIDE = """
 Hermes studio tools (use with {"action":"hermes","tool":...,"args":{...}}):
@@ -208,13 +214,29 @@ class Run:
         # M6: 📋 Review lists the models used from these
         self.log.with_suffix(".meta.json").write_text(json.dumps({"provider": provider, "model": model, "at": time.time()}))
         self.connected = cfg.get("mode") == "connected"
+        # fix 5 (2026-11-23): "done" needs proof — a passing check after the last change
+        self.changed = 0                      # step number of the last write/edit (0 = none yet)
+        self.proved = 0                       # step number of the last passing check
+        self.refused_done = 0
+        self.stuck_after = float(cfg.get("stuck_after_s", STUCK_AFTER_S))
+        self.last_progress = time.time()
 
     # ---- public view ----
     def view(self) -> dict:
         return {"id": self.id, "state": self.state, "why": self.why, "task": self.task, "steps": self.steps,
                 "step_cap": self.step_cap, "usd": round(self.usd, 6), "cap_usd": self.cap_usd,
                 "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
-                "project": self.project["id"], "provider": self.provider, "model": self.model}
+                "project": self.project["id"], "provider": self.provider, "model": self.model,
+                "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info()}
+
+    def proof_ok(self) -> bool:
+        """True when nothing was changed, or a check passed after the last change."""
+        return not self.changed or self.proved > self.changed
+
+    def stuck_info(self) -> dict:
+        quiet = max(0.0, time.time() - self.last_progress)
+        return {"quiet_s": round(quiet), "stuck": self.state == "running" and quiet >= self.stuck_after,
+                "stuck_after_s": round(self.stuck_after)}
 
     def undo_step(self, n: int) -> dict:
         """↩ Undo one write/edit step (workbench Changes). Only if the file still holds exactly what that step wrote.
@@ -256,6 +278,18 @@ class Run:
 
     def _record(self, step: dict) -> None:
         step["n"], step["at"] = len(self.steps) + 1, time.time()
+        self.last_progress = step["at"]
+        res = step.get("result") if isinstance(step.get("result"), dict) else {}
+        if step.get("action") in CHANGE_ACTIONS and not res.get("error") and not res.get("held"):
+            self.changed = step["n"]
+        elif step.get("action") == "run" and res.get("exit") == 0:
+            self.proved = step["n"]
+        elif step.get("action") == "hermes" and step.get("tool") in PROOF_TOOLS and not res.get("error"):
+            try:
+                if PROOF_TOOLS[step["tool"]](res):
+                    self.proved = step["n"]
+            except Exception:                                        # noqa: BLE001 — odd result = no proof
+                pass
         self.steps.append(step)
         with open(self.log, "a") as fh:
             fh.write(json.dumps(step, default=str) + "\n")
@@ -442,8 +476,21 @@ class Run:
                     self.undo[len(self.steps) + 1] = ch
                 self._record(step)
                 if res.get("done"):
-                    self.state, self.why = "done", str(a.get("summary") or "✅ Done")[:600]
-                    return
+                    summary = str(a.get("summary") or "")[:500]
+                    if self.proof_ok():
+                        self.state = "done"
+                        self.why = (summary or "✅ Done") if self.changed else ("ℹ️ No files changed. " + summary)[:600]
+                        return
+                    self.refused_done += 1
+                    if self.refused_done >= 2:                       # asked twice without a passing check: say so, never ✅
+                        self.state = "unproven"
+                        self.why = ("⚠️ The model says it finished, but no check passed after its last change. "
+                                    "Look before you keep it. Its words: " + summary)[:600]
+                        return
+                    res = {"error": "Not accepted: no check passed after your last change (step "
+                                    f"{self.changed}). Run a check that exits 0 (node --check, python3 -m py_compile, "
+                                    "a grep, the test bot), fix what fails, then say done."}
+                    step["result"] = res                             # the step card shows the refusal, not "done"
                 msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res, default=str)[:MAX_OUT + 500]})
         except Stopped as e:
             self.state, self.why = "stopped", str(e)

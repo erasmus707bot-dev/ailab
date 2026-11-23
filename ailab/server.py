@@ -76,7 +76,10 @@ class App:
         return {"ok": True, "version": __version__, "mode": self.cfg["mode"], "flags": self.cfg["flags"],
                 "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "repos": sorted(repos.linked(self.cfg)), "programs": repos.programs(self.cfg), "sandbox": preview.sandbox_kind(),
                 "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama", **({"off": True} if n in self._hermes_off() else {})}
-                              for n in sorted(NAMES, key=lambda n: n != "ollama")]}
+                              for n in sorted(NAMES, key=lambda n: n != "ollama")],
+                # fix 5: what's running / stuck / ended without proof — for the Hermes card (and later Iris "finished or stuck")
+                "runs": [{"id": r.id, "project": r.project["id"], "state": r.state, **r.stuck_info(), "proved": r.proof_ok()}
+                         for r in list(self.agents.runs.values())[-10:]]}
 
     def _hermes_off(self) -> set:
         """2026-11-23: hosted providers Hermes has turned off (connected mode) — the page skips them as the default pick.

@@ -213,6 +213,9 @@ def apply(aid: str, sha: str, confirm: str) -> dict:
     tmp = t.with_name(f".{t.name}.ailab-{aid}")
     tmp.write_text(text)
     os.replace(tmp, t)
+    if t.read_text() != text:                                       # fix 5: say "applied" only after reading it back
+        raise ReviewError("The file was written but doesn't read back the same — not marked applied. Check it by hand.",
+                          "readback", "⚠️")
     agent.set_approval_state(aid, "applied", target=str(t), backup=backup)
     return {"ok": True, "id": aid, "state": "applied", "target": str(t), "backup": backup}
 

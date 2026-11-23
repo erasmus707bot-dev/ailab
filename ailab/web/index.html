@@ -839,7 +839,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && (v
 /* ---------- agent (flag `agent`) ---------- */
 let agTimer = null;
 const ICON = { list: "📂", read: "📖", write: "📝", edit: "✏️", repo: "🔗", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "❓" };
-const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
+const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", unproven: "⚠️ Not proven", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
                 refused: "🔒 Refused", failed: "⚠️ Failed" };
 function agentView(wb) {
   if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
@@ -935,7 +935,7 @@ function agentView(wb) {
   const final = h("div", { class: "final", id: "agfinal", hidden: true });
 
   function paint(run) {
-    status.textContent = `${STATE[run.state] || run.state} · ${run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
+    status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
     run.steps.forEach(s => {
       const r = s.result || {};
