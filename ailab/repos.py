@@ -21,9 +21,9 @@ from . import preview, secretscan
 
 NAME_RX = re.compile(r"[a-z0-9][a-z0-9_-]{0,29}")
 DENY_DIRS = {"node_modules", "__pycache__", "graphify-out", "site-packages", "dist-packages", "venv", "vault",
-             "secrets", "backups", "_to_delete"}
+             "secrets", "backups", "_to_delete", "tokens"}
 DENY_FILE_RX = re.compile(r"(?i)(\.(pem|key|p12|pfx|kdbx|jks|keystore|sqlite3?|db|pyc|lock)$|^id_(rsa|ed25519|ecdsa)"
-                          r"|^credentials[^/]*\.json$|^secrets?\.[a-z]+$)")
+                          r"|^credentials[^/]*\.json$|^secrets?\.[a-z]+$|\.token$|^tokens?\.json$)")
 MAX_FIND, MAX_LIST, MAX_PULL, FIND_SECONDS = 60, 300, 12, 8.0
 
 
@@ -45,6 +45,19 @@ def linked(cfg: dict) -> dict[str, Path]:
             continue
         if parts and rp.is_dir() and not any(s.startswith(".") for s in parts):
             out[str(name)] = rp
+    return out
+
+
+def programs(cfg: dict) -> dict[str, list[str]]:
+    """program -> its linked folders, in the order given (2026-11-22). Folders that are not linked are left out;
+    a program left with no folders is dropped. A program only groups — every read rule stays per folder."""
+    ok, out = linked(cfg), {}
+    for name, members in (cfg.get("programs") or {}).items():
+        if not NAME_RX.fullmatch(str(name)) or not isinstance(members, list):
+            continue
+        m = list(dict.fromkeys(str(x) for x in members if str(x) in ok))
+        if m:
+            out[str(name)] = m
     return out
 
 

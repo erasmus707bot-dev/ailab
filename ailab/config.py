@@ -28,6 +28,7 @@ DEFAULTS: dict = {
     "agent_cap_usd": 0.50,                # $ per agent run (inside the daily cap)
     "port": 8850,                         # 8795 is Hermes SiteGen; 8850 unused in ~/hermes (2026-11-20)
     "repos": {},                          # 🔗 linked code folders the agent may read + propose changes to: {"hermes": "~/hermes"}
+    "programs": {},                       # 🔗 one program, several linked folders: {"hermes": ["hermes", "hermes-forge"]}
     "hermes_url": "",                     # connected mode: where the ⌂ Hermes button goes
 }
 

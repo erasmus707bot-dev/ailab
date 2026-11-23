@@ -85,9 +85,21 @@
   .saved { font-size: .78rem; color: var(--dim); min-height: 1em; }
 
   dialog { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); color: var(--text); max-width: 92vw; }
+  dialog { padding: 0; } dialog > form { padding: 16px; }   /* padding on the form, so a tap inside the box never counts as "outside" */
   dialog::backdrop { background: rgba(0,0,0,.45); }
   dialog input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); }
   .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  /* ⚙️ Settings → 🔑 Keys (2026-11-23) */
+  .hint { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--calm, var(--panel2)); font-size: .95rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .legend { font-size: .9rem; color: var(--dim); flex-basis: 100%; } .legend summary { cursor: pointer; }
+  .keys { max-width: 760px; margin: 0 auto; }
+  .keyrow { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); margin: 10px 0; background: var(--panel); }
+  .keyrow .st { font-size: .92rem; color: var(--dim); }
+  .keyrow input { width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: inherit; padding: 8px 10px; font: inherit; }
+  .keyrow .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .keyrow .btn { min-height: 44px; }
+  .keyrow .msg { grid-column: 1 / -1; font-size: .92rem; min-height: 1.2em; }
+  @media (max-width: 640px) { .keyrow { grid-template-columns: 1fr; } .keyrow .acts { justify-content: flex-start; } }
   .btn { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 8px 14px; }
   a.btn { color: inherit; text-decoration: none; display: inline-block; }
   .btn.pri { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
@@ -111,7 +123,7 @@
   .tab { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 6px 10px; font-size: .9rem; }
   .tab[aria-pressed="true"] { border-color: var(--accent); font-weight: 650; }
   .tab .dot { color: var(--warn); }
-  .code { flex: 1; min-height: 40vh; width: 100%; resize: none; border-radius: 10px; border: 1px solid var(--line);
+  .code { flex: 1; min-height: 40vh; width: 100%; resize: vertical; border-radius: 10px; border: 1px solid var(--line);
     background: var(--bg); padding: 10px; font: 15px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 2; }
   .pvpane { min-height: 0; }
   .pane a.ib { color: inherit; display: inline-grid; place-items: center; text-decoration: none; }
@@ -158,6 +170,27 @@
   .wbtabs .tab { flex: 1; padding: 10px 6px; font-size: 1rem; }
   .wb { flex: 1; display: grid; grid-template-columns: minmax(170px, 230px) minmax(0, 1.35fr) minmax(320px, 1fr); gap: var(--gap);
     height: calc(100dvh - 48px - 2 * var(--gap)); min-height: 0; }
+  /* 2026-11-23: panes can be resized (drag the gutter, or focus it and use ← →) and moved (◀ ▶ in each pane bar) */
+  .wb.custom { gap: 0; }
+  .gutter { width: 12px; cursor: col-resize; touch-action: none; -webkit-user-select: none; user-select: none; border: 0; background: transparent; padding: 0;
+    position: relative; align-self: stretch; }
+  .gutter::after { content: ""; position: absolute; left: 4px; right: 4px; top: 0; bottom: 0; border-radius: 4px; background: var(--line); }
+  .gutter:hover::after, .gutter:focus-visible::after { background: var(--accent); }
+  .panebar { display: flex; align-items: center; gap: 4px; }
+  .panebar h2 { flex: 1; }
+  /* 2026-11-23 clarity pass: one plain line under each pane title; ⤢ enlarge for the big text boxes */
+  .panesub { margin: -2px 0 6px; font-size: .92rem; color: var(--dim); }
+  .boxwrap { position: relative; display: flex; flex-direction: column; min-height: 0; }
+  .boxwrap > textarea { flex: 1; resize: vertical; padding-right: 48px; }
+  .boxwrap > .grow { position: absolute; top: 6px; right: 6px; z-index: 2; min-width: 40px; min-height: 40px; }
+  .boxwrap.big { position: fixed; inset: 4vh 4vw; z-index: 60; background: var(--panel); border: 2px solid var(--accent); border-radius: var(--r);
+    padding: 12px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.55); }
+  .boxwrap.big > textarea { height: 100% !important; min-height: 0 !important; max-height: none; resize: none; font-size: 1.05rem; }
+  .filesed > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
+  .filesed[open] { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+  .waitnone { color: var(--dim); font-size: .95rem; margin: 4px 0 10px; }
+  .panebar .ib { min-width: 36px; min-height: 36px; opacity: .7; }
+  .panebar .ib:hover, .panebar .ib:focus-visible { opacity: 1; }
   .wb > .pane { overflow: auto; min-width: 0; }
   .wb select, .wb textarea { max-width: 100%; min-width: 0; }
   .wb h2 { margin: 0; font-size: 1rem; }
@@ -187,8 +220,9 @@
   @media (max-width: 980px) {
     .title { display: none; }
     .wbtabs { display: flex; position: sticky; top: 52px; z-index: 3; background: var(--bg); padding-bottom: 2px; }
-    .wb { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .wb, .wb.custom { grid-template-columns: minmax(0, 1fr) !important; height: auto; }
     .wb > .pane { display: none; overflow: visible; }
+    .gutter, .panebar .ib { display: none; }
     header #full, header #mode { display: none; }
   }
   @media (max-width: 640px) {
@@ -215,6 +249,7 @@
     <span class="chip" id="mode" title="Mode"></span>
     <span class="chip spend" id="spend" title="Spent today / daily cap"><span>💲</span><span id="spendtxt">–</span><span class="bar"><i id="spendbar"></i></span></span>
     <button class="ib" id="full" title="Full screen" aria-label="Full screen">⛶</button>
+    <button class="ib" id="settings" title="Settings — keys" aria-label="Settings">⚙️</button>
     <button class="ib" id="theme" title="Light / dark" aria-label="Light or dark mode">☀️</button>
   </span>
 </header>
@@ -226,7 +261,7 @@
     <label class="sr" for="pname">Name</label>
     <input type="text" id="pname" placeholder="Name" maxlength="60" required>
     <p><label><input type="checkbox" id="psens"> 🔒 Sensitive — stays on this computer (Ollama only)</label></p>
-    <div class="row"><button class="btn" value="cancel">✕</button><button class="btn pri" value="ok" id="pok">✓ Create</button></div>
+    <div class="row"><button class="btn" value="cancel" formnovalidate aria-label="Close">✕</button><button class="btn pri" value="ok" id="pok">✓ Create</button></div>
   </form>
 </dialog>
 
@@ -269,6 +304,7 @@ function setTheme(t) {
   try { localStorage.setItem("ailab.theme", t); } catch (e) {}
   $("#theme").textContent = t === "dark" ? "☀️" : "🌙";
 }
+$("#settings").onclick = () => go("settings");
 $("#theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 $("#theme").textContent = document.documentElement.dataset.theme === "dark" ? "☀️" : "🌙";
 $("#full").onclick = () => {
@@ -344,7 +380,60 @@ function newProject() {
     const r = await api("/api/projects", { name: $("#pname").value, sensitive: $("#psens").checked });
     if (r.ok) { S.projects.push(r.project); store.set("project", r.project.id); render(); }
   };
+  d.returnValue = "";                                   /* Esc must never reuse an earlier "ok" */
+  d.onclick = (e) => { if (e.target === d) d.close("cancel"); };   /* tap outside the box = close */
   d.showModal();
+}
+
+/* ---------- ⚙️ Settings → 🔑 Keys (2026-11-23) ----------
+   Standalone: keys go to the OS keyring, else ~/.config/ailab/keys.env (owner-only). Never shown back; Test = list models.
+   Connected: Hermes holds every hosted key (Vault) — this page shows Hermes's answer and links to its Settings. */
+function settingsView() {
+  const box = h("div", { class: "keys" }, h("h2", {}, "⚙️ Settings"), h("h3", {}, "🔑 Keys"), h("p", { class: "note", id: "keysnote" }, "⏳"));
+  api("/api/keys").then(k => {
+    const note = $("#keysnote");
+    if (k.mode === "connected") {
+      note.textContent = "🔌 Connected: Hermes holds every hosted key in its Vault and makes the calls. Add or rotate keys in Hermes.";
+      const hu = (homeUrl() || "http://127.0.0.1:8780/").replace(/\/$/, "");      // Hermes dashboard default port is 8780
+      box.append(h("p", {}, h("a", { class: "btn pri", href: hu + "/#aikeys", target: "_blank", rel: "noopener" }, "Open Hermes → Settings → API keys"),
+        " ", h("span", { class: "note" }, "Paste the key there, Save, then switch the provider on. Come back and reload this page.")));
+      if (k.note) box.append(h("p", { class: "note" }, k.note));
+      (k.providers || []).forEach(p => box.append(h("div", { class: "keyrow" },
+        h("div", {}, h("b", {}, `${p.icon} ${p.id}`)),
+        h("div", { class: "st" }, !p.listed ? "⏸ Off in Hermes, or no key yet — turn it on in Hermes → Settings → API keys" : p.set ? `✅ key in Hermes · ${p.models.length} model${p.models.length === 1 ? "" : "s"}` : "⛔ no key in Hermes"),
+        h("div", { class: "acts" }))));
+      return;
+    }
+    note.textContent = k.store && k.store.keyring ? "Keys are saved in your OS keyring (service “ailab”). They are never shown back."
+      : `No OS keyring found — keys are saved owner-only in ${k.store ? k.store.file : "keys.env"}. They are never shown back.`;
+    const SRC = { keyring: "✅ in OS keyring", file: "✅ in keys.env", environment: "✅ from the environment", none: "⛔ not set" };
+    (k.providers || []).forEach(p => {
+      const inp = h("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: p.set ? "Paste a new key to replace it" : "Paste the key", "aria-label": `${p.id} key` });
+      const st = h("div", { class: "st" }, SRC[p.source] || p.source), msg = h("div", { class: "msg" }, p.problem || "");
+      const say = (t, bad) => { msg.textContent = t; msg.style.color = bad ? "var(--bad, inherit)" : ""; };
+      const save = h("button", { class: "btn pri", type: "button", onclick: async () => {
+        if (!inp.value.trim()) { say("Paste the key first.", true); inp.focus(); return; }
+        save.disabled = true; say("Saving…");
+        const r = await api("/api/keys/set", { provider: p.id, key: inp.value }); inp.value = "";
+        save.disabled = false;
+        if (!r.ok) { say("✗ " + (r.message || r.code || r.status), true); return; }
+        st.textContent = SRC[r.source]; say(`Saved to the ${r.source === "file" ? "key file" : "OS keyring"}. Press Test to check it.`);
+      } }, "💾 Save");
+      const test = h("button", { class: "btn", type: "button", onclick: async () => {
+        test.disabled = true; say("Testing — asking the provider for its model list…");
+        const r = await api("/api/keys/test", { provider: p.id }); test.disabled = false;
+        say(r.ok ? `✅ Works — ${r.models} models listed.` : "✗ " + (r.message || r.code || r.status), !r.ok);
+      } }, "🧪 Test");
+      const rm = h("button", { class: "btn", type: "button", onclick: async () => {
+        rm.disabled = true; const r = await api("/api/keys/remove", { provider: p.id }); rm.disabled = false;
+        if (r.ok) { st.textContent = SRC.none; say((r.removed || []).length ? `Removed from ${r.removed.join(" and ")}.` : "Nothing stored by the Lab to remove (an environment variable stays yours)."); }
+        else say("✗ " + (r.message || r.code), true);
+      } }, "🗑 Remove");
+      box.append(h("div", { class: "keyrow" }, h("div", {}, h("b", {}, `${p.icon} ${p.id}`), st, h("div", { class: "st" }, p.env)),
+        inp, h("div", { class: "acts" }, save, test, rm), msg));
+    });
+  });
+  return [box];
 }
 
 /* ---------- views ---------- */
@@ -363,20 +452,76 @@ function diffPre(text) {
     l.startsWith("@@") ? "hunk" : l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : "" }, l + "\n")));
   return pre;
 }
+/* ⤢ Enlarge (2026-11-23): wraps a textarea; the button (or Esc) toggles a near-full-screen view. Typing is never lost —
+   it is the same element, just restyled. */
+function growBox(ta, label) {
+  const wrap = h("div", { class: "boxwrap" });
+  const btn = h("button", { class: "ib grow", type: "button", title: `Enlarge the ${label}`, "aria-label": `Enlarge the ${label}`, "aria-pressed": "false" }, "⤢");
+  const set = (on) => { wrap.classList.toggle("big", on); btn.textContent = on ? "⤡" : "⤢"; btn.setAttribute("aria-pressed", String(on));
+    btn.title = btn.ariaLabel = `${on ? "Shrink" : "Enlarge"} the ${label}`; ta.focus(); };
+  btn.onclick = () => set(!wrap.classList.contains("big"));
+  wrap.addEventListener("keydown", e => { if (e.key === "Escape" && wrap.classList.contains("big")) { e.preventDefault(); e.stopPropagation(); set(false); } });
+  wrap.append(ta, btn);
+  return wrap;
+}
+
+/* 🧱 Pane layout (2026-11-23): order + widths live on this device (store "wblayout"); the code pane is the flexible one.
+   Gutters are real buttons: drag with pointer capture, or focus and use ← → (16px a step). ◀ ▶ swap a pane with its neighbour. */
+const PANES = ["files", "code", "agent"], PANE_MIN = { files: 150, code: 280, agent: 300 };
+function wbLayout() { const l = store.get("wblayout", null); return l && Array.isArray(l.order) && l.order.length === 3 && PANES.every(x => l.order.includes(x)) ? { order: l.order, widths: l.widths || {} } : { order: [...PANES], widths: {} }; }
+function wbSave(l) { store.set("wblayout", l); }
+function wbResetLayout() { store.set("wblayout", null); render(); }
+function layoutPanes(sec, panes) {
+  const l = wbLayout(), custom = Object.keys(l.widths).length > 0 || l.order.join() !== PANES.join();
+  sec.classList.toggle("custom", custom);
+  sec.replaceChildren();
+  const cols = [];
+  l.order.forEach((id, i) => {
+    if (i) { sec.append(gutter(l.order[i - 1], id)); cols.push("12px"); }
+    sec.append(panes[id]);
+    cols.push(id === "code" ? "minmax(0, 1fr)" : l.widths[id] ? `${l.widths[id]}px` : (id === "files" ? "minmax(170px, 230px)" : "minmax(320px, 1fr)"));
+  });
+  sec.style.gridTemplateColumns = custom ? cols.join(" ") : "";
+  function gutter(a, b) {
+    const target = a !== "code" ? a : b, sign = a !== "code" ? 1 : -1;   // the side pane this gutter resizes, and which way grows it
+    const g = h("button", { class: "gutter", type: "button", role: "separator", "aria-orientation": "vertical",
+      "aria-label": `Resize ${target} pane. Drag, or use the left and right arrow keys.` });
+    const cur = () => l.widths[target] || panes[target].getBoundingClientRect().width;
+    const clamp = (w) => Math.round(Math.max(PANE_MIN[target], Math.min(w, sec.clientWidth - 24 - PANE_MIN.code - 150)));
+    const apply = (w) => { l.widths[target] = clamp(w); wbSave(l); layoutPanes(sec, panes); };
+    let x0 = 0, w0 = 0, live = null;
+    g.addEventListener("pointerdown", e => { if (e.button !== 0) return; x0 = e.clientX; w0 = cur(); live = w0; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener("pointermove", e => { if (!g.hasPointerCapture(e.pointerId)) return; live = clamp(w0 + sign * (e.clientX - x0));
+      const c = (sec.style.gridTemplateColumns || cols.join(" ")).split(" "); c[l.order.indexOf(target) * 2] = `${live}px`; sec.classList.add("custom"); sec.style.gridTemplateColumns = c.join(" "); });
+    g.addEventListener("lostpointercapture", () => { if (live != null) apply(live); live = null; });
+    g.addEventListener("keydown", e => { if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return; e.preventDefault();
+      const k = [...sec.querySelectorAll(".gutter")].indexOf(g); apply(cur() + (e.key === "ArrowRight" ? 16 : -16) * sign); sec.querySelectorAll(".gutter")[k].focus(); });
+    return g;
+  }
+}
+function paneBar(id, title, sec, panes) {
+  const mv = (d) => { const L = wbLayout(), o = [...L.order], j = o.indexOf(id), k = j + d; if (k < 0 || k > 2) return; [o[j], o[k]] = [o[k], o[j]];
+    wbSave({ order: o, widths: L.widths }); layoutPanes(sec, panes); const b = sec.querySelector(`[data-pane="${id}"] .panebar .ib`); if (b) b.focus(); };
+  return h("div", { class: "panebar" }, h("h2", {}, title),
+    h("button", { class: "ib", type: "button", "aria-label": `Move ${id} pane left`, title: "Move left", onclick: () => mv(-1) }, "◀"),
+    h("button", { class: "ib", type: "button", "aria-label": `Move ${id} pane right`, title: "Move right", onclick: () => mv(1) }, "▶"));
+}
+
 /* 🛠 The workbench — front page. Left: files. Middle: code, changes waiting, preview, run output. Right: the task box + agent steps. */
 function startView() {
   const p = curProject();
   let tab = store.get("wbtab", "agent"), mode = "code", curRun = null, sig = "", lastOut = 0, held = [];
   const sec = h("section", { class: "wb", id: "wb", "data-tab": tab });
-  const tabBtns = [["files", "📂 Files"], ["code", "📝 Code"], ["agent", "🤖 Agent"]].map(([t, n]) =>
+  const tabBtns = [["files", "📂 Files"], ["code", "✋ Waiting"], ["agent", "🤖 Ask AI"]].map(([t, n]) =>
     h("button", { class: "tab", "data-t": t, "aria-pressed": String(t === tab), onclick: () => setTab(t) }, n));
   function setTab(t) { tab = t; store.set("wbtab", t); sec.dataset.tab = t; tabBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t))); }
   const fileName = h("span", { class: "wbfile", id: "wbfile" }, "—");
   const changes = h("div", { class: "changes", id: "wbchanges", "aria-live": "polite" });
+  const waitNone = h("p", { class: "waitnone" }, "✅ Nothing waiting. When the AI wants to change real code, it shows up here for your OK.");
   const outSum = h("summary", {}, "▶ Run output"), outPre = h("pre", {}, "Nothing has run yet.");
   const drawer = h("details", { class: "drawer", id: "wbout" }, outSum, outPre);
 
-  const pv = previewView({ onPick: () => setTab("code"), onOpen: path => { fileName.textContent = path; } });
+  const pv = previewView({ onPick: () => { setTab("code"); if (filesEd && !filesEd.open) filesEd.open = true; }, onOpen: path => { fileName.textContent = path; } });
   const ag = agentView({ onRun, showChanges: () => { setTab("code"); changes.scrollIntoView({ block: "nearest" }); } });
 
   /* ---- changes: agent edits in this project (↩ Undo) + writes held outside it (✅ Apply / ✗ Reject) ---- */
@@ -411,7 +556,9 @@ function startView() {
         pv ? h("button", { class: "btn", onclick: () => pv.pick(s.path) }, "📝 Open") : null, note));
     });
     changes.innerHTML = "";
-    if (rows.length) changes.append(h("h2", {}, `✋ ${rows.length} change${rows.length === 1 ? "" : "s"} to look at`), ...rows);
+    if (rows.length) changes.append(h("h2", {}, `✋ ${rows.length} waiting for your OK`),
+      h("p", { class: "panesub" }, "Read what changed, then Apply (type apply) or Reject. Nothing touches your real code until you do."), ...rows);
+    waitNone.hidden = rows.length > 0;
     paintWaiting(rows.length);
   }
   async function loadHeld() {
@@ -440,27 +587,39 @@ function startView() {
   const TOOLS = [["chat", "router", "💬 Ask a model"], ["compare", "compare", "⚖️ Compare models"], ["review", null, "📋 Send a demo"], ["preview", "preview", "👁 Big preview"]];
   const tools = h("div", { class: "runbar wbtools" }, TOOLS.map(([id, flag, name]) =>
     h("button", { class: "btn" + (!flag || S.flags[flag] ? "" : " off"), onclick: () => go(id), "data-path": id }, name)));
-  const agentPane = h("div", { class: "pane wbagent agent" }, h("h2", {}, "🤖 What should I build or change?"),
+  const panes = {};
+  const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Ask the AI", sec, panes),
+    h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
     ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.held), ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
-    h("details", {}, h("summary", {}, "🧰 More tools"), tools));
-  let codePane, filesPane = null;
+    h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the three panes back to the standard size and order" }, "🧱 Reset pane layout")));
+  let codePane, filesPane = null, filesEd = null;
   if (pv) {
     const prevWrap = h("div", { style: "display:none;flex:1;flex-direction:column;gap:8px;min-height:0" }, pv.tools, pv.frame);
-    const segBtns = [["code", "📝 Code"], ["preview", "👁 Preview"]].map(([m, n]) =>
+    const edWrap = growBox(pv.ed, "file editor");
+    if (mode !== "code") edWrap.style.display = "none";
+    const segBtns = [["code", "✏️ Edit"], ["preview", "👁 Preview"]].map(([m, n]) =>
       h("button", { "aria-pressed": String(m === mode), onclick: () => { mode = m;
         segBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === m)));
-        pv.ed.style.display = m === "code" ? "" : "none"; prevWrap.style.display = m === "preview" ? "flex" : "none"; }, "data-m": m }, n));
-    codePane = h("div", { class: "pane wbcode" }, changes,
-      h("div", { class: "bar2" }, fileName, h("span", { class: "seg", role: "group", "aria-label": "Code or preview" }, segBtns), pv.saveBtn),
-      pv.note, pv.restore, pv.ed, prevWrap, drawer);
-    filesPane = h("div", { class: "pane wbfiles" }, h("h2", {}, "📂 Files"), pv.tabs);
+        edWrap.style.display = m === "code" ? "" : "none"; prevWrap.style.display = m === "preview" ? "flex" : "none"; }, "data-m": m }, n));
+    const edOpen = store.get("wbfilesed", false);
+    filesEd = h("details", { class: "filesed", open: edOpen, ontoggle: e => store.set("wbfilesed", e.target.open) },
+      h("summary", {}, "✏️ Edit or preview this project's files", h("span", { class: "note" }, "— optional, for hand edits")),
+      h("p", { class: "panesub" }, "The current project's own files (left list). Edit by hand and 💾 Save, or 👁 Preview to see the page run."),
+      h("div", { class: "bar2" }, "Editing: ", fileName, h("span", { class: "note" }, ` in ${p.name || p.id}`), h("span", { class: "seg", role: "group", "aria-label": "Edit or preview" }, segBtns), pv.saveBtn),
+      pv.note, pv.restore, edWrap, prevWrap);
+    codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, paneBar("code", "✋ Waiting for you", sec, panes),
+      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), waitNone, changes, filesEd, drawer);
+    filesPane = h("div", { class: "pane wbfiles", "data-pane": "files" }, paneBar("files", "📂 Files", sec, panes),
+      h("p", { class: "panesub" }, "This project's files. Tap one to open it in the editor."), pv.tabs);
   } else {
-    codePane = h("div", { class: "pane wbcode" }, changes, offCard("preview", "👁", "Files & code"), drawer);
-    filesPane = h("div", { class: "pane wbfiles" }, h("h2", {}, "📂 Files"), h("p", { class: "note" }, "⏸ Not switched on yet."));
+    codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, paneBar("code", "✋ Waiting for you", sec, panes),
+      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), waitNone, changes, offCard("preview", "👁", "Files & code"), drawer);
+    filesPane = h("div", { class: "pane wbfiles", "data-pane": "files" }, paneBar("files", "📂 Files", sec, panes), h("p", { class: "note" }, "⏸ Not switched on yet."));
   }
-  sec.append(filesPane, codePane, agentPane);
+  Object.assign(panes, { files: filesPane, code: codePane, agent: agentPane });
+  layoutPanes(sec, panes);
   return [projectRow(), h("nav", { class: "wbtabs", "aria-label": "Workbench" }, tabBtns), sec];
 }
 
@@ -475,7 +634,10 @@ function autosave(text) {
 }
 
 /* ⭐ recommended models (ailab/roster.py): starred + first in every model list; this card says what each is for */
-const mlabel = (r, m) => r.picks && r.picks[m] ? `⭐ ${m} — ${r.picks[m]}` : m;
+/* 2026-11-23: every model shows a best-use tag + $ tier (ailab/roster.py). ⭐ rows keep their hand-picked job. */
+const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "";
+  return r.picks && r.picks[m] ? `⭐ ${m} — ${r.picks[m]}${tier}` : `${m} — ${t.use || ""}${tier}`; };
+const legendNote = (r) => h("details", { class: "note" }, h("summary", {}, "What do the tags and $ mean?"), r.legend || "");
 function rosterCard(pid) {
   const box = h("div", { id: "rosterbox" }, "⏳");
   const d = h("details", { id: "roster" }, h("summary", {}, "⭐ Which model for what?"), box);
@@ -496,6 +658,7 @@ function chatView() {
   const provs = S.providers.filter(x => !p.sensitive || x.local);
   const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
   const modelSel = h("select", { "aria-label": "Model", id: "model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
+  const legend = h("div", { class: "legend" });
   const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
     provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
   api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
@@ -503,6 +666,7 @@ function chatView() {
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
     const want = store.get("model." + prov, r.models[0]);
     r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
+    if (r.legend) legend.replaceChildren(legendNote(r));
   });
   const log = h("div", { class: "log", id: "log" }, chatLog.map(msgEl));
   const ta = h("textarea", { id: "draft", placeholder: "💬 …", "aria-label": "Message",
@@ -523,7 +687,7 @@ function chatView() {
     btn.disabled = false; ta.focus();
   }
   return [projectRow(), h("section", { class: "chat" },
-    h("div", { class: "picker" }, provSel, modelSel), log,
+    h("div", { class: "picker" }, provSel, modelSel), legend, log,
     h("div", { class: "composer" }, ta, btn), h("div", { class: "saved", id: "saved" }), rosterCard(p.id))];
 }
 function msgEl(m) {
@@ -657,6 +821,8 @@ function agentView(wb) {
   const provs = S.providers.filter(x => !p.sensitive || x.local);
   const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
   const modelSel = h("select", { "aria-label": "Model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
+  const legend = h("div", { class: "legend" }), hint = h("div", { class: "hint", id: "aghint", hidden: true });
+  let loaded = null;
   const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
     provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
   api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
@@ -664,20 +830,53 @@ function agentView(wb) {
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
     const want = store.get("model." + prov, r.models[0]);
     r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
+    if (r.legend) legend.replaceChildren(legendNote(r));
+    loaded = r; suggest();
   });
+  /* 💡 Suggested model (2026-11-23): reads the task, picks from the list already loaded for this provider —
+     nothing is sent anywhere. The research behind it: people pick the wrong tier for the job and never see the cost. */
+  function wantFor(text) {
+    const t = text.toLowerCase();
+    if (!t.trim()) return null;
+    if (/\b(screenshot|picture|photo|image|icon|logo|mockup|diagram|look at the)\b/.test(t)) return { use: "🖼 sees images", why: "the task mentions pictures" };
+    if (/\b(research|compare|investigate|analy[sz]e|explain why|which is better|pros and cons|audit|review the design)\b/.test(t)) return { use: "🔬 reasoning / research", why: "the task asks for research or reasoning" };
+    if (/\b(refactor|architecture|rewrite|migrate|whole app|across (all|every)|multi-step|complex|hardest|big change)\b/.test(t)) return { use: "🧠 hardest work", why: "the task is a big change" };
+    if (/\b(typo|rename|one line|small|quick|tiny|simple|colou?r|padding|label|wording)\b/.test(t)) return { use: "⚡ fast & cheap", why: "the task is small" };
+    return { use: "💻 coding", why: "it's a coding task" };
+  }
+  const RANK = { "": 0, free: 0, "$": 1, "$$": 2, "$$$": 3, "$$$$": 4 };
+  function suggest() {
+    if (!loaded || !loaded.ok) { hint.hidden = true; return; }
+    const w = wantFor(task.value); if (!w) { hint.hidden = true; return; }
+    const tg = loaded.tags || {}, picks = loaded.picks || {};
+    const fits = loaded.models.filter(m => (tg[m] || {}).use === w.use || (picks[m] || "").includes(w.use.slice(3)));
+    const pool = fits.length ? fits : loaded.models.filter(m => picks[m]);           // nothing tagged for it → the ⭐ picks
+    if (!pool.length) { hint.hidden = true; return; }
+    const cheapest = [...pool].sort((a, b) => (picks[b] ? 1 : 0) - (picks[a] ? 1 : 0) || RANK[(tg[a] || {}).tier || ""] - RANK[(tg[b] || {}).tier || ""])[0];
+    if (cheapest === modelSel.value) { hint.hidden = true; return; }
+    const tier = (tg[cheapest] || {}).tier;
+    hint.replaceChildren(`💡 For this task try ${cheapest}${tier ? " (" + tier + ")" : ""} — ${w.why}${fits.length ? "" : " (no model here is tagged for it; this is a ⭐ pick)"}. `,
+      h("button", { class: "btn", type: "button", onclick: () => { modelSel.value = cheapest; store.set("model." + prov, cheapest); hint.hidden = true; } }, "Use it"));
+    hint.hidden = false;
+  }
   const task = h("textarea", { id: "agtask", "aria-label": "Task", placeholder: "Say it in plain words. e.g. Add a footer with today's year, then check it's there.  (Ctrl+Enter starts)" });
   task.onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); startBtn.click(); } };
   task.value = store.get("agtask." + p.id, "");
   let t = null;
-  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t);
+  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); suggest();
     t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
   // 2026-11-22 goal starters: fill the task box (Hermes studio tools → connected mode only)
   const GOALS = [
     ["🍄 Mario level", "Make a fresh Mario-type level for Pidima. Steps: 1) hermes mario_level_spec. 2) Design your OWN map: 13 rows, 120 or more columns, with pits, block rows, enemies and a staircase before the flag. 3) hermes mario_level_check, fix every problem it lists, check again. 4) hermes mario_level_make with a short name. 5) Write the final map to level.txt. Then done."],
     ["🎮 Game code", "Change the Pidima game: (say here what to change — e.g. make the jump a little higher, add a double jump, bigger touch buttons). Steps: 1) hermes pidima_source (copies the game files into this project). 2) read the file you need. 3) change it with edit, one spot at a time. 4) run: node --check engine.js && node --check game.js && node bot.js --js 10 — fix and repeat until exit 0. 5) hermes pidima_propose with the files you changed and a one-line note. Then done."],
     ["🐧 Linux app", "Make a Linux app: (say here what it should do). Steps: 1) hermes linux_app_describe. 2) hermes linux_app_change for anything missing, one change per call. 3) hermes linux_app_build; if the verdict is not pass, read the problems, change, build again. 4) hermes linux_app_package. Then done, with the app id and the .deb file name."]];
-  // 🔗 linked code folders (python3 -m ailab link hermes ~/hermes): one starter per folder — works in standalone too
-  const REPOS = (S.repos || []).map(n => [`🛠 Change ${n}`, `Change the ${n} code: (say here what to change). Steps: 1) repo find in "${n}" to locate the code. 2) repo pull only the files you need (they land in repos/${n}/…). 3) read them. 4) change your copy with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the files you changed, with a one-line note. Then done, saying what you changed and how you checked it.`]);
+  // 🔗 linked code folders (python3 -m ailab link hermes ~/hermes) — works in standalone too
+  // A program (python3 -m ailab program hermes hermes hermes-forge) gets ONE starter naming all its folders; folders in no program keep their own.
+  const PROGS = S.programs || {}, inProg = new Set(Object.values(PROGS).flat());
+  const units = Object.entries(PROGS).concat((S.repos || []).filter(n => !inProg.has(n)).map(n => [n, [n]]));
+  const REPOS = units.map(([n, fs]) => [`🛠 Change ${n}`, fs.length > 1
+    ? `Change the ${n} program: (say here what to change). Its code is in ${fs.length} linked folders: ${fs.map(f => `"${f}"`).join(", ")}. Steps: 1) repo find in each of those folders to locate the code (the folder name goes in "repo"). 2) repo pull only the files you need, from the folder each one is in (they land in repos/<folder>/…). 3) read them. 4) change your copies with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the changed files, once per folder, with a one-line note. Then done, saying what you changed and how you checked it.`
+    : `Change the ${n} code: (say here what to change). Steps: 1) repo find in "${fs[0]}" to locate the code. 2) repo pull only the files you need (they land in repos/${fs[0]}/…). 3) read them. 4) change your copy with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the files you changed, with a one-line note. Then done, saying what you changed and how you checked it.`]);
   const repoRow = h("div", { class: "runbar", id: "agrepos" }, REPOS.map(([label, text]) =>
     h("button", { class: "btn pri", type: "button", title: "Fill the task box", onclick: () => { task.value = text; task.oninput(); task.focus(); task.setSelectionRange(text.indexOf("("), text.indexOf(")") + 1); task.scrollTop = 0; } }, label)),
     REPOS.length ? h("span", { class: "note" }, "reads the real code · changes wait for your ✅") : h("span", { class: "note" }, "🔗 No code folder linked yet — on gandalf: python3 -m ailab link hermes ~/hermes"));
@@ -737,9 +936,9 @@ function agentView(wb) {
     stopBtn.disabled = true; const r = await api("/api/agent/stop", { id }); if (r.ok) paint(r.run);
   };
   poll();
-  if (wb) return { picker: h("div", { class: "picker" }, provSel, modelSel), task, goals, repoRow, startBtn, stopBtn, held, status, final, steps };
+  if (wb) return { picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), hint), goals, repoRow, startBtn, stopBtn, held, status, final, steps };
   return [projectRow(), h("section", { class: "agent" },
-    h("div", { class: "picker" }, provSel, modelSel), task, repoRow, goals,
+    h("div", { class: "picker" }, provSel, modelSel), legend, task, hint, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     status, final, steps,
@@ -984,6 +1183,7 @@ function render() {
   else if (view === "agent") kids = agentView();
   else if (view === "review") kids = reviewView();
   else if (view === "compare") kids = compareView();
+  else if (view === "settings") kids = settingsView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = false;

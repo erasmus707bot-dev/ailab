@@ -40,6 +40,25 @@ class Repos(unittest.TestCase):
         with self.assertRaises(repos.RepoError):
             repos.root_of(self.cfg, "gone")
 
+    def test_programs_group_only_linked_folders(self):
+        forge = self.home / "hermes-forge"
+        forge.mkdir()
+        cfg = {**self.cfg, "repos": {**self.cfg["repos"], "hermes-forge": str(forge)},
+               "programs": {"hermes": ["hermes", "hermes-forge", "gone", "hermes"], "empty": ["gone"], "Bad Name": ["hermes"],
+                            "odd": "hermes"}}
+        self.assertEqual(repos.programs(cfg), {"hermes": ["hermes", "hermes-forge"]})
+        self.assertEqual(repos.programs(self.cfg), {})
+
+    def test_token_files_are_never_read(self):
+        (self.repo / "forge" / "tokens").mkdir()
+        (self.repo / "forge" / "tokens" / "x.py").write_text("def status")
+        (self.repo / "forge" / "ailab.token").write_text("def status")
+        (self.repo / "forge" / "tokens.json").write_text("def status")
+        for bad in ("forge/tokens/x.py", "forge/ailab.token", "forge/tokens.json"):
+            with self.assertRaises(repos.RepoError, msg=bad):
+                repos.read_text(self.repo, bad)
+        self.assertEqual({m["path"] for m in repos.find(self.repo, "def status")["matches"]}, {"forge/card.py"})
+
     def test_find_skips_hidden_vendored_linked_and_secret_files(self):
         r = repos.find(self.repo, "def status|TOKEN")
         self.assertEqual({m["path"] for m in r["matches"]}, {"forge/card.py"})

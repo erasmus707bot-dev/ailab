@@ -33,6 +33,11 @@ PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-i
             "frame-ancestors 'self'; form-action 'none'")
 
 
+def _keyring_ok() -> bool:
+    from .keys import _keyring                                     # noqa: PLC0415
+    return _keyring() is not None
+
+
 def _off(flag: str) -> tuple[int, dict]:
     return 403, {"ok": False, "code": "not_switched_on", "flag": flag,
                  "message": f"{OFF[flag]} is not switched on yet. Nothing was sent and nothing was spent.",
@@ -63,7 +68,7 @@ class App:
 
     def state(self) -> dict:
         return {"ok": True, "version": __version__, "mode": self.cfg["mode"], "flags": self.cfg["flags"],
-                "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "repos": sorted(repos.linked(self.cfg)), "sandbox": preview.sandbox_kind(),
+                "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "repos": sorted(repos.linked(self.cfg)), "programs": repos.programs(self.cfg), "sandbox": preview.sandbox_kind(),
                 "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama"} for n in sorted(NAMES, key=lambda n: n != "ollama")]}
 
     # ---- routes: (status, body) ----
@@ -74,7 +79,75 @@ class App:
         r = self.lab.list_models(prov, store.project(pid) or {})
         ids, picks = roster.arrange(prov, [m["id"] for m in r.get("models", [])], r.get("source") != "hermes",
                                     (self.cfg.get("extra_models") or {}).get(prov))
-        return 200, {"ok": True, "provider": prov, "source": r.get("source"), "models": ids[:500], "picks": picks}
+        price_of = None
+        try:                                                        # price table for models the listing didn't price
+            p = self.lab.provider(prov)
+            price_of = lambda mid, listed, _p=p: _p.price(mid, listed)     # noqa: E731
+        except Exception:                                           # noqa: BLE001 — fakes / unknown provider: no tiers
+            pass
+        tg = roster.tags(prov, r.get("models", []), price_of)
+        return 200, {"ok": True, "provider": prov, "source": r.get("source"), "models": ids[:500], "picks": picks,
+                     "tags": {m: tg.get(m, {"use": roster.use_tag(m), "tier": ""}) for m in ids[:500]},
+                     "legend": roster.USE_LEGEND}
+
+    # ---- 🔑 Keys page (2026-11-23). Standalone: the Lab's own store (keyring → environment → keys.env, 0600).
+    # Connected: Hermes holds every hosted key (Vault) — the Lab shows Hermes's answer and points at Hermes Settings.
+    def keys(self, q: dict) -> tuple[int, dict]:
+        from .keys import ENV_NAMES                                # noqa: PLC0415
+        hosted = [n for n in NAMES if n != "ollama"]
+        out = {"ok": True, "mode": self.cfg["mode"], "hermes_url": self.cfg.get("hermes_url") or "", "providers": []}
+        if self.cfg["mode"] == "connected":
+            known = {}
+            try:
+                for e in self.lab.mcp.call("llm_providers").get("providers", []):
+                    known[e["provider"]] = e
+            except Exception as e:                                 # noqa: BLE001 — Hermes down is a normal state
+                out["note"] = f"Hermes isn't answering ({type(e).__name__})."
+            for n in hosted:
+                e = known.get(n)
+                out["providers"].append({"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "where": "hermes",
+                                         "listed": e is not None, "set": bool(e and e.get("has_key")),
+                                         "models": (e or {}).get("models") or []})
+            return 200, out
+        ks = self.lab.keys
+        for n in hosted:
+            st = ks.status(n) if hasattr(ks, "status") else {"set": False, "source": "none"}
+            out["providers"].append({"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "where": "lab", "env": ENV_NAMES[n], **st})
+        out["store"] = {"keyring": _keyring_ok(), "file": str(ks.env_file) if hasattr(ks, "env_file") else ""}
+        return 200, out
+
+    def keys_set(self, b: dict) -> tuple[int, dict]:
+        if self.cfg["mode"] == "connected":
+            return 409, {"ok": False, "code": "hermes_holds_keys", "message": "In connected mode Hermes holds the keys. Add it in Hermes → Settings → API keys."}
+        name = str(b.get("provider") or "")
+        try:
+            where = self.lab.keys.set(name, str(b.get("key") or ""))
+        except KeyMissing as e:
+            return 400, {"ok": False, "code": "bad_key", "message": str(e)}
+        try:
+            self.lab.models.forget(name)                           # a new key must not serve the old key's cached list
+        except Exception:                                          # noqa: BLE001
+            pass
+        return 200, {"ok": True, "provider": name, "source": where}
+
+    def keys_remove(self, b: dict) -> tuple[int, dict]:
+        if self.cfg["mode"] == "connected":
+            return 409, {"ok": False, "code": "hermes_holds_keys", "message": "In connected mode Hermes holds the keys."}
+        name = str(b.get("provider") or "")
+        return 200, {"ok": True, "provider": name, "removed": self.lab.keys.remove(name)}
+
+    def keys_test(self, b: dict) -> tuple[int, dict]:
+        """Lists the provider's models with the stored key — the only thing a key is ever used for here."""
+        if not self.cfg["flags"]["router"]:
+            return _off("router")
+        name = str(b.get("provider") or "")
+        try:
+            self.lab.models.forget(name)                           # list afresh — a stale cache would hide a bad key
+        except Exception:                                          # noqa: BLE001
+            pass
+        r = self.lab.list_models(name, {})
+        n = len(r.get("models") or [])
+        return 200, {"ok": True, "provider": name, "models": n, "source": r.get("source")}
 
     def roster(self, q: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["router"]:
@@ -360,6 +433,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(lambda: (200, app.state()))
             if u.path == "/api/models":
                 return self._run(app.models, q)
+            if u.path == "/api/keys":
+                return self._run(app.keys, q)
             if u.path == "/api/roster":
                 return self._run(app.roster, q)
             if u.path == "/api/preview/files":
@@ -394,6 +469,12 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 b = json.loads(self.rfile.read(n) or b"{}")
             except ValueError:
                 return self._send(400, {"ok": False, "code": "bad_json"})
+            if p == "/api/keys/set":
+                return self._run(app.keys_set, b)
+            if p == "/api/keys/remove":
+                return self._run(app.keys_remove, b)
+            if p == "/api/keys/test":
+                return self._run(app.keys_test, b)
             if p == "/api/chat":
                 return self._run(app.chat, b)
             if p == "/api/preview/file":

@@ -29,6 +29,12 @@ class ModelCache:
         f.write_text(json.dumps(data))
         return {**data, "source": "live"}
 
+    def forget(self, provider_name: str) -> None:
+        """Drop one provider's cached list (a new key must list afresh)."""
+        f = self._file(provider_name)
+        if f.exists():
+            f.unlink()
+
     def lookup(self, provider_name: str, model: str) -> dict | None:
         f = self._file(provider_name)
         if not f.exists():

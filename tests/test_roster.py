@@ -33,3 +33,24 @@ class Roster(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BestUse(unittest.TestCase):
+    """2026-11-23: every model gets a best-use tag and a $ tier."""
+
+    def test_tags_from_names(self):
+        from ailab import roster as R
+        self.assertEqual(R.use_tag("Qwen/Qwen3-Coder-30B"), "💻 coding")
+        self.assertEqual(R.use_tag("qwen2.5-vl-72b"), "🖼 sees images")
+        self.assertEqual(R.use_tag("deepseek-r1:14b"), "🔬 reasoning / research")
+        self.assertEqual(R.use_tag("claude-haiku-5-5"), "⚡ fast & cheap")
+        self.assertEqual(R.use_tag("qwen3.8:27b"), "🧠 hardest work")
+        self.assertEqual(R.use_tag("text-embedding-3-small"), "⚙️ not a chat model")
+        self.assertEqual(R.use_tag("grok-4-1"), "💬 general")
+
+    def test_tiers_and_tags_dict(self):
+        from ailab import roster as R
+        self.assertEqual([R.cost_tier(x) for x in (0.5e-6, 3e-6, 10e-6, 20e-6, None)], ["$", "$$", "$$$", "$$$$", ""])
+        t = R.tags("openrouter", [{"id": "a/b-coder", "price_out": 2e-6}, {"id": "c/d"}], lambda m, l: (0, 30e-6, True))
+        self.assertEqual(t, {"a/b-coder": {"use": "💻 coding", "tier": "$$"}, "c/d": {"use": "💬 general", "tier": "$$$$"}})
+        self.assertEqual(R.tags("ollama", [{"id": "qwen3.5:4b"}])["qwen3.5:4b"]["tier"], "free")

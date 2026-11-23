@@ -95,3 +95,61 @@ def status(lab, project: dict | None = None) -> list[dict]:
             row["state"], row["todo"] = "not in the provider's list", "the id changed — pick the nearest name in the model list"
         out.append(row)
     return out
+
+
+# ---- "best use" + cost tier for EVERY model (2026-11-23) --------------------------------------------------------
+# Starred models carry a curated job above. Everything else gets a tag read off its name — a guide, not a test
+# result — and a $ tier from the price the provider lists (or the Lab's price table). Unknown price → no tier.
+USE_RULES: list[tuple[str, str]] = [
+    (r"embed|rerank|whisper|tts|moderation|guard|transcri", "⚙️ not a chat model"),
+    (r"cod(e|er|ex|estral)|devstral|starcoder|swe-", "💻 coding"),
+    (r"(^|[-/_:.])(vl|vision|omni|pixtral)([-/_:.]|$)|-vision|image-?(preview|understanding)", "🖼 sees images"),
+    (r"(^|[-/_:.])(r1|qwq|o1|o3|o4)([-/_:.]|$)|reason|think|deep-?research|-dr\b", "🔬 reasoning / research"),
+    (r"flash|mini|lite|haiku|nano|tiny|small|turbo|fast|instant|:[1-9](\.[0-9])?b\b", "⚡ fast & cheap"),
+    (r"opus|ultra|max\b|large|405b|235b|480b|:[1-9][0-9]{1,2}b\b", "🧠 hardest work"),
+]
+USE_LEGEND = ("Tags come from the model's name (💻 coding · 🖼 sees images · 🔬 reasoning · ⚡ fast & cheap · 🧠 hardest work) "
+              "— a guide, not a test. ⭐ rows were picked by hand. $ tiers: output price per million tokens — "
+              "$ under 1 · $$ under 5 · $$$ under 15 · $$$$ above; free = local.")
+
+
+def use_tag(model_id: str) -> str:
+    m = (model_id or "").lower()
+    for rx, tag in USE_RULES:
+        if re.search(rx, m):
+            return tag
+    return "💬 general"
+
+
+def cost_tier(out_per_token: float | None, local: bool = False) -> str:
+    if local:
+        return "free"
+    if out_per_token is None:
+        return ""
+    per_m = out_per_token * 1e6
+    if per_m <= 0:
+        return "free"
+    return "$" if per_m < 1 else "$$" if per_m < 5 else "$$$" if per_m < 15 else "$$$$"
+
+
+def tags(provider_name: str, models: list[dict], price_of=None) -> dict[str, dict]:
+    """{id: {"use": tag, "tier": "$$"}} for a provider's live list. price_of(model_id, listed) -> (in, out, priced) or None."""
+    out = {}
+    local = provider_name == "ollama"
+    for m in models:
+        mid = m.get("id") if isinstance(m, dict) else str(m)
+        if not mid:
+            continue
+        tier = cost_tier(None, local)
+        if not local:
+            listed = m if isinstance(m, dict) else None
+            if listed and listed.get("price_out") is not None:
+                tier = cost_tier(float(listed["price_out"]))
+            elif price_of:
+                try:
+                    pin, pout, priced = price_of(mid, listed)
+                    tier = cost_tier(pout) if priced else ""
+                except Exception:                                 # noqa: BLE001 — a price is a nicety
+                    tier = ""
+        out[mid] = {"use": use_tag(mid), "tier": tier}
+    return out

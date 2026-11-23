@@ -1,4 +1,4 @@
-"""python3 -m ailab status | doctor | secretscan [path] | models <provider> [--refresh] | roster | link <name> <folder> | unlink <name> | links | serve [--port N] [--host 127.0.0.1]"""
+"""python3 -m ailab status | doctor | secretscan [path] | models <provider> [--refresh] | roster | link <name> <folder> | unlink <name> | links | program <name> <folder-name>… | unprogram <name> | programs | serve [--port N] [--host 127.0.0.1]"""
 from __future__ import annotations
 
 import json
@@ -39,6 +39,34 @@ def main(argv: list[str] | None = None) -> int:
         ok = repos.linked({"repos": cur})
         print("🔗 linked code folders: " + (", ".join(f"{k} → {v}" for k, v in sorted(ok.items())) or "none")
               + ("" if cmd == "links" else "   (restart the Lab to pick it up)"))
+        return 0
+    if cmd in ("program", "unprogram", "programs"):                # 🔗 one program, several linked folders
+        from . import config, repos                                # noqa: PLC0415
+        f = config.home() / "config.json"
+        raw = json.loads(f.read_text() or "{}") if f.exists() else {}
+        cur = dict(raw.get("programs") or {})
+        if cmd == "program":
+            names = a[2:]
+            if len(a) < 3 or not repos.NAME_RX.fullmatch(a[1]):
+                print("use: python3 -m ailab program <name> <linked-folder> [more…]   e.g.  program hermes hermes hermes-forge")
+                return 2
+            ok = repos.linked(raw)
+            bad = [n for n in names if n not in ok]
+            if bad:
+                print(f"❌ not linked yet: {', '.join(bad)} — link each first (python3 -m ailab link <name> <folder>). Nothing changed.")
+                return 1
+            cur[a[1]] = list(dict.fromkeys(names))
+        elif cmd == "unprogram":
+            cur.pop(a[1] if len(a) > 1 else "", None)
+        if cmd != "programs":
+            raw["programs"] = cur
+            f.parent.mkdir(parents=True, exist_ok=True)
+            tmp = f.with_name(f.name + ".tmp")
+            tmp.write_text(json.dumps(raw, indent=1))
+            tmp.replace(f)
+        pr = repos.programs({**raw, "programs": cur})
+        print("🔗 programs: " + ("; ".join(f"{k} → {', '.join(v)}" for k, v in sorted(pr.items())) or "none")
+              + ("" if cmd == "programs" else "   (restart the Lab to pick it up)"))
         return 0
     if cmd == "doctor":
         from .preview import Preview                               # noqa: PLC0415

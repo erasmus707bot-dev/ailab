@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from . import config as _config
 from . import privacy, providers
-from .keys import LocalKeys
+from .keys import KeyStore, LocalKeys
 from .mcp_client import HermesMCP, HermesRefused
 from .models import ModelCache
 from .providers.base import ChatResult
@@ -26,7 +26,7 @@ class Lab:
             self.spend = spend or HermesSpend(self.mcp, self.cfg["category"])
         else:
             self.mcp = None
-            self.keys = keys or LocalKeys()
+            self.keys = keys or KeyStore()
             self.spend = spend or LocalLedger(_config.home() / "ledger.json", self.cfg["daily_cap_usd"])
 
     def provider(self, name: str):
