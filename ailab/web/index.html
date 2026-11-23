@@ -473,8 +473,8 @@ function wbLayout() { const l = store.get("wblayout", null); return l && Array.i
 function wbSave(l) { store.set("wblayout", l); }
 function wbResetLayout() { store.set("wblayout", null); render(); }
 function layoutPanes(sec, panes) {
-  const l = wbLayout(), custom = Object.keys(l.widths).length > 0 || l.order.join() !== PANES.join();
-  sec.classList.toggle("custom", custom);
+  const l = wbLayout();
+  sec.classList.add("custom");               // 2026-11-23: gutters are grid cells too — always lay out all 5 columns (first launch wrapped)
   sec.replaceChildren();
   const cols = [];
   l.order.forEach((id, i) => {
@@ -482,7 +482,7 @@ function layoutPanes(sec, panes) {
     sec.append(panes[id]);
     cols.push(id === "code" ? "minmax(0, 1fr)" : l.widths[id] ? `${l.widths[id]}px` : (id === "files" ? "minmax(170px, 230px)" : "minmax(320px, 1fr)"));
   });
-  sec.style.gridTemplateColumns = custom ? cols.join(" ") : "";
+  sec.style.gridTemplateColumns = cols.join(" ");
   function gutter(a, b) {
     const target = a !== "code" ? a : b, sign = a !== "code" ? 1 : -1;   // the side pane this gutter resizes, and which way grows it
     const g = h("button", { class: "gutter", type: "button", role: "separator", "aria-orientation": "vertical",
@@ -493,7 +493,7 @@ function layoutPanes(sec, panes) {
     let x0 = 0, w0 = 0, live = null;
     g.addEventListener("pointerdown", e => { if (e.button !== 0) return; x0 = e.clientX; w0 = cur(); live = w0; g.setPointerCapture(e.pointerId); e.preventDefault(); });
     g.addEventListener("pointermove", e => { if (!g.hasPointerCapture(e.pointerId)) return; live = clamp(w0 + sign * (e.clientX - x0));
-      const c = (sec.style.gridTemplateColumns || cols.join(" ")).split(" "); c[l.order.indexOf(target) * 2] = `${live}px`; sec.classList.add("custom"); sec.style.gridTemplateColumns = c.join(" "); });
+      const c = [...cols]; c[l.order.indexOf(target) * 2] = `${live}px`; sec.style.gridTemplateColumns = c.join(" "); });   // cols, not a split string: "minmax(0, 1fr)" holds a space
     g.addEventListener("lostpointercapture", () => { if (live != null) apply(live); live = null; });
     g.addEventListener("keydown", e => { if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return; e.preventDefault();
       const k = [...sec.querySelectorAll(".gutter")].indexOf(g); apply(cur() + (e.key === "ArrowRight" ? 16 : -16) * sign); sec.querySelectorAll(".gutter")[k].focus(); });

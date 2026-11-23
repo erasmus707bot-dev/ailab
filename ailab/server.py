@@ -333,7 +333,8 @@ ERRORS = ((PrivacyRefused, 403, "privacy", "🔒"), (SpendBlocked, 402, "over_ca
 
 
 def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
-    index = (WEB / "index.html").read_bytes()
+    def index() -> bytes:                       # 2026-11-23: read per load — page edits show without a Lab restart
+        return (WEB / "index.html").read_bytes()
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -426,7 +427,7 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             if u.path.startswith("/api/") and self._foreign():
                 return self._send(403, {"ok": False, "code": "cross_origin"})
             if u.path in ("/", "/index.html"):
-                return self._send(200, index, "text/html; charset=utf-8")
+                return self._send(200, index(), "text/html; charset=utf-8")
             if u.path == "/icon.svg":
                 return self._send(200, (WEB / "icon.svg").read_bytes(), "image/svg+xml")
             if u.path == "/api/state":
