@@ -69,7 +69,25 @@ class App:
     def state(self) -> dict:
         return {"ok": True, "version": __version__, "mode": self.cfg["mode"], "flags": self.cfg["flags"],
                 "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "repos": sorted(repos.linked(self.cfg)), "programs": repos.programs(self.cfg), "sandbox": preview.sandbox_kind(),
-                "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama"} for n in sorted(NAMES, key=lambda n: n != "ollama")]}
+                "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama", **({"off": True} if n in self._hermes_off() else {})}
+                              for n in sorted(NAMES, key=lambda n: n != "ollama")]}
+
+    def _hermes_off(self) -> set:
+        """2026-11-23: hosted providers Hermes has turned off (connected mode) — the page skips them as the default pick.
+        Cached 60 s; Hermes down → nothing marked off (the models call still explains)."""
+        import time                                                # noqa: PLC0415
+        if self.cfg["mode"] != "connected":
+            return set()
+        c = getattr(self, "_off_cache", None)
+        if c and time.monotonic() - c[0] < 60:
+            return c[1]
+        try:
+            listed = {e["provider"] for e in self.lab.mcp.call("llm_providers").get("providers", [])}
+            off = {n for n in NAMES if n != "ollama" and n not in listed}
+        except Exception:                                          # noqa: BLE001 — Hermes down is a normal state
+            off = set()
+        self._off_cache = (time.monotonic(), off)
+        return off
 
     # ---- routes: (status, body) ----
     def models(self, q: dict) -> tuple[int, dict]:

@@ -657,11 +657,11 @@ function chatView() {
   if (!S.flags.router) return [offCard("router", "💬", "Ask models")];
   const p = curProject();
   const provs = S.providers.filter(x => !p.sensitive || x.local);
-  const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
+  const prov = provs.find(x => x.id === store.get("provider", "") && !x.off) ? store.get("provider") : (provs.find(x => !x.off) || provs[0]).id;   // 2026-11-23: never open on a provider Hermes has off
   const modelSel = h("select", { "aria-label": "Model", id: "model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
   const legend = h("div", { class: "legend" });
   const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
-    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
+    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}${x.off ? " · off in Hermes" : ""}`)));
   api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
     modelSel.innerHTML = "";
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
@@ -820,12 +820,12 @@ function agentView(wb) {
   if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
   const p = curProject();
   const provs = S.providers.filter(x => !p.sensitive || x.local);
-  const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : provs[0].id;
+  const prov = provs.find(x => x.id === store.get("provider", "") && !x.off) ? store.get("provider") : (provs.find(x => !x.off) || provs[0]).id;   // 2026-11-23: never open on a provider Hermes has off
   const modelSel = h("select", { "aria-label": "Model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
   const legend = h("div", { class: "legend" }), hint = h("div", { class: "hint", id: "aghint", hidden: true });
   let loaded = null;
   const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
-    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
+    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}${x.off ? " · off in Hermes" : ""}`)));
   api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
     modelSel.innerHTML = "";
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
