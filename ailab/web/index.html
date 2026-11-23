@@ -225,6 +225,12 @@
     .wb > .pane { display: none; overflow: visible; }
     .gutter, .panebar .ib { display: none; }
     header #full, header #mode { display: none; }
+    /* 2026-11-23 Argus touch test: header icons were 36×40, dropdowns 37–39, Start/Stop 42, summaries 20–25 px tall */
+    header button, header select { min-height: 44px; min-width: 44px; }
+    .wb select, .wb .btn, .settings .btn, .wb button.btn { min-height: 44px; }
+    details > summary { padding-block: 12px; }
+    header .ib, .boxwrap > .grow { min-width: 44px !important; min-height: 44px !important; }
+    #spend > span:first-child { display: none; }            /* the $ amount says it — room for 44 px icons */
   }
   @media (max-width: 640px) {
     header #projnew { display: none; }                      /* phone: "➕ New project…" is the last entry of the project list */
