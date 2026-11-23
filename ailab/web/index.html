@@ -849,6 +849,23 @@ function agentView(wb) {
   function suggest() {
     if (!loaded || !loaded.ok) { hint.hidden = true; return; }
     const w = wantFor(task.value); if (!w) { hint.hidden = true; return; }
+    /* 2026-11-23: real code in a linked folder (Hermes, ailab) — local models got lost in the live test; claude-sonnet-5-5 finished it for ~$0.06 */
+    if (/linked folders?|repo (find|pull|propose)/i.test(task.value)) {
+      const strong = "claude-sonnet-5-5", here = S.providers.find(x => x.id === prov) || {};
+      if (here.local) {
+        const hosted = provs.find(x => !x.local && x.id === "claude") || provs.find(x => !x.local);
+        hint.replaceChildren("💡 Changing real code in a linked folder needs a strong hosted model — local models got lost on this in testing (claude-sonnet-5-5 finished one for about $0.06). ",
+          hosted ? h("button", { class: "btn", type: "button", onclick: () => { store.set("provider", hosted.id); if (hosted.id === "claude") store.set("model.claude", strong); render(); } }, `Switch to ${hosted.icon} ${hosted.id}`)
+                 : h("span", { class: "note" }, "This project is 🔒 local-only, so expect to steer it step by step."));
+        hint.hidden = false; return;
+      }
+      if (loaded.models.includes(strong)) {
+        if (modelSel.value === strong) { hint.hidden = true; return; }
+        hint.replaceChildren(`💡 For real code in a linked folder try ${strong} — it finished a Hermes change in 6 steps for about $0.06. `,
+          h("button", { class: "btn", type: "button", onclick: () => { modelSel.value = strong; store.set("model." + prov, strong); hint.hidden = true; } }, "Use it"));
+        hint.hidden = false; return;
+      }
+    }
     const tg = loaded.tags || {}, picks = loaded.picks || {};
     const fits = loaded.models.filter(m => (tg[m] || {}).use === w.use || (picks[m] || "").includes(w.use.slice(3)));
     const pool = fits.length ? fits : loaded.models.filter(m => picks[m]);           // nothing tagged for it → the ⭐ picks
