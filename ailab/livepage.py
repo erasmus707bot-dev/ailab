@@ -128,6 +128,8 @@ def changed(pid: str, app: dict) -> dict:
         rel = f.relative_to(base).as_posix()
         if f.is_symlink() or not f.is_file() or any(s.startswith(".") for s in rel.split("/")):
             continue
+        if "__pycache__" in rel.split("/") or f.suffix in (".pyc", ".pyo"):     # build leftovers, not changes (live test 2026-11-23)
+            continue
         if _differs(f, app["root"] / rel):
             (out["pages"] if rel.startswith(pre) else out["other"]).append(rel)
             n += 1

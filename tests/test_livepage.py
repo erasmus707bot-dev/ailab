@@ -280,3 +280,20 @@ class ApiOff(Api):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PycIgnored(unittest.TestCase):
+    def test_pycache_is_not_a_change(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d) / "copy"
+            (base / "forge/__pycache__").mkdir(parents=True)
+            (base / "forge/__pycache__/card.cpython-312.pyc").write_bytes(b"x")
+            (base / "forge/card.py").write_text("changed")
+            real = Path(d) / "real"
+            (real / "forge").mkdir(parents=True)
+            (real / "forge/card.py").write_text("orig")
+            with mock.patch.object(livepage, "_copies", return_value=base):
+                out = livepage.changed("p", {"web": "web", "root": real})
+            self.assertEqual(out["other"], ["forge/card.py"])

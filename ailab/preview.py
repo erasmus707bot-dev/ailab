@@ -28,7 +28,7 @@ PIPE = Path(__file__).resolve().parent / "sandbox" / "pipe_server.py"
 EDIT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".svg", ".txt", ".md",
             # 2026-11-22 workbench: software work, not only web pages
             ".py", ".sh", ".toml", ".yaml", ".yml", ".ini", ".cfg", ".ts", ".tsx", ".jsx", ".kt", ".java", ".gd", ".c", ".h", ".rs", ".go", ".sql", ".xml", ".csv"}
-MAX_EDIT = 500_000
+MAX_EDIT = 2_000_000          # 2 MB: Hermes home index.html is ~580 KB (live test 2026-11-23); big files use edit/read ranges
 MAX_CAPTURE = 8_000_000
 REL = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*")
 PID = re.compile(r"[a-z0-9-]{1,48}")
