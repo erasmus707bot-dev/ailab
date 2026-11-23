@@ -278,7 +278,12 @@ class Run:
             name, do = str(a.get("repo") or ""), str(a.get("do") or "")
             root = repos.root_of(self.cfg, name)
             if do == "find":
-                return repos.find(root, str(a.get("pattern") or ""), str(a.get("glob") or ""), str(a.get("dir") or ""))
+                res = repos.find(root, str(a.get("pattern") or ""), str(a.get("glob") or ""), str(a.get("dir") or ""))
+                if not res.get("matches"):                    # point the model at the program's other folders
+                    others = [f for m in repos.programs(self.cfg).values() if name in m for f in m if f != name]
+                    if others:
+                        res["tip"] = f"Nothing in {name!r}. The same program also has: {', '.join(dict.fromkeys(others))} — try find there."
+                return res
             if do == "list":
                 return repos.ls(root, str(a.get("dir") or ""))
             if do == "pull":

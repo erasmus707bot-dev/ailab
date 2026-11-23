@@ -107,6 +107,19 @@ class Repos(unittest.TestCase):
         self.assertEqual((self.repo / "forge" / "card.py").read_text(), "def status():\n    return 1\n")   # untouched
         self.assertFalse((self.repo / "forge" / "new.py").exists())
 
+    def test_worktrees_skipped_and_empty_find_points_to_program_folders(self):
+        (self.repo / "day" / "worktrees" / "w1" / "forge").mkdir(parents=True)
+        (self.repo / "day" / "worktrees" / "w1" / "forge" / "card.py").write_text("def status():\n")
+        self.assertEqual({m["path"] for m in repos.find(self.repo, "def status")["matches"]}, {"forge/card.py"})
+        forge = self.home / "hermes-forge"
+        (forge / "x").mkdir(parents=True)
+        (forge / "x" / "a.py").write_text("y = 1\n")
+        self.cfg["repos"]["forge"] = str(forge)
+        self.cfg["programs"] = {"hermes": ["forge", "hermes"]}
+        out = self._run()._repo({"repo": "forge", "do": "find", "pattern": "def status"})
+        self.assertEqual(out["matches"], [])
+        self.assertIn("hermes", out["tip"])
+
     def test_compare_lanes_cannot_propose_and_unknown_folder_is_an_error(self):
         r = self._run()
         r.is_lane = True

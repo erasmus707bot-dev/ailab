@@ -148,7 +148,8 @@
   .step .why { color: var(--dim); font-size: .9rem; }
   .step pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; font-size: .82rem; max-height: 40vh; overflow: auto; }
   .step.held { border-color: var(--warn); }
-  .step .hd b { overflow-wrap: anywhere; }
+  .step .hd b { flex-shrink: 0; }
+  .step .hd > span:last-child { min-width: 0; overflow-wrap: anywhere; }
   .step.err { border-color: var(--bad); }
   .final { background: var(--calm); border-radius: var(--r); padding: 10px 12px; }
   /* ⚖️ Compare (M8) */
@@ -875,7 +876,7 @@ function agentView(wb) {
   const PROGS = S.programs || {}, inProg = new Set(Object.values(PROGS).flat());
   const units = Object.entries(PROGS).concat((S.repos || []).filter(n => !inProg.has(n)).map(n => [n, [n]]));
   const REPOS = units.map(([n, fs]) => [`🛠 Change ${n}`, fs.length > 1
-    ? `Change the ${n} program: (say here what to change). Its code is in ${fs.length} linked folders: ${fs.map(f => `"${f}"`).join(", ")}. Steps: 1) repo find in each of those folders to locate the code (the folder name goes in "repo"). 2) repo pull only the files you need, from the folder each one is in (they land in repos/<folder>/…). 3) read them. 4) change your copies with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the changed files, once per folder, with a one-line note. Then done, saying what you changed and how you checked it.`
+    ? `Change the ${n} program: (say here what to change). Its code is in ${fs.length} linked folders: ${fs.map(f => `"${f}"`).join(", ")}. Steps: 1) repo find in the first folder to locate the code (the folder name goes in "repo"); if it finds nothing there, try the next folder. 2) repo pull only the files you need, from the folder each one is in (they land in repos/<folder>/…). 3) read them. 4) change your copies with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the changed files, once per folder, with a one-line note. Then done, saying what you changed and how you checked it.`
     : `Change the ${n} code: (say here what to change). Steps: 1) repo find in "${fs[0]}" to locate the code. 2) repo pull only the files you need (they land in repos/${fs[0]}/…). 3) read them. 4) change your copy with edit, one spot at a time, matching the code around it. 5) run a check on each changed file (python3 -m py_compile <file>, or node --check <file>) and fix until it passes. 6) repo propose the files you changed, with a one-line note. Then done, saying what you changed and how you checked it.`]);
   const repoRow = h("div", { class: "runbar", id: "agrepos" }, REPOS.map(([label, text]) =>
     h("button", { class: "btn pri", type: "button", title: "Fill the task box", onclick: () => { task.value = text; task.oninput(); task.focus(); task.setSelectionRange(text.indexOf("("), text.indexOf(")") + 1); task.scrollTop = 0; } }, label)),

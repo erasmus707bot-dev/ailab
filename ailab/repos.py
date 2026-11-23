@@ -21,7 +21,7 @@ from . import preview, secretscan
 
 NAME_RX = re.compile(r"[a-z0-9][a-z0-9_-]{0,29}")
 DENY_DIRS = {"node_modules", "__pycache__", "graphify-out", "site-packages", "dist-packages", "venv", "vault",
-             "secrets", "backups", "_to_delete", "tokens"}
+             "secrets", "backups", "_to_delete", "tokens", "worktrees"}
 DENY_FILE_RX = re.compile(r"(?i)(\.(pem|key|p12|pfx|kdbx|jks|keystore|sqlite3?|db|pyc|lock)$|^id_(rsa|ed25519|ecdsa)"
                           r"|^credentials[^/]*\.json$|^secrets?\.[a-z]+$|\.token$|^tokens?\.json$)")
 MAX_FIND, MAX_LIST, MAX_PULL, FIND_SECONDS = 60, 300, 12, 8.0
