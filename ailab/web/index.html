@@ -997,7 +997,7 @@ let liveTimer = null, liveMsg = null;
 function liveView() {
   if (!S.flags.live) return [offCard("live", "🪞", "Show & change")];
   const p = curProject();
-  let apps = [], app = null, ports = null, picked = null, chg = { pages: [], other: [] }, seen = {}, chk = null, busy = false;
+  let apps = [], app = null, ports = null, picked = null, chg = { pages: [], other: [] }, seen = {}, chk = null, busy = false, robot = null, robotBusy = false;
   const appSel = h("select", { "aria-label": "App", id: "liveapp" }), pageSel = h("select", { "aria-label": "Page", id: "livepage" });
   const part = h("input", { type: "text", id: "livepart", placeholder: "#part (optional)", "aria-label": "Part of the page, like #aikeys", size: 14, maxlength: 80 });
   const reload = h("button", { class: "btn", type: "button", title: "Load both sides again" }, "🔄");
@@ -1026,7 +1026,7 @@ function liveView() {
   const url = (side, bust) => { const a = addr(), i = a.indexOf("#"), base = i < 0 ? a : a.slice(0, i), hash = i < 0 ? "" : a.slice(i);
     return `${location.protocol}//${location.hostname}:${ports[side]}${base}${bust ? (base.includes("?") ? "&" : "?") + "_lab=" + Date.now() : ""}${hash}`; };
   function load(side) { seen[side] = null; (side === "now" ? fNow : fNew).src = url(side, true); }
-  function loadBoth() { if (!ports) return; chk = null; load("now"); load("new"); paintLight(); }
+  function loadBoth() { if (!ports) return; chk = null; robot = null; load("now"); load("new"); paintLight(); }
 
   function paintLight() {
     const n = chg.pages.length + chg.other.length;
@@ -1052,10 +1052,15 @@ function liveView() {
           if (blocked.length) why.push(`The New page tried something the preview holds back: ${blocked[0]}`);
           if (newE.length) why.push(`The page has ${newE.length} error(s), but the Now page has the same ones.`);
           if (!chk.syntax.node) why.push("The code check could not run (node is not installed here).");
-          l = why.length ? "yellow" : "green";
+          // fix 4 (2026-11-23): green only after the 🤖 robot tested the spot in a real browser
+          if (robotBusy) { why.push("🤖 The robot is testing the change in a real browser…"); }
+          else if (!robot) why.push("🤖 The robot test has not run yet.");
+          else if (robot.level === "red") { l = "red"; why.unshift(...robot.why); }
+          else why.push(...robot.why);
+          l = l === "red" ? "red" : why.length ? "yellow" : "green";
         }
       }
-      text = text || (l === "green" ? "🟢 Works. The page opens, the code reads cleanly, and no new errors showed up."
+      text = text || (l === "green" ? `🟢 Works. ${(robot && robot.good || []).join(" ")} The code reads cleanly and no new errors showed up.`
         : l === "yellow" ? "🟡 Looks OK, but check this:" : "🔴 Something broke:");
     }
     light.dataset.l = l; more.replaceChildren(...why.slice(0, 6).map(x => h("li", {}, x)));
@@ -1069,6 +1074,11 @@ function liveView() {
     if (check && chg.pages.length + chg.other.length) {
       const c = await api("/api/live/check", { project: p.id, app: app.name, path: pageSel.value || "/" });
       if (c.ok) { chk = c; chg = c.changed; }
+      paintLight();
+      robotBusy = true; robot = null; paintLight();
+      const rb = await api("/api/live/robot", { project: p.id, app: app.name, path: pageSel.value || "/", selector: picked ? picked.selector : "" });
+      robotBusy = false;
+      robot = rb.ok ? rb.robot : { level: "yellow", why: [`🤖 Robot test did not run: ${rb.message || "no answer"}`] };
     }
     paintLight();
   }
@@ -1194,7 +1204,7 @@ function liveView() {
     light, split,
     h("details", {}, h("summary", {}, "ℹ️ How this works"),
       h("p", {}, "⬅️ Now is the real page. ➡️ New is the same real app with only your changed page swapped in. Nothing touches the real code until you press ✅ Keep and then give your OK in ✋ Waiting."),
-      h("p", {}, "🚦 Green means: the page opens, the changed code reads cleanly, and the New page shows no errors the Now page doesn't have. It does not prove every button works."),
+      h("p", {}, "🚦 Green means: the page opens, the changed code reads cleanly, no new errors showed up, and the 🤖 robot opened the New page in a real browser, found the spot you pointed at, saw it changed, and clicked it if it's a button or link. If the robot can't run, the light stays yellow."),
       h("p", {}, h("label", {}, saveBox, " 🔓 Let the New page save things (off = look-only; saving goes to the real app's data)"))))];
 }
 

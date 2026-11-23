@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, compare, config, livepage, preview, repos, review, roster, store
+from . import __version__, agent, compare, config, livepage, preview, repos, review, robotcheck, roster, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -35,7 +35,7 @@ PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-i
             "frame-ancestors 'self'; form-action 'none'")
 
 
-LIVE_POST = {"/api/live/open": "live_open", "/api/live/writes": "live_writes", "/api/live/check": "live_check",
+LIVE_POST = {"/api/live/open": "live_open", "/api/live/writes": "live_writes", "/api/live/check": "live_check", "/api/live/robot": "live_robot",
              "/api/live/keep": "live_keep", "/api/live/discard": "live_discard"}
 
 
@@ -309,6 +309,21 @@ class App:
             path = "/"
         return 200, {"ok": True, "now": self.live.status_of("now", path), "new": self.live.status_of("new", path),
                      "syntax": livepage.syntax(pid, app), **self._live_view(pid, app)}
+
+    def live_robot(self, b: dict) -> tuple[int, dict]:
+        """Fix 4: a headless browser tests the spot Scott asked about, Now vs New. Green needs this."""
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        pid, app = self._pid(b.get("project")), livepage.app_of(self.cfg, str(b.get("app") or ""))
+        if self.live.target != {"pid": pid, "app": app["name"]}:
+            return 409, {"ok": False, "message": "Open the page in 🪞 Show & change first.", "code": "not_open", "icon": "🪞"}
+        path = str(b.get("path") or "/")
+        if not path.startswith("/") or len(path) > 500 or any(c in path for c in "\r\n "):
+            path = "/"
+        ports, host = self.live.ports(), "127.0.0.1"
+        res = robotcheck.run(f"http://{host}:{ports['now']}{path}", f"http://{host}:{ports['new']}{path}",
+                             str(b.get("selector") or ""), config.home() / "projects" / pid / "live" / "robot", self.cfg)
+        return 200, {"ok": True, "robot": res}
 
     def live_keep(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["live"]:
