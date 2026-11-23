@@ -6,12 +6,13 @@ Flags gate every working endpoint: with `router` off, chat and model lookup answ
 from __future__ import annotations
 
 import json
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, compare, config, preview, repos, review, roster, store
+from . import __version__, agent, compare, config, livepage, preview, repos, review, roster, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -27,10 +28,15 @@ PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'sel
                "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
 PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙"}
-OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models"}
+OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models",
+       "live": "🪞 Show & change"}
 # Static comparison page: our own escaped HTML; only an inline theme-toggle script, images inline.
 PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
             "frame-ancestors 'self'; form-action 'none'")
+
+
+LIVE_POST = {"/api/live/open": "live_open", "/api/live/writes": "live_writes", "/api/live/check": "live_check",
+             "/api/live/keep": "live_keep", "/api/live/discard": "live_discard"}
 
 
 def _keyring_ok() -> bool:
@@ -255,6 +261,64 @@ class App:
             return _off("agent")
         return 200, {"ok": True, "items": agent.approvals()}
 
+    # ---- 🪞 Show & change (flag `live`, 2026-11-23): a running app's page, Now beside New ----
+    @property
+    def live(self):
+        if getattr(self, "_live", None) is None:
+            self._live = livepage.Live(self.cfg, getattr(self, "bind_host", "127.0.0.1"))
+        return self._live
+
+    def _live_view(self, pid: str, app: dict) -> dict:
+        return {"changed": livepage.changed(pid, app), "writes": self.live.allow_writes, "blocked": self.live.blocked}
+
+    def live_apps(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        found = livepage.apps(self.cfg)
+        return 200, {"ok": True, "ports": self.live.ports(), "apps": [
+            {"name": n, "repo": a["repo"], "web": a["web"], "up": livepage.is_up(a), "pages": livepage.pages(a)}
+            for n, a in found.items()]}
+
+    def live_open(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        pid, app = self._pid(b.get("project")), livepage.app_of(self.cfg, str(b.get("app") or ""))
+        return 200, {"ok": True, "ports": self.live.open(pid, app["name"]), **self._live_view(pid, app)}
+
+    def live_changed(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        pid, app = self._pid(q.get("project")), livepage.app_of(self.cfg, (q.get("app") or [""])[0])
+        return 200, {"ok": True, **self._live_view(pid, app)}
+
+    def live_writes(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        self.live.allow_writes = bool(b.get("allow"))
+        return 200, {"ok": True, "writes": self.live.allow_writes}
+
+    def live_check(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        pid, app = self._pid(b.get("project")), livepage.app_of(self.cfg, str(b.get("app") or ""))
+        path = str(b.get("path") or "/")
+        if not path.startswith("/") or len(path) > 500 or any(c in path for c in "\r\n "):
+            path = "/"
+        return 200, {"ok": True, "now": self.live.status_of("now", path), "new": self.live.status_of("new", path),
+                     "syntax": livepage.syntax(pid, app), **self._live_view(pid, app)}
+
+    def live_keep(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        pid, app = self._pid(b.get("project")), livepage.app_of(self.cfg, str(b.get("app") or ""))
+        return 200, {"ok": True, **livepage.keep(pid, app, str(b.get("note") or ""))}
+
+    def live_discard(self, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"]["live"]:
+            return _off("live")
+        pid, app = self._pid(b.get("project")), livepage.app_of(self.cfg, str(b.get("app") or ""))
+        return 200, {"ok": True, **livepage.discard(pid, app)}
+
     # ---- ⚖️ Compare (flag `compare`, M8). Lanes run the agent loop, so 🤖 Agent must be on too. ----
     @property
     def cmps(self):
@@ -351,6 +415,7 @@ ERRORS = ((PrivacyRefused, 403, "privacy", "🔒"), (SpendBlocked, 402, "over_ca
 
 
 def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
+    app.bind_host = host                        # 🪞 the preview ports listen where the Lab does
     def index() -> bytes:                       # 2026-11-23: read per load — page edits show without a Lab restart
         return (WEB / "index.html").read_bytes()
 
@@ -365,9 +430,15 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")               # never show a stale layout
             self.send_header("X-Content-Type-Options", "nosniff")
+            frames = ""
+            if not csp and app.cfg["flags"].get("live"):
+                hn = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+                if re.fullmatch(r"[A-Za-z0-9.-]{1,253}", hn):
+                    frames = "; frame-src 'self' " + " ".join(f"{sch}://{hn}:{pt}" for pt in app.live.ports().values()
+                                                              for sch in ("http", "https"))
             self.send_header("Content-Security-Policy", csp or
                              "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
-                             "img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'")
+                             "img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'" + frames)
             self.end_headers()
             self.wfile.write(data)
 
@@ -381,6 +452,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             except compare.CompareError as e:
                 code = {"sensitive": 403, "too_big": 413, "busy": 409, "state": 409, "secret": 422,
                         "not_found": 404}.get(e.code, 400)
+                body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
+            except livepage.LiveError as e:
+                code = {"not_found": 404, "port_busy": 409}.get(e.code, 400)
                 body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
             except review.ReviewError as e:
                 code = {"sensitive": 403, "outside_home": 403, "dotfile": 403, "symlink": 403, "too_big": 413,
@@ -464,6 +538,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_version, q)
             if u.path == "/api/agent/run":
                 return self._run(app.agent_run, q)
+            if u.path == "/api/live/apps":
+                return self._run(app.live_apps, q)
+            if u.path == "/api/live/changed":
+                return self._run(app.live_changed, q)
             if u.path == "/api/review":
                 return self._run(app.review_list, q)
             if u.path == "/api/compare":
@@ -500,6 +578,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_save, b)
             if p == "/api/preview/capture":
                 return self._run(app.preview_capture, b)
+            if p in LIVE_POST:
+                return self._run(getattr(app, LIVE_POST[p]), b)
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)
             if p == "/api/agent/stop":
@@ -553,6 +633,8 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
             app._agents.stop_all()
         if getattr(app, "_cmps", None):
             app._cmps.stop_all()
+        if getattr(app, "_live", None):
+            app._live.close()
         if getattr(app, "_pv", None):
             app._pv.close()                                         # stop sandboxed preview servers
     return 0

@@ -21,7 +21,10 @@ DEFAULTS: dict = {
     "prices_per_mtok": {},
     "base_urls": {},                      # override any provider's base URL
     # Feature flags. Switched on one at a time by Scott (M7). There is deliberately no API to flip them.
-    "flags": {"router": False, "preview": False, "agent": False, "compare": False},
+    "flags": {"router": False, "preview": False, "agent": False, "compare": False, "live": False},
+    # 🪞 Show & change (2026-11-23): a running app's pages, Now beside New. Loopback apps only; "repo" must be a linked folder.
+    "live_apps": {"hermes": {"url": "http://127.0.0.1:8780", "repo": "hermes", "web": "dist/hermes-local/hermes_local/web"}},
+    "live_ports": [8860, 8861],          # Now, New — unused in ~/hermes (grep 2026-11-23); UNVERIFIED on the live box
     "agent_step_cap": 20,                 # steps per agent run (12 until 2026-11-22; game-code work needs read → edit → test rounds)
     "agent_max_tokens": 4096,             # per model reply (Hermes llm_call allows at most 4096)
     "extra_models": {},                   # {"openrouter": ["vendor/model-id"]} — added to that provider's model list

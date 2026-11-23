@@ -239,6 +239,23 @@
     .wbcode .code { min-height: 46vh; }
     .wbcode .frame { min-height: 56vh; }
   }
+  /* 🪞 Show & change (2026-11-23) */
+  .live { display: flex; flex-direction: column; gap: var(--gap); flex: 1; min-height: 0; }
+  .livebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .livebar select, .livebar input, .livebar .btn { min-height: 44px; max-width: 100%; }
+  .livebar select, .livebar input { border-radius: 10px; border: 1px solid var(--line); background: var(--panel); padding: 6px 10px; }
+  #liveask { width: 100%; min-height: 76px; resize: vertical; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); padding: 12px; font-size: 1.05rem; }
+  .livelight { padding: 12px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--calm); font-size: 1.05rem; }
+  .livelight[data-l="green"] { border-color: var(--ok); } .livelight[data-l="yellow"] { border-color: var(--warn); } .livelight[data-l="red"] { border-color: var(--bad); }
+  .livelight ul { margin: 6px 0 0; padding-left: 1.2em; color: var(--dim); font-size: .95rem; }
+  .livesplit { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); flex: 1; min-height: 62vh; }
+  .livesplit[data-show="now"], .livesplit[data-show="new"] { grid-template-columns: 1fr; }
+  .livesplit[data-show="now"] > [data-side="new"], .livesplit[data-show="new"] > [data-side="now"] { display: none; }
+  .livecol { display: flex; flex-direction: column; gap: 4px; min-height: 0; min-width: 0; }
+  .livecol h3 { margin: 0; font-size: 1rem; }
+  .liveframe { flex: 1; width: 100%; min-height: 58vh; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+  .livecol[data-side="new"] .liveframe { border-color: var(--accent); }
+  @media (max-width: 980px) { .livesplit[data-show="both"] { grid-template-columns: 1fr; } }
   #navnote { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: min(92vw, 520px); padding: 12px 16px; border-radius: 12px; background: var(--panel); color: var(--ink, inherit); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s; }
   #navnote.on { opacity: 1; }
 </style>
@@ -300,6 +317,7 @@ const PATHS = [
   { id: "agent", flag: "agent", sym: "🤖", name: "Agent", tip: "Plan → write → run → check, step by step, with a Stop button." },
   { id: "review", flag: null, sym: "📋", name: "Review", tip: "Send a demo to Hermes for your OK; apply or reject held agent writes." },
   { id: "compare", flag: "compare", sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side." },
+  { id: "live", flag: "live", sym: "🪞", name: "Show & change", tip: "A running page: Now beside New. Say what to change, see it, keep it or throw it away." },
 ];
 let S = null;                          // server state
 let view = "start", trail = [];        // ← retraces this trail
@@ -591,12 +609,13 @@ function startView() {
   loadHeld();
 
   /* ---- panes ---- */
-  const TOOLS = [["chat", "router", "💬 Ask a model"], ["compare", "compare", "⚖️ Compare models"], ["review", null, "📋 Send a demo"], ["preview", "preview", "👁 Big preview"]];
+  const TOOLS = [["live", "live", "🪞 Show & change a page"], ["chat", "router", "💬 Ask a model"], ["compare", "compare", "⚖️ Compare models"], ["review", null, "📋 Send a demo"], ["preview", "preview", "👁 Big preview"]];
   const tools = h("div", { class: "runbar wbtools" }, TOOLS.map(([id, flag, name]) =>
     h("button", { class: "btn" + (!flag || S.flags[flag] ? "" : " off"), onclick: () => go(id), "data-path": id }, name)));
   const panes = {};
   const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Ask the AI", sec, panes),
     h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
+    S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
     ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.held), ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
@@ -970,6 +989,215 @@ function agentView(wb) {
       h("p", {}, "Runs in the sandbox (no internet, writes only in this project). Stops at the step cap, the $ cap, ⏹ Stop, or Hermes STOP_SHIFTS. Writes anywhere else wait for your approval.")))];
 }
 
+/* ---------- 🪞 Show & change (flag `live`, 2026-11-23) ----------
+   A running app's page: Now (left) beside New (right). New = the real app with only this project's changed page swapped in.
+   Say what to change (👆 point at the spot if you like) → the agent edits its copy → New reloads → 🚦 says if it works →
+   ✅ Keep (goes to ✋ Waiting for your OK) or 🗑 Throw away. Nothing here writes the real code. */
+let liveTimer = null, liveMsg = null;
+function liveView() {
+  if (!S.flags.live) return [offCard("live", "🪞", "Show & change")];
+  const p = curProject();
+  let apps = [], app = null, ports = null, picked = null, chg = { pages: [], other: [] }, seen = {}, chk = null, busy = false;
+  const appSel = h("select", { "aria-label": "App", id: "liveapp" }), pageSel = h("select", { "aria-label": "Page", id: "livepage" });
+  const part = h("input", { type: "text", id: "livepart", placeholder: "#part (optional)", "aria-label": "Part of the page, like #aikeys", size: 14, maxlength: 80 });
+  const reload = h("button", { class: "btn", type: "button", title: "Load both sides again" }, "🔄");
+  const ask = h("textarea", { id: "liveask", placeholder: "What do you want changed?  Example: make the Save button bigger and green", "aria-label": "What do you want changed" });
+  const pickBtn = h("button", { class: "btn", type: "button", id: "livepick" }, "👆 Point at it");
+  const pickChip = h("button", { class: "chip", type: "button", hidden: true, title: "Tap to forget this spot" });
+  const goBtn = h("button", { class: "btn pri", type: "button", id: "livego" }, "✨ Make it");
+  const stopBtn = h("button", { class: "btn", type: "button", hidden: true }, "⏹ Stop");
+  const status = h("span", { class: "note", role: "status", id: "livestatus" });
+  const light = h("div", { class: "livelight", id: "livelight", role: "status" }, "⚪ Pick a page to begin.");
+  const keepBtn = h("button", { class: "btn pri", type: "button", id: "livekeep", disabled: true }, "✅ Keep");
+  const tossBtn = h("button", { class: "btn", type: "button", id: "livetoss", disabled: true }, "🗑 Throw away");
+  const fNow = h("iframe", { class: "liveframe", id: "livenow", title: "Now — the page as it is today" });
+  const fNew = h("iframe", { class: "liveframe", id: "livenew", title: "New — the page with your change" });
+  const split = h("div", { class: "livesplit", "data-show": store.get("liveshow", innerWidth < 980 ? "new" : "both") },
+    h("div", { class: "livecol", "data-side": "now" }, h("h3", {}, "⬅️ Now"), fNow),
+    h("div", { class: "livecol", "data-side": "new" }, h("h3", {}, "➡️ New"), fNew));
+  const showBtns = [["now", "Now"], ["both", "Both"], ["new", "New"]].map(([k, n]) =>
+    h("button", { "data-k": k, "aria-pressed": String(split.dataset.show === k), onclick: () => { split.dataset.show = k; store.set("liveshow", k);
+      showBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === k))); } }, n));
+  const saveBox = h("input", { type: "checkbox", id: "livewrites" });
+  const more = h("ul", {});
+
+  const page = () => (app ? app.pages : []).find(x => x.path === pageSel.value) || null;
+  const addr = () => { const h0 = part.value.trim(); return (pageSel.value || "/") + (h0 ? (h0.startsWith("#") ? h0 : "#" + h0) : ""); };
+  const url = (side, bust) => { const a = addr(), i = a.indexOf("#"), base = i < 0 ? a : a.slice(0, i), hash = i < 0 ? "" : a.slice(i);
+    return `${location.protocol}//${location.hostname}:${ports[side]}${base}${bust ? (base.includes("?") ? "&" : "?") + "_lab=" + Date.now() : ""}${hash}`; };
+  function load(side) { seen[side] = null; (side === "now" ? fNow : fNew).src = url(side, true); }
+  function loadBoth() { if (!ports) return; chk = null; load("now"); load("new"); paintLight(); }
+
+  function paintLight() {
+    const n = chg.pages.length + chg.other.length;
+    keepBtn.disabled = tossBtn.disabled = !n || busy;
+    let l = "white", text = "", why = [];
+    if (!app) text = "⚪ Pick a page to begin.";
+    else if (!app.up) { l = "red"; text = `🔌 ${app.name} is not running, so there is nothing to show yet. Start it, then press 🔄.`; }
+    else if (busy) text = "⏳ The AI is making your change…";
+    else if (!n) text = "⚪ No change yet. New is the same as Now.";
+    else {
+      const bad = chk ? chk.syntax.files.filter(f => !f.ok) : [];
+      const nowE = (seen.now && seen.now.errors) || [], newE = (seen.new && seen.new.errors) || [], blocked = (seen.new && seen.new.blocked) || [];
+      const fresh = newE.filter(x => !nowE.includes(x));
+      const shown = chg.pages.some(f => page() && f.endsWith("/" + page().file) || (page() && f === page().file));
+      if (chk && chk.new != null && chk.new >= 400 && !(chk.now >= 400)) { l = "red"; why.push(`The New page did not open (the app answered ${chk.new}).`); }
+      bad.forEach(f => { l = "red"; why.push(`${f.file.split("/").pop()}: the code has a mistake — ${f.message}`); });
+      fresh.forEach(x => { l = "red"; why.push(`New error on the page: ${x}`); });
+      if (l !== "red") {
+        if (!chk || !seen.new || !seen.new.loaded) { l = "yellow"; text = "⏳ Checking the New page…"; }
+        else {
+          if (chg.other.length) why.push(`Behind-the-scenes code changed too (${chg.other.map(f => f.split("/").pop()).join(", ")}). The preview cannot show that part yet.`);
+          if (!shown) why.push("The change is in a different file than this page. Pick that page to see it.");
+          if (blocked.length) why.push(`The New page tried something the preview holds back: ${blocked[0]}`);
+          if (newE.length) why.push(`The page has ${newE.length} error(s), but the Now page has the same ones.`);
+          if (!chk.syntax.node) why.push("The code check could not run (node is not installed here).");
+          l = why.length ? "yellow" : "green";
+        }
+      }
+      text = text || (l === "green" ? "🟢 Works. The page opens, the code reads cleanly, and no new errors showed up."
+        : l === "yellow" ? "🟡 Looks OK, but check this:" : "🔴 Something broke:");
+    }
+    light.dataset.l = l; more.replaceChildren(...why.slice(0, 6).map(x => h("li", {}, x)));
+    light.replaceChildren(text, why.length ? more : "");
+  }
+
+  async function refresh(check) {
+    if (!app) return;
+    const r = await api(`/api/live/changed?project=${encodeURIComponent(p.id)}&app=${encodeURIComponent(app.name)}`);
+    if (r.ok) chg = r.changed;
+    if (check && chg.pages.length + chg.other.length) {
+      const c = await api("/api/live/check", { project: p.id, app: app.name, path: pageSel.value || "/" });
+      if (c.ok) { chk = c; chg = c.changed; }
+    }
+    paintLight();
+  }
+  async function open() {
+    if (!app) return paintLight();
+    const r = await api("/api/live/open", { project: p.id, app: app.name });
+    if (!r.ok) { light.dataset.l = "red"; light.textContent = `${r.icon || "⚠️"} ${r.message || "Could not open the preview."}`; return; }
+    ports = r.ports; chg = r.changed; saveBox.checked = !!r.writes;
+    loadBoth(); refresh(true);
+  }
+  function paintPages() {
+    pageSel.replaceChildren(...(app ? app.pages : []).map(x => h("option", { value: x.path }, x.title)));
+    const want = store.get("livepage." + (app ? app.name : ""), "/");
+    if ((app ? app.pages : []).some(x => x.path === want)) pageSel.value = want;
+  }
+  appSel.onchange = () => { app = apps.find(a => a.name === appSel.value) || null; store.set("liveapp", appSel.value); paintPages(); open(); };
+  pageSel.onchange = () => { store.set("livepage." + app.name, pageSel.value); picked = null; pickChip.hidden = true; loadBoth(); refresh(true); };
+  part.onchange = loadBoth; reload.onclick = () => { loadBoth(); refresh(true); };
+
+  liveMsg = e => {
+    const d = e.data || {}; if (d.lab !== "live") return;
+    const side = e.source === fNow.contentWindow ? "now" : e.source === fNew.contentWindow ? "new" : null; if (!side) return;
+    if (d.type === "picked" && side === "now") {
+      picked = d.el; pickBtn.textContent = "👆 Point at it"; pickChip.hidden = false;
+      pickChip.textContent = `👆 ${picked.text ? "“" + picked.text.slice(0, 40) + "”" : "<" + picked.tag + ">"} ✕`;
+      status.textContent = "Got it. Now say what to change."; ask.focus();
+      try { fNew.contentWindow.postMessage({ lab: "live", type: "show", selector: picked.selector }, "*"); } catch (x) {}
+      return;
+    }
+    if (d.type === "loaded" || d.type === "errors" || d.type === "moved")
+      seen[side] = { errors: d.errors || [], blocked: d.blocked || [], loaded: d.type === "loaded" || !!(seen[side] && seen[side].loaded) };
+    paintLight();
+  };
+  addEventListener("message", liveMsg);
+
+  pickBtn.onclick = () => {
+    if (!ports) return;
+    if (split.dataset.show === "new") showBtns[1].click();
+    try { fNow.contentWindow.postMessage({ lab: "live", type: "pick", on: true }, "*"); } catch (x) {}
+    pickBtn.textContent = "👆 Now tap the part…"; status.textContent = "Tap the part of the ⬅️ Now page you want changed.";
+  };
+  pickChip.onclick = () => { picked = null; pickChip.hidden = true; };
+
+  async function model() {
+    const provs = S.providers.filter(x => (!p.sensitive || x.local) && !x.off);
+    const prov = (provs.find(x => x.id === store.get("provider", "")) || provs[0] || {}).id;
+    if (!prov) return null;
+    let m = store.get("model." + prov, "");
+    if (!m) { const r = await api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`); m = r.ok && r.models[0] || ""; }
+    return m ? { prov, m } : null;
+  }
+  function taskText() {
+    const pg = page(), file = (app.web ? app.web + "/" : "") + pg.file, copy = `repos/${app.repo}/${file}`, have = chg.pages.includes(file);
+    let t = `Change one page of the ${app.name} app.\nWhat Scott wants: ${ask.value.trim()}\n`;
+    if (picked) t += `The spot he pointed at on the page: a <${picked.tag}>${picked.text ? ` showing "${picked.text}"` : ""}; CSS path: ${picked.selector}; its HTML starts: ${picked.html}\n`;
+    return t + `The page's file is ${file} in the linked folder "${app.repo}".\nSteps: 1) ${have
+      ? `Your copy ${copy} already exists and holds earlier changes — do NOT pull it again; keep working on that copy.`
+      : `repo pull that one file from "${app.repo}" (it lands at ${copy}).`} 2) Find the spot: run grep -n with a few words from it on ${copy}, then read only those lines (the file can be big). 3) Change your copy with edit, one spot at a time, matching the code around it. Change only what was asked — nothing else. 4) If the page's script lives in another file you must change, pull and edit that one too, and run node --check on any .js file you changed. 5) Do NOT propose. Scott looks at the live preview and presses Keep himself. Then done, with one plain sentence saying what you changed.`;
+  }
+  async function poll() {
+    const id = store.get("liverun." + p.id, null); if (!id || view !== "live") return;
+    const r = await api(`/api/agent/run?id=${encodeURIComponent(id)}`);
+    if (!r.ok) { store.set("liverun." + p.id, null); busy = false; stopBtn.hidden = true; goBtn.disabled = false; return paintLight(); }
+    if (r.spend) { S.spend = r.spend; paintBar(); }
+    const run = r.run;
+    if (run.state === "running") {
+      busy = true; goBtn.disabled = true; stopBtn.hidden = false;
+      status.textContent = `🤖 Working… step ${run.steps.length} of up to ${run.step_cap} · $${run.usd.toFixed(3)}`;
+      paintLight(); liveTimer = setTimeout(poll, 1500); return;
+    }
+    busy = false; goBtn.disabled = false; stopBtn.hidden = true; store.set("liverun." + p.id, null);
+    status.textContent = run.why ? run.why.slice(0, 300) : "Done.";
+    load("new"); await refresh(true);
+    if (picked) setTimeout(() => { try { fNew.contentWindow.postMessage({ lab: "live", type: "show", selector: picked.selector }, "*"); } catch (x) {} }, 2500);
+  }
+  goBtn.onclick = async () => {
+    if (!app || !page()) return;
+    if (!S.flags.agent) { status.textContent = "⏸ The 🤖 Agent is not switched on yet, so the AI cannot make changes."; return; }
+    if (!ask.value.trim()) { status.textContent = "✏️ Say what you want changed first."; ask.focus(); return; }
+    const pm = await model();
+    if (!pm) { status.textContent = "⚠️ No AI model is ready. Pick one on the main screen first."; return; }
+    goBtn.disabled = true; status.textContent = `🤖 Starting (${pm.m})…`;
+    const r = await api("/api/agent/start", { project: p.id, provider: pm.prov, model: pm.m, task: taskText() });
+    if (!r.ok) { goBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
+    store.set("liverun." + p.id, r.run.id); store.set("agrun." + p.id, r.run.id); busy = true; paintLight(); poll();
+  };
+  stopBtn.onclick = async () => { const id = store.get("liverun." + p.id, null); if (id) await api("/api/agent/stop", { id }); };
+  keepBtn.onclick = async () => {
+    keepBtn.disabled = true;
+    const r = await api("/api/live/keep", { project: p.id, app: app.name, note: ask.value.trim().slice(0, 200) });
+    if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Could not keep it."}`; return paintLight(); }
+    status.replaceChildren(`✋ ${r.held.length} change(s) are waiting for your OK. `,
+      h("button", { class: "btn pri", type: "button", onclick: () => { store.set("wbtab", "code"); go("start"); } }, "Open ✋ Waiting"),
+      r.skipped.length ? ` · not kept: ${r.skipped.join(" ")}` : "");
+    paintLight();
+  };
+  let sure = 0;
+  tossBtn.onclick = async () => {
+    if (Date.now() - sure > 4000) { sure = Date.now(); tossBtn.textContent = "🗑 Sure? Tap again"; setTimeout(() => { tossBtn.textContent = "🗑 Throw away"; }, 4000); return; }
+    sure = 0; tossBtn.textContent = "🗑 Throw away";
+    const r = await api("/api/live/discard", { project: p.id, app: app.name });
+    status.textContent = r.ok ? "🗑 Thrown away. New is the same as Now again." : `${r.icon || "⚠️"} ${r.message || "Could not throw it away."}`;
+    chk = null; load("new"); refresh(false);
+  };
+  saveBox.onchange = async () => { const r = await api("/api/live/writes", { allow: saveBox.checked }); saveBox.checked = !!(r.ok && r.writes); };
+
+  (async () => {
+    const r = await api("/api/live/apps");
+    if (!r.ok) { light.textContent = `${r.icon || "⚠️"} ${r.message || "Show & change is not answering."}`; return; }
+    apps = r.apps;
+    if (!apps.length) { light.textContent = "🔗 No app is set up yet. On gandalf: python3 -m ailab link hermes ~/hermes — then come back."; return; }
+    appSel.replaceChildren(...apps.map(a => h("option", { value: a.name }, `${a.up ? "🟢" : "🔌"} ${a.name}`)));
+    const want = store.get("liveapp", apps[0].name); app = apps.find(a => a.name === want) || apps[0]; appSel.value = app.name;
+    paintPages(); await open(); poll();
+  })();
+
+  return [projectRow(), h("section", { class: "live", id: "live" },
+    h("div", { class: "livebar" }, h("b", {}, "1 · Pick a page"), appSel, pageSel, part, reload),
+    h("div", {}, h("b", {}, "2 · Say what to change"), ask),
+    h("div", { class: "livebar" }, pickBtn, pickChip, goBtn, stopBtn, status),
+    h("div", { class: "livebar" }, h("b", {}, "3 · Look, then choose"), keepBtn, tossBtn,
+      h("span", { class: "seg", role: "group", "aria-label": "Which side to show" }, showBtns)),
+    light, split,
+    h("details", {}, h("summary", {}, "ℹ️ How this works"),
+      h("p", {}, "⬅️ Now is the real page. ➡️ New is the same real app with only your changed page swapped in. Nothing touches the real code until you press ✅ Keep and then give your OK in ✋ Waiting."),
+      h("p", {}, "🚦 Green means: the page opens, the changed code reads cleanly, and the New page shows no errors the Now page doesn't have. It does not prove every button works."),
+      h("p", {}, h("label", {}, saveBox, " 🔓 Let the New page save things (off = look-only; saving goes to the real app's data)"))))];
+}
+
 /* ---------- ⚖️ Compare (flag `compare`, M8) ---------- */
 let cmpTimer = null;
 const modelCache = {};
@@ -1197,7 +1425,8 @@ function reviewView() {
 function render() {
   const main = $("#main"); main.innerHTML = "";
   clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer); clearTimeout(cmpTimer);
-  main.classList.toggle("wide", view === "start" || (view === "preview" && !!S.flags.preview));
+  clearTimeout(liveTimer); if (liveMsg) { removeEventListener("message", liveMsg); liveMsg = null; }
+  main.classList.toggle("wide", view === "start" || view === "live" || (view === "preview" && !!S.flags.preview));
   paintProjects();
   const path = PATHS.find(p => p.id === view);
   let kids;
@@ -1207,6 +1436,7 @@ function render() {
   else if (view === "agent") kids = agentView();
   else if (view === "review") kids = reviewView();
   else if (view === "compare") kids = compareView();
+  else if (view === "live") kids = liveView();
   else if (view === "settings") kids = settingsView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
