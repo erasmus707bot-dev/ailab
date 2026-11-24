@@ -28,3 +28,10 @@ Rig note: tapSel landed ~24 css px low on this page twice (toolbar show/hide); d
 - Phone top bar: ≤640 px the spend chip shows today only (`.cap` hidden), picker min 4rem, tighter chips. Headless Chrome 393×722 with ✋ chip + "$0.07 / $2.00": **446 → 393 px**, all header buttons 44 px.
 - index.html/agent.py change → **Lab restart needed** (agent.py is server code). Argus re-check owed.
 Still open: **4. runs survive a Lab restart** (runs live in memory only).
+
+## Finding 4 fixed — runs survive a Lab restart — 2026-11-24 09:10 (ailab `93bdb22`, 239 tests OK)
+- Saved to `projects/<p>/agent/<run>.state.json` (atomic) after each step, on each ❓/🗺 card, at the end. Lanes not kept.
+- Lab start loads runs from the last 24 h. Waiting card → still waiting; ▶ Go / a choice carries on. Mid-step → **⏸ Paused — Lab restarted** + **▶ Resume ⭐** (`POST /api/agent/resume`); never restarts by itself (Scott's pick 1).
+- A half-done write/run/tool step is not replayed; the model is told it may or may not have happened.
+- Proven: 8 unit tests incl. the exact case over HTTP (plan up → server replaced on same home → Go → done); headless phone 393 px: Resume 44 px, tap posts.
+- Not proven: on gandalf with a real model. Needs a Lab restart (desktop icon) first. Check: start a run with ❓ Ask me first, restart while the card is up, tap the answer.
