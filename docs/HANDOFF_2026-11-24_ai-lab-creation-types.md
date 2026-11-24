@@ -29,12 +29,17 @@ Picker squeeze 10:35 (`6d38ecd`), Argus:
   (provider + model on one row, tag help + 🎨 on one row). ▶ Start 865 → **503** on a 722 screen, page 393 wide,
   tag help opens/closes by real tap. Desktop layout unchanged.
 
+Image hand-off 10:30 (`df52566`):
+- 🖼 run `fe2a2c2338` (deepseek v4.1 flash): ✅ done $0.0057, image_brief.md (title + 3 prompts, 9:16 1440×3120, avoid list), no robot.
+- Bug: hermes_url is empty in Lab config → only a note showed. Fixed: button uses ⌂ Home's address (hermes_url, else where the Lab was opened from).
+- After ✓ Keep all: **🖼 Take the brief to Image Studio ⭐** is the main button → opened Hermes Image Studio (127.0.0.1:8780/models).
+
 ## Still open
-1. 🖼/🎬 hand-off button live (needs a picture task; unit-tested only).
-2. Scratch has a `letter.md` from the 📝 test run (test project).
+1. Scratch has `letter.md` + `image_brief.md` from the test runs (test project).
+2. 🎬 Video hand-off: same code path as 🖼, unit-tested only.
 
 ## Known gaps
 - Lab still can't make pictures/video itself — needs a Hermes MCP tool (later module).
 - Parallel session active on ~/ailab today — check `git log` before editing.
 
-Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — image hand-off`
+Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — next type`
