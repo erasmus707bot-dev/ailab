@@ -13,8 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import (__version__, agent, compare, config, livepage, memory, preview, promptbuilder, repos, review, robotcheck,
-               roster, store)
+from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review,
+               robotcheck, roster, store)
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -328,6 +328,12 @@ class App:
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
         return 200, {"ok": True, "run": self.agents.get((q.get("id") or [""])[0]).view(), "spend": self.spend()}
+
+    def agent_answer(self, b: dict) -> tuple[int, dict]:
+        """M5: Scott's answer to the agent's on-screen question."""
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        return 200, {"ok": True, "run": self.agents.answer(str(b.get("id") or ""), str(b.get("answer") or "")).view()}
 
     def agent_stop(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["agent"]:
@@ -705,6 +711,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(getattr(app, LIVE_POST[p]), b)
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)
+            if p == "/api/agent/answer":
+                return self._run(app.agent_answer, b)
             if p == "/api/agent/stop":
                 return self._run(app.agent_stop, b)
             if p == "/api/agent/undo":
@@ -751,6 +759,7 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
     on = [k for k, v in app.cfg["flags"].items() if v] or ["none"]
     print(f"AI Lab on http://{host}:{srv.server_address[1]}/  mode={app.cfg['mode']}  on={','.join(on)}",
           file=sys.stderr)
+    notify.Watcher(app.agents, app.cfg).start()          # 📱 M5: phone pings — only "finished" or "stuck"
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

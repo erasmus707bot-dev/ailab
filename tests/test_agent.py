@@ -239,6 +239,44 @@ class MemoryInRun(Base):
         self.assertNotIn("Lab memory", seen[0])
         self.assertEqual(r.view()["memory_saved"], [])
 
+
+class AskAndPlan(Base):
+    """M5 (2026-11-24): the agent can ask Scott a question on screen; the run shows done / doing / left."""
+    def test_ask_waits_for_answer_and_plan_tracks_modules(self):
+        import threading as th
+        b = Brain([act(action="list", module="M0", why="look"),
+                   act(action="ask", question="Green or blue?", choices=["green", "blue"], module="M1", why="his call"),
+                   act(action="done", summary="asked")])
+        c = config.load({"mode": "standalone"})
+        r = agent.Run(b, c, self.project, "openrouter", "m", "Build it\n## Module 0 — Audit\n## Module 1 — Do\n## Module 2 — Prove")
+        t = th.Thread(target=r.loop); t.start()
+        for _ in range(100):
+            if r.question:
+                break
+            __import__("time").sleep(0.05)
+        self.assertEqual(r.view()["question"]["choices"], ["green", "blue"])
+        self.assertEqual([p["state"] for p in r.view()["plan"]], ["done", "doing", "left"])
+        r.answer("green")
+        t.join(5)
+        self.assertEqual(r.state, "done")
+        self.assertIsNone(r.view()["question"])
+        self.assertIn("green", b.calls[-1])
+        with self.assertRaises(ValueError):
+            r.answer("late")
+
+    def test_stop_while_asking(self):
+        import threading as th
+        b = Brain([act(action="ask", question="?", why="x")])
+        r = agent.Run(b, config.load({"mode": "standalone"}), self.project, "openrouter", "m", "t")
+        t = th.Thread(target=r.loop); t.start()
+        for _ in range(100):
+            if r.question:
+                break
+            __import__("time").sleep(0.05)
+        r.stop()
+        t.join(5)
+        self.assertEqual(r.state, "stopped")
+
 if __name__ == "__main__":
     unittest.main()
 

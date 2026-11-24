@@ -922,6 +922,25 @@ function msgEl(m) {
   return e;
 }
 
+/* M5: the agent asks a real decision → an on-screen pop-up (always closable — closing just leaves it waiting) */
+let askShown = "";
+function askPop(run) {
+  const q = run.question, key = q ? run.id + "|" + q.text : "";
+  let d = document.getElementById("askdlg");
+  if (!q) { if (d && d.open) d.close(); askShown = ""; return; }
+  if (askShown === key && d) return;                      /* shown once; ✕ Later keeps it closed until ❓ is tapped */
+  askShown = key; if (d) d.remove();
+  const free = h("input", { type: "text", placeholder: "…or type your answer", "aria-label": "Your answer" });
+  const reply = async (t) => { const r = await api("/api/agent/answer", { id: run.id, answer: t }); if (r.ok) d.close(); };
+  d = h("dialog", { id: "askdlg" }, h("form", { method: "dialog", onsubmit: e => { e.preventDefault(); if (free.value.trim()) reply(free.value.trim()); } },
+    h("h3", {}, "🤖 The agent needs you"), h("p", {}, q.text),
+    h("div", { class: "hint" }, (q.choices || []).map(c => h("button", { class: "btn pri", type: "button", onclick: () => reply(c) }, c))),
+    free, h("div", { class: "row" }, h("button", { class: "btn", type: "button", onclick: () => d.close() }, "✕ Later"),
+      h("button", { class: "btn pri", type: "submit" }, "Send"))));
+  d.onclick = (e) => { if (e.target === d) d.close(); };
+  document.body.append(d); d.showModal();
+}
+
 /* 🧠 M2: which memory the model got, and what was saved from what Scott said */
 function memLine(x) {
   const used = x.memory_used || [], saved = x.memory_saved || [];
@@ -1145,6 +1164,11 @@ function agentView(wb) {
     status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
     const ml = memLine(run); if (ml) steps.append(h("div", { class: "step" }, ml));
+    /* M5: plain progress list from the build prompt's modules */
+    if ((run.plan || []).length) { const IC = { done: "✅", doing: "🔨", left: "⏳" };
+      steps.append(h("div", { class: "step" }, h("b", {}, "Progress: "), run.plan.map(m => h("span", { style: "margin-right:12px;white-space:nowrap" }, `${IC[m.state]} ${m.module}`)))); }
+    if (run.question) steps.prepend(h("button", { class: "btn pri", type: "button", onclick: () => { askShown = ""; askPop(run); } }, "❓ The agent is asking you something — tap to answer"));
+    askPop(run);
     run.steps.forEach(s => {
       const r = s.result || {};
       const cls = "step" + (r.held ? " held" : "") + (r.error ? " err" : "");

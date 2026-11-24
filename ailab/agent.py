@@ -46,8 +46,9 @@ object per turn and nothing else. Actions:
 {"action":"edit","path":"game.js","find":"<exact text now in the file, found once>","replace":"<new text>"}   (big files: change one spot)
 {"action":"run","cmd":"grep -c footer index.html"}      (sh, inside the folder, no network, 60 s)
 {"action":"hermes","tool":"addon_build","args":{"template":"hello"}}   (connected mode only)
+{"action":"ask","question":"Scott, which colour?","choices":["green","blue"]}   (a real decision only he can make — waits for his answer)
 {"action":"done","summary":"what changed and how you checked it"}
-Add "why" (one short line) to every action. Paths are relative to the project folder. Check your work with
+Add "why" (one short line) to every action. Following a build prompt? Add "module":"M1" (the module you are on). Paths are relative to the project folder. Check your work with
 "run" before "done". "done" is refused until a check you ran AFTER your last change exited 0."""
 # Added to the system prompt in connected mode only (standalone has no Hermes tools).
 HERMES_GUIDE = """
@@ -222,6 +223,12 @@ class Run:
         self.last_progress = time.time()
         self.memory_used: list[str] = []      # 🧠 M2: memory subjects given to the model (shown as "used: …")
         self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
+        # M5 (2026-11-24): plain progress list from the prompt's "## Module N" headings + on-screen questions
+        self.plan = [m.group(1) for m in re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)", self.task, re.M)][:12]
+        self.module_now = ""
+        self.question: dict | None = None
+        self._answer = None
+        self._answered = threading.Event()
 
     # ---- public view ----
     def view(self) -> dict:
@@ -230,7 +237,31 @@ class Run:
                 "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
                 "project": self.project["id"], "provider": self.provider, "model": self.model,
                 "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info(),
-                "memory_used": self.memory_used, "memory_saved": self.memory_saved}
+                "memory_used": self.memory_used, "memory_saved": self.memory_saved,
+                "plan": self.plan_view(), "question": self.question}
+
+    def plan_view(self) -> list[dict]:
+        """✅ done / 🔨 doing / ⏳ left for each module of the build prompt."""
+        if not self.plan:
+            return []
+        now = self.plan.index(self.module_now) if self.module_now in self.plan else (0 if self.steps else -1)
+        out = []
+        for i, m in enumerate(self.plan):
+            if i < now or (i == now and self.state == "done"):
+                st = "done"
+            elif i == now and self.state == "running":
+                st = "doing"
+            else:
+                st = "left"
+            out.append({"module": f"Module {m}", "state": st})
+        return out
+
+    def answer(self, text: str) -> None:
+        """Scott answered the on-screen question."""
+        if not self.question:
+            raise ValueError("The agent is not asking anything right now.")
+        self._answer = str(text or "").strip()[:500] or "(no answer)"
+        self._answered.set()
 
     def proof_ok(self) -> bool:
         """True when nothing was changed, or a check passed after the last change."""
@@ -364,6 +395,24 @@ class Run:
 
     def act(self, a: dict) -> dict:
         kind = str(a.get("action"))
+        m = str(a.get("module") or "").strip().upper().replace("MODULE", "").strip().lstrip("M")
+        if m and m in [x.upper() for x in self.plan]:
+            self.module_now = next(x for x in self.plan if x.upper() == m)
+        if kind == "ask":                                    # M5: on-screen pop-up; waiting for Scott is not "stuck"
+            q = str(a.get("question") or "").strip()[:400]
+            if not q:
+                return {"error": "ask needs a question."}
+            ch = [str(c)[:80] for c in (a.get("choices") or []) if str(c).strip()][:4]
+            self._answered.clear()
+            self.question = {"text": q, "choices": ch}
+            try:
+                while not self._answered.wait(1.0):
+                    self._check_stop()
+                    self.last_progress = time.time()
+            finally:
+                self.question = None
+            self.last_progress = time.time()
+            return {"answer": self._answer}
         if kind == "list":
             return {"files": [f["path"] for f in preview.list_root(self.root)]}
         if kind == "read":
@@ -533,6 +582,11 @@ class Agents:
             self.runs[run.id] = run
         threading.Thread(target=run.loop, daemon=True, name=f"agent-{run.id}").start()
         return run
+
+    def answer(self, rid: str, text: str) -> Run:
+        r = self.get(rid)
+        r.answer(text)
+        return r
 
     def get(self, rid: str) -> Run:
         r = self.runs.get(rid)
