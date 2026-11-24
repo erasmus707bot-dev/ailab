@@ -17,13 +17,24 @@
 - Bug found + fixed live: stray "null" after the 🎬 chip (`edeb2bd`).
 - Chips 44 px, wrap to 3 rows in the agent pane, no sideways scroll (desktop). Chrome window would not resize to phone width.
 
+## Argus touch test 10:20 (Pixel 5 AVD, real Chrome, http://10.0.2.2:8850)
+Pass:
+- 393 = 393 (no sideways scroll), every chip 44 px, 0 console errors.
+- Real taps: 🎮 → on + ↺ appears · 📱 → both on · ↺ → back to guessing. Typing "a snake game for my phone" → 📱 ⭐ + 🎮 ⭐.
+Finding → fixed (`0626afd`):
+- 9 chips wrapped to 4 rows (194 px) and pushed ▶ Start to 865 on a 722 screen. Phones (≤640 px) now show only the picked
+  chips + **▾ More** (or **▾ Pick what you're making** when none) in one 44 px line; label hidden; tap ▾ More → all 9 + ▴ Fewer (real tap OK).
+Left as is (not mine to change):
+- ▶ Start still starts at 715 px (bottom edge of a 722 screen) — the model picker above it is 202 px tall. Before the chips it was 671.
+  Compacting the picker on phones would bring it back on screen.
+
 ## Still open
-1. **Argus touch test** of the chip row on the phone (not done).
-2. 🖼/🎬 hand-off button live (needs a picture task; unit-tested only).
-3. Scratch now has a `letter.md` from the 📝 test run (test project).
+1. 🖼/🎬 hand-off button live (needs a picture task; unit-tested only).
+2. Scratch has a `letter.md` from the 📝 test run (test project).
+3. Phone model picker 202 px (see above) — offer to Scott.
 
 ## Known gaps
 - Lab still can't make pictures/video itself — needs a Hermes MCP tool (later module).
 - Parallel session active on ~/ailab today — check `git log` before editing.
 
-Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — Argus touch test`
+Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — picker compact`
