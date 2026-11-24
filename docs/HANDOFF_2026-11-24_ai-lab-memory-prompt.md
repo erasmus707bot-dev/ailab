@@ -40,3 +40,14 @@ acceptance:
     cmd: python3 -m unittest discover -s tests
     expect: exit 0
 ```
+
+## M6 live proof — 2026-11-24 06:30 (after golive.sh; Claude in Scott's Chrome)
+- Flags on: memory, prompt (+ all earlier). 
+- 🧠 Import: **14 subjects, 608 lines**, 1 health line skipped (count only) — also picked up `~/.claude/CLAUDE.md` + skills graphify, scott-conventions. Memory page renders, cards open.
+- Review round-trip on claude-devices: change + add → before/after (2) → applied as [scott] → ↶ undo back to 3 lines. ✅
+- 📝 Plain template ✅ (size: small). ✨ deepseek draft ✅ in format, $0.0018, 🧠 used profile/preferences/rules-claude-code.
+- ✳️ Send to Claude: order passed **Hermes order.py** on gandalf → `night/orders/hermes__lab-lab-proof-scan-button-m0.json`, then **parked by Claude** (test only, no night spend).
+- 🎨: hermes-4-405b ($0.0007) and venice/uncensored ($0.0002) answered through the ZDR guard → ids + private routing confirmed. "🎨 only (2 here)" on openrouter.
+- Keys: qwen/kimi warning shows. **Kimi now reads "⏸ off in Hermes"** (earlier today it listed with a key) — check Hermes → Settings → API keys.
+- Fixes after proof (`see next commit`): project rules now load before the long global rules file (rules-hermes was crowded out); order slug no longer "lab-lab-".
+- Owed: Argus phone touch test (Memory + Prompt pages); a real 📱 ping (not sent — would buzz Scott's phone for a test); pull dolphin3:8b / hermes3:8b if wanted (`ollama pull dolphin3:8b`).

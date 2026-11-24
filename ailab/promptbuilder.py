@@ -159,7 +159,7 @@ def night_order(prompt_path: Path, project: str, repo_path: str, slug_: str) -> 
             "prompt_file": str(prompt_path), "prompt_anchor": "## Module 0",
             "acceptance": [{"kind": "review", "check": "night_out/AUDIT.md lists what exists, what is missing, and the gate question"}],
             "budget_usd": 2.0, "max_turns": 40, "priority": 5, "status": "queued", "kind": "audit",
-            "slug": f"lab-{slug_}-m0", "source_handoff": str(prompt_path)}
+            "slug": f"{slug_ if slug_.startswith('lab-') else 'lab-' + slug_}-m0", "source_handoff": str(prompt_path)}
 
 
 def queue_for_claude(prompt_path: Path, project: str, repo_path: str, orders: Path | None = None) -> dict:

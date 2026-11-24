@@ -299,9 +299,11 @@ def for_context(project: str = "", ask: str = "", budget_chars: int = 6000) -> t
     """A short memory block for the model + the subject names used (shown to Scott as "used: …")."""
     names = [s["name"] for s in subjects()]
     words = {w for w in re.findall(r"[a-z0-9]{4,}", f"{project} {ask}".lower())}
-    pick = [n for n in ALWAYS if n in names]
-    if project and f"rules-{slug(project)}" in names:
-        pick.append(f"rules-{slug(project)}")
+    pick = [n for n in ALWAYS[:2] if n in names]          # who he is + how he wants things first
+    for w in re.findall(r"[a-z0-9-]+", (project or "").lower()):   # then that program's own rules (before the long global file)
+        if f"rules-{w}" in names and f"rules-{w}" not in pick:
+            pick.append(f"rules-{w}")
+    pick += [n for n in ALWAYS[2:] if n in names]
     scored = sorted(((sum(w in n for w in words), n) for n in names if n not in pick), reverse=True)
     pick += [n for sc, n in scored if sc > 0][:4]
     out, used, size = [], [], 0
