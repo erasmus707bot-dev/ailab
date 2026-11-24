@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review, ship,
+from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review, ship, creation,
                robotcheck, roster, store)
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
@@ -332,7 +332,8 @@ class App:
         live = b.get("kind") == "live"          # 🪞 runs: Scott already pointed at the spot, and that flow has its own robot
         run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""),
                                 str(b.get("task") or ""), step_cap=cap, ask_first=bool(b.get("ask_first")) and not live,
-                                selftest=None if live else self._play_test)
+                                selftest=None if live else self._play_test,
+                                ctypes=[] if live else (b.get("ctypes") if isinstance(b.get("ctypes"), list) else []))
         return 200, {"ok": True, "run": run.view()}
 
     def _play_test(self, run) -> dict | None:
@@ -345,7 +346,8 @@ class App:
         host = getattr(self, "bind_host", "127.0.0.1")
         host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
         return robotcheck.play(f"http://{host}:{port}/preview/{run.project['id']}/",
-                               run.log.parent / "shots" / run.id, self.cfg)
+                               run.log.parent / "shots" / run.id, self.cfg,
+                               mode=creation.robot_mode(getattr(run, "ctypes", [])))
 
     def agent_more(self, b: dict) -> tuple[int, dict]:
         """▶ Continue a run that hit its step limit."""
@@ -733,6 +735,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.prompt_get, q)
             if u.path == "/api/memory":
                 return self._run(app.memory_get, q)
+            if u.path == "/api/creation_types":            # 🧩 chips above the task box (2026-11-24)
+                return self._run(lambda: (200, {"ok": True, "types": creation.public()}))
             if u.path == "/api/roster":
                 return self._run(app.roster, q)
             if u.path == "/api/preview/files":

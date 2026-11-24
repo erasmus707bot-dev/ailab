@@ -255,7 +255,8 @@ def _play_real(url, shots, cfg):
     return out
 
 
-def judge_play(v: dict) -> dict:
+def judge_play(v: dict, mode: str = "play") -> dict:
+    """mode "page" (🧩 website / app, 2026-11-24): a screen that stays still after a click is fine — only games must move."""
     red, yellow, good = [], [], []
     if v.get("load_error"):
         red.append(f"The robot could not open the page: {v['load_error']}")
@@ -275,7 +276,10 @@ def judge_play(v: dict) -> dict:
         elif v.get("moved"):
             good.append(f"The robot pressed “{name}” and some keys — the screen moved.")
         else:
-            yellow.append(f"The robot pressed “{name}” and some keys, but nothing on screen changed. Look at it yourself.")
+            if mode == "play":
+                yellow.append(f"The robot pressed “{name}” and some keys, but nothing on screen changed. Look at it yourself.")
+            else:
+                good.append(f"The robot pressed “{name}” — the page kept working.")
     ph = v.get("phone")
     if isinstance(ph, dict) and not ph.get("error"):
         bad = []
@@ -295,7 +299,7 @@ def judge_play(v: dict) -> dict:
     return {"ran": True, "ok": level == "green", "level": level, "why": red + yellow, "good": good, "shots": v.get("shots") or []}
 
 
-def play(url: str, shots: Path | None = None, cfg: dict | None = None, driver=None) -> dict:
+def play(url: str, shots: Path | None = None, cfg: dict | None = None, driver=None, mode: str = "play") -> dict:
     """→ {"ran", "ok", "level": green|yellow|red, "why", "good", "shots"}. `driver(url, shots, cfg)` replaces the browser in tests."""
     if driver is None:
         ok, msg = available(cfg)
@@ -303,7 +307,7 @@ def play(url: str, shots: Path | None = None, cfg: dict | None = None, driver=No
             return {"ran": False, "ok": False, "level": "yellow", "why": [f"🤖 Robot play-test did not run: {msg}"], "good": [], "shots": []}
         driver = _play_real
     try:
-        return judge_play(driver(url, shots, cfg))
+        return judge_play(driver(url, shots, cfg), mode)
     except Exception as e:                                           # noqa: BLE001
         return {"ran": False, "ok": False, "level": "yellow", "good": [], "shots": [],
                 "why": [f"🤖 Robot play-test could not start the browser: {str(e).splitlines()[0][:200]}"]}

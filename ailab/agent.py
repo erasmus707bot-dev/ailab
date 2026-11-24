@@ -19,7 +19,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import config, memory, preview, repos, secretscan, store
+from . import config, memory, preview, repos, secretscan, store, creation
 from .mcp_client import HermesRefused
 from .transport import HttpError
 from .privacy import PrivacyRefused
@@ -235,11 +235,13 @@ class Run:
     def __init__(self, lab, cfg: dict, project: dict, provider: str, model: str, task: str,
                  root: Path | None = None, log_dir: Path | None = None, cap_usd: float | None = None,
                  autosave_field: str = "agent-last", step_cap: int | None = None, ask_first: bool = False,
-                 selftest=None):
+                 selftest=None, ctypes=None):
         """root/log_dir/cap_usd: ⚖️ Compare (M8) runs one lane in its own copy of the project."""
         self.id = uuid.uuid4().hex[:10]
         self.lab, self.cfg, self.project = lab, cfg, project
         self.provider, self.model, self.task = provider, model, task.strip()[:4000]
+        # 🧩 creation types Scott picked (chips above the task box, 2026-11-24) — steer the agent, robot test and ship
+        self.ctypes = [t["id"] for t in creation.pick(ctypes)]
         self.root = (root or preview.ensure_site(project["id"])).resolve()
         self.step_cap = int(step_cap or cfg.get("agent_step_cap", 12))
         self.cap_usd = float(cfg.get("agent_cap_usd", 0.50) if cap_usd is None else cap_usd)
@@ -253,7 +255,7 @@ class Run:
         self.log = (log_dir or config.home() / "projects" / project["id"] / "agent") / f"{self.id}.jsonl"
         self.log.parent.mkdir(parents=True, exist_ok=True)
         # M6: 📋 Review lists the models used from these
-        self.log.with_suffix(".meta.json").write_text(json.dumps({"provider": provider, "model": model, "at": time.time()}))
+        self.log.with_suffix(".meta.json").write_text(json.dumps({"provider": provider, "model": model, "at": time.time(), "ctypes": self.ctypes}))
         self.connected = cfg.get("mode") == "connected"
         # fix 5 (2026-11-23): "done" needs proof — a passing check after the last change
         self.changed = 0                      # step number of the last write/edit (0 = none yet)
@@ -306,7 +308,14 @@ class Run:
                 "plan": self.plan_view(), "question": self.question,
                 "real_steps": len(self.steps) - self.bad, "long_replies": self.long_used, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
                 "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None,
-                "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored}
+                "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored,
+                **self.type_view()}
+
+    def type_view(self) -> dict:
+        """🧩 What was picked, and what to offer when it is done: 📦 ship targets, 🖼/🎬 Hermes hand-offs."""
+        ids = getattr(self, "ctypes", []) or []
+        return {"ctypes": ids, "ship": creation.ship_targets(ids), "handoffs": creation.handoffs(ids),
+                "robot_mode": creation.robot_mode(ids)}
 
     def plan_view(self) -> list[dict]:
         """✅ done / 🔨 doing / ⏳ left for each module of the build prompt."""
@@ -358,6 +367,8 @@ class Run:
     def _selftest(self) -> dict | None:
         """🤖 The robot opens the finished page, presses its main button and some keys. None = nothing to test."""
         if not self.selftest or not self.changed:
+            return None
+        if creation.robot_mode(getattr(self, "ctypes", [])) == "none":   # 📝 text / 🖼 image / 🎬 video brief: no page to play
             return None
         page = [st.get("path", "") for st in self.steps if st.get("diff") and not st.get("undone")]
         if not any("/" not in p and p.rsplit(".", 1)[-1].lower() in ("html", "htm", "js", "mjs", "css") for p in page):
@@ -759,7 +770,8 @@ class Run:
                 mem, self.memory_used = memory.for_context(" ".join([self.project.get("name", "")] + linked), self.task)
             except Exception:                                     # noqa: BLE001 — memory is a help, never a blocker
                 mem = ""
-        return [{"role": "system", "content": SYSTEM + (ASK_FIRST if self.ask_first else "") + (HERMES_GUIDE if self.connected else "")
+        return [{"role": "system", "content": SYSTEM + (ASK_FIRST if self.ask_first else "") + creation.brief(getattr(self, "ctypes", []), self.ask_first)
+                 + (HERMES_GUIDE if self.connected else "")
                  + (REPO_GUIDE.format(names=", ".join(linked)) if linked else "")
                  + (("\n\n" + mem + "\nUse it to match how Scott likes things; the task still wins.") if mem else "")},
                 {"role": "user", "content": f"Task: {self.task}\nFiles: "
@@ -911,13 +923,14 @@ class Agents:
         self.lock = threading.Lock()
 
     def start(self, lab, cfg, project, provider, model, task, step_cap: int | None = None, ask_first: bool = False,
-              selftest=None) -> Run:
+              selftest=None, ctypes=None) -> Run:
         if not task.strip():
             raise ValueError("Tell the agent what to do.")
         with self.lock:
             if any(r.state == "running" and r.project["id"] == project["id"] for r in self.runs.values()):
                 raise ValueError("An agent is already working on this project. Stop it first.")
-            run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap, ask_first=ask_first, selftest=selftest)
+            run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap, ask_first=ask_first, selftest=selftest,
+                      ctypes=ctypes)
             self.runs[run.id] = run
         threading.Thread(target=run.loop, daemon=True, name=f"agent-{run.id}").start()
         return run
