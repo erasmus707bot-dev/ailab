@@ -1,11 +1,13 @@
 """🤖 Robot check for 🪞 Show & change (2026-11-23, AI Lab fix 4) — makes the 🚦 light honest.
 
 A real headless browser opens the Now and New pages, finds the spot Scott pointed at, checks it really changed,
-clicks it on both sides when it is clickable, and compares page errors. The light may only go green when this passes.
+clicks it on the New (test copy) side only when it is clickable, and compares page errors. The light may only go green when this passes.
 If the robot can't run (Playwright or a browser missing, app asks for a sign-in), it says so and the light stays
 yellow — never green on a guess.
 
-Safety: New is look-only (non-GET → 403 at the proxy) unless Scott ticked 🔓, so a click cannot save anything.
+Safety: the robot NEVER clicks the Now (real) page — a click there runs real actions (2026-11-24: it started a
+real Hermes scan). New is look-only (non-GET → 403 at the proxy) unless Scott ticked 🔓, so a click cannot save
+anything; that expected 403 is not counted as a new error.
 The browser is headless, has no cookies of Scott's and only visits the two loopback preview ports.
 Needs on gandalf: `pip install --user playwright` — it drives the Chrome already installed (no browser download).
 """
@@ -15,6 +17,7 @@ import shutil
 import time
 from pathlib import Path
 
+LOOKONLY_403 = "status of 403"   # console text when New's look-only proxy refuses a save — expected, not a bug
 CLICKABLE = ("button", "a", "summary", "label", "select", "input")
 TIMEOUT_MS = 15_000
 
@@ -112,7 +115,7 @@ def _real(now_url, new_url, sel, shots, cfg):
         b = pw.chromium.launch(headless=True, **({"executable_path": exe} if exe else {}))
         try:
             ctx = b.new_context(viewport={"width": 1280, "height": 900})
-            now = _visit(ctx, now_url, sel, True, shots / f"{stamp}-now.png" if shots else None)
+            now = _visit(ctx, now_url, sel, False, shots / f"{stamp}-now.png" if shots else None)
             new = _visit(ctx, new_url, sel, True, shots / f"{stamp}-new.png" if shots else None)
         finally:
             b.close()
@@ -127,7 +130,15 @@ def judge(now: dict, new: dict, sel: str) -> dict:
         red.append(f"The New page did not open (the app answered {new['status']}).")
     if now.get("signin") or new.get("signin"):
         yellow.append("The app asked the robot to sign in, so it could not see the real page. Check it yourself.")
-    fresh = [e for e in new.get("errors") or [] if e not in (now.get("errors") or [])]
+    # Now is never clicked, so: load errors compare New vs Now; errors after New's click must be none
+    # (except the look-only 403, which is the safety block working).
+    now_errs = now.get("errors_before", now.get("errors")) or []
+    new_load = new.get("errors_before", new.get("errors")) or []
+    new_click = (new.get("errors") or [])[len(new_load):] if "errors_before" in new else []
+    blocked = [e for e in new_click if LOOKONLY_403 in e]
+    fresh = [e for e in new_load if e not in now_errs] + [e for e in new_click if LOOKONLY_403 not in e]
+    if blocked:
+        good.append("The click tried to save something; the test copy blocked it, as it should.")
     if fresh:
         red.append(f"New error on the page: {fresh[0]}" + (f" (+{len(fresh) - 1} more)" if len(fresh) > 1 else ""))
     pn, pw = now.get("probe") or {}, new.get("probe") or {}
