@@ -42,3 +42,10 @@ Continue phrase: `continue AI Lab five fixes from the 2026-11-23 handoff — liv
 - Real run (claude-sonnet-5-5, $0.069, 5 steps): pointed at "Scan now", asked for "Scan everything" + green. Result: **"ℹ️ No files changed"** (fix 5 label, not ✅) and robot 🔴 "looks exactly the same" (fix 4). Both honesty fixes proven live.
 - Why nothing changed: Hermes home `index.html` = 580 KB, over the 500 KB file limit. Fixed `0b57716`: limit → 2 MB; `__pycache__`/.pyc no longer listed as "behind-the-scenes changes". **Loads at next Lab restart.**
 - Still UNVERIFIED: a change landing on the home page (New serves raw index.html; Hermes normally splits it via home_split); reboot-proof hermes-mcp (needs a reboot).
+
+## Live proof #2 — 2026-11-23 16:00 (after Scott's Lab restart)
+- `.pyc` warning gone ("No change yet" before the run).
+- Same ask (point at "Scan now" → "Scan everything", green), claude-sonnet-5-5, 9 steps, **$0.14**. **The change landed**: New shows a green "Scan everything" button, Now unchanged. 🚦 **🟢** — robot: "the spot you pointed at changed · clicked it and the page kept working · no new errors". **Fix 4 proven end-to-end on a real Hermes page.** Thrown away after (New = Now again).
+- Run ended `capped`, not done: the Lab had no price for Sonnet 5.5 → $15/$75 fallback → next step estimated $0.37 > $0.36 left. Fixed `4850b9f`: Sonnet 5.5 $2/$10, Opus 5.5 $4/$20 (web-checked 2026-11-23), roster OpenRouter prices ("about", UNVERIFIED); config.json prices now add to defaults. Same step now ≈ $0.08. **Loads at next Lab restart.**
+- Owed: Argus phone touch test; reboot proof for hermes-mcp; Scott's OpenRouter key (then rerun the same test on deepseek-v4.1-flash).
+- Next build: memory import + prompt builder — build prompt first (decision doc parts 2–3).
