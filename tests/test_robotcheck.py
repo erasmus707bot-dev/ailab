@@ -39,6 +39,16 @@ class Judge(unittest.TestCase):
         self.assertEqual(r["level"], "green")
         self.assertTrue(any("blocked" in g for g in r["good"]))
 
+    def test_404_fallout_after_new_click_is_a_note(self):
+        new = page({**BTN, "style": "b"}, clicked=True, errors_before=[],
+                   errors=["Failed to load resource: the server responded with a status of 404 (Not Found)"])
+        self.assertEqual(rc.judge(page(BTN, errors_before=[]), new, "#s")["level"], "green")
+
+    def test_404_on_new_page_load_is_still_red(self):
+        e = "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        new = page({**BTN, "style": "b"}, clicked=True, errors_before=[e], errors=[e])
+        self.assertEqual(rc.judge(page(BTN, errors_before=[]), new, "#s")["level"], "red")
+
     def test_script_error_after_new_click_is_red(self):
         new = page({**BTN, "style": "b"}, clicked=True, errors_before=[], errors=["TypeError: x is undefined"])
         self.assertEqual(rc.judge(page(BTN, errors_before=[]), new, "#s")["level"], "red")

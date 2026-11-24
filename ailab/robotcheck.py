@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 LOOKONLY_403 = "status of 403"   # console text when New's look-only proxy refuses a save — expected, not a bug
+LOAD_FAIL = "Failed to load resource"  # after New's click: fallout of the blocked save (403, then 404 polls) — a note
 CLICKABLE = ("button", "a", "summary", "label", "select", "input")
 TIMEOUT_MS = 15_000
 
@@ -135,8 +136,8 @@ def judge(now: dict, new: dict, sel: str) -> dict:
     now_errs = now.get("errors_before", now.get("errors")) or []
     new_load = new.get("errors_before", new.get("errors")) or []
     new_click = (new.get("errors") or [])[len(new_load):] if "errors_before" in new else []
-    blocked = [e for e in new_click if LOOKONLY_403 in e]
-    fresh = [e for e in new_load if e not in now_errs] + [e for e in new_click if LOOKONLY_403 not in e]
+    blocked = [e for e in new_click if LOOKONLY_403 in e or LOAD_FAIL in e]
+    fresh = [e for e in new_load if e not in now_errs] + [e for e in new_click if e not in blocked]
     if blocked:
         good.append("The click tried to save something; the test copy blocked it, as it should.")
     if fresh:
