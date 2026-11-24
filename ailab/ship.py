@@ -24,17 +24,30 @@ def _err(msg: str, code: str = "bad_args", icon: str = "📦") -> preview.Previe
     return preview.PreviewError(msg, code, icon)
 
 
+def _title(f: Path, rx: str) -> str:
+    import html as _h
+    import re as _re
+    try:
+        m = _re.search(rx, f.read_text(errors="replace")[:200_000], _re.I | _re.S | _re.M)
+    except OSError:
+        return ""
+    return _re.sub(r"\s+", " ", _h.unescape(m.group(1))).strip()[:60] if m else ""
+
+
 def options(pid: str) -> list[dict]:
-    """What can be shipped from this project: the top folder (web app) and any folder holding project.godot."""
+    """What can be shipped from this project: the top folder (web app) and any folder holding project.godot.
+    Each carries its own name (page <title> / Godot config/name) so two apps from one project never share a shelf."""
     root = preview.ensure_site(pid).resolve()
     out = []
     if (root / "index.html").is_file():
-        out.append({"folder": "", "kind": "web", "label": "🌐 Web app (index.html)"})
+        out.append({"folder": "", "kind": "web", "label": "🌐 Web app (index.html)",
+                    "name": _title(root / "index.html", r"<title[^>]*>(.*?)</title>")})
     for pg in sorted(root.rglob("project.godot")):
         rel = pg.parent.relative_to(root).as_posix()
         if any(p.startswith(".") or p in SKIP_DIRS for p in Path(rel).parts):
             continue
-        out.append({"folder": "" if rel == "." else rel, "kind": "godot", "label": f"🎮 Godot game ({rel or 'top'})"})
+        out.append({"folder": "" if rel == "." else rel, "kind": "godot", "label": f"🎮 Godot game ({rel or 'top'})",
+                    "name": _title(pg, r'^config/name="([^"]*)"')})
     return out
 
 

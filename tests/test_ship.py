@@ -32,7 +32,7 @@ class Ship(Srv):
         site = preview.ensure_site("scratch")
         g = site / "tetris-android"
         g.mkdir()
-        (g / "project.godot").write_text("config_version=5\n")
+        (g / "project.godot").write_text('config_version=5\n[application]\nconfig/name="Starfall Tetris"\n')
         (g / "main.gd").write_text("extends Node\n")
         (g / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\nxx")
         (g / ".godot").mkdir()
@@ -40,6 +40,7 @@ class Ship(Srv):
         code, o, _ = self.req("/api/ship/options?project=scratch")
         kinds = {(x["kind"], x["folder"]) for x in o["options"]}
         self.assertIn(("godot", "tetris-android"), kinds)
+        self.assertEqual(next(x["name"] for x in o["options"] if x["kind"] == "godot"), "Starfall Tetris")
         code, r, _ = self.req("/api/ship/start", {"project": "scratch", "name": "Tetris", "folder": "tetris-android",
                                                   "platforms": ["android", "bogus"]})
         self.assertTrue(r["ok"], r)

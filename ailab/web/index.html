@@ -247,6 +247,13 @@
   /* 2026-11-24 Argus touch test: plan Go / Later / Send change were 42 px */
   #askdlg .btn, #askdlg input[type=text] { min-height: 44px; } .planlist li { overflow-wrap: anywhere; }
   .askrow { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; font-size: .95rem; }
+  /* 🧩 creation type chips (2026-11-24): tap any number; ⭐ = the Lab's guess from your words */
+  .typerow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .typerow .tlead { font-size: .9rem; color: var(--dim); margin-right: 2px; }
+  .tchip { min-height: 44px; min-width: 44px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--panel2); color: inherit; font-size: .95rem; display: inline-flex; gap: 4px; align-items: center; }
+  .tchip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .tchip.reset { background: none; border-style: dashed; font-size: .88rem; }
   .drawer pre { white-space: pre-wrap; word-break: break-word; font-size: .82rem; max-height: 30vh; overflow: auto; margin: 6px 0 0; }
   .wbtools .btn.off { opacity: .6; }
   @media (max-width: 980px) {
@@ -789,14 +796,18 @@ function startView() {
   const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, baWrap, resRobot, resBtns, resNote, shipBox);
   /* 2026-11-24 lab-ship M3: 📦 Make it an app — Hermes builds Android / Linux / Windows onto the 🧪 test shelf. */
   const PLAT_L = { android: "📱 Android", linux: "🐧 Linux", windows: "🪟 Windows" };
-  async function shipOpen() {
+  async function shipOpen(want) {   /* want: platforms picked by the 🧩 chips (Android / Windows / Linux) */
+    want = Array.isArray(want) && want.length ? want : null;
     shipBox.hidden = false; shipBox.replaceChildren(h("p", { class: "note" }, "⏳ Looking at the project…"));
     const o = await api(`/api/ship/options?project=${encodeURIComponent(p.id)}`);
     if (!o.ok) { shipBox.replaceChildren(h("p", {}, `${o.icon || "⚠️"} ${o.message || "Can't ship this project."}`)); return; }
     if (!o.options.length) { shipBox.replaceChildren(h("p", {}, "❓ Nothing to ship yet — it needs an index.html, or a folder with project.godot.")); return; }
-    const name = h("input", { type: "text", value: p.name || "", "aria-label": "App name", maxlength: 60 });
+    const name = h("input", { type: "text", value: o.options[0].name || p.name || "", "aria-label": "App name", maxlength: 60 });
     const sel = h("select", { "aria-label": "What to ship" }, o.options.map((x, i) => h("option", { value: String(i) }, x.label)));
-    const boxes = Object.keys(PLAT_L).map(k => h("label", { class: "chk" }, h("input", { type: "checkbox", checked: true, value: k }), " " + PLAT_L[k]));
+    let named = false;                                  // the app's own title, until Scott types a name himself
+    name.addEventListener("input", () => { named = true; });
+    sel.addEventListener("change", () => { if (!named) name.value = o.options[+sel.value].name || p.name || ""; });
+    const boxes = Object.keys(PLAT_L).map(k => h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !want || want.includes(k), value: k }), " " + PLAT_L[k]));
     const ori = h("select", { "aria-label": "Screen" }, [["any", "Any way up"], ["landscape", "Sideways"], ["portrait", "Upright"]].map(([v, l]) => h("option", { value: v }, l)));
     const out = h("div", {});
     const go = h("button", { class: "btn pri", type: "button" }, "📦 Build the apps ⭐");
@@ -866,7 +877,14 @@ function startView() {
         onclick: () => { store.set(keptKey, kept.concat(open.map(s => run.id + ":" + s.n)).slice(-200)); sig = ""; onRun(run); } }, run.can_continue ? "✓ Keep as is" : "✓ Keep all"),
       h("button", { class: "btn", type: "button", title: "Put every file back the way it was before this run", onclick: undoAll }, "↩ Undo all"));
     else if (chg.length) resNote.textContent = "✓ Kept.";
-    resBtns.append(h("button", { class: "btn", type: "button", title: "Hermes builds Android / Linux / Windows apps from this project (🧪 test builds only you see)", onclick: shipOpen }, "📦 Make it an app"));
+    /* 🧩 2026-11-24: the chips said where it goes → that ship target is the ⭐ next step; image/video → their Hermes studio */
+    const okEnd = run.state === "done" || run.state === "unproven";
+    (run.handoffs || []).forEach(ho => resBtns.append(handoffBtn(ho, okEnd && !open.length)));
+    const tgt = run.ship || [];
+    resBtns.append(tgt.length && okEnd
+      ? h("button", { class: open.length ? "btn" : "btn pri", type: "button", title: "Hermes builds it onto the 🧪 test shelf (only you see it)", onclick: () => shipOpen(tgt) },
+          `📦 Make it ${tgt.length > 1 ? "the apps" : "an app"}: ${tgt.map(k => PLAT_L[k] || k).join(" + ")}${open.length ? "" : " ⭐"}`)
+      : h("button", { class: "btn", type: "button", title: "Hermes builds Android / Linux / Windows apps from this project (🧪 test builds only you see)", onclick: () => shipOpen() }, "📦 Make it an app"));
   }
   function chgCard(icon, title, sub, diff, open, ...controls) {
     return h("div", { class: "chg" }, h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, icon), h("b", {}, title), h("span", { class: "note" }, sub)),
@@ -939,7 +957,7 @@ function startView() {
     h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
     S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
     S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
-    ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.askRow, ag.held), ag.status, ag.final, ag.repoRow,
+    ...(ag ? [ag.typeRow, ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.askRow, ag.held), ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
     h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the three panes back to the standard size and order" }, "🧱 Reset pane layout")));
@@ -986,6 +1004,20 @@ function autosave(text) {
 /* 2026-11-23: every model shows a best-use tag + $ tier (ailab/roster.py). ⭐ rows keep their hand-picked job. */
 const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "", lim = t.limits ? `${t.limits} ` : "";
   return r.picks && r.picks[m] ? `⭐ ${lim}${m} — ${r.picks[m]}${tier}` : `${lim}${m} — ${t.use || ""}${tier}`; };
+/* 🧩 creation types (2026-11-24): the chips, the ⭐ guess (same rule as ailab/creation.py guess) and hand-off buttons */
+let CTYPES = null;
+const ctypesLoad = () => CTYPES ? Promise.resolve(CTYPES) : api("/api/creation_types").then(r => (CTYPES = r.ok ? r.types : []));
+function ctypeGuess(text) {
+  const t = " " + (text || "").toLowerCase().replace(/\s+/g, " ") + " ", esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return (CTYPES || []).map((ty, n) => [ty.words.filter(w => new RegExp(`(^|[^a-z0-9])${esc(w.toLowerCase())}(?![a-z0-9])`).test(t)).length, n, ty.id])
+    .filter(x => x[0]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, 3).map(x => x[2]);
+}
+function handoffBtn(ho, star) {
+  const base = (S.hermes_url || "").replace(/\/+$/, "");
+  if (!base) return h("span", { class: "note" }, `${ho.icon} The brief is in ${ho.file} — take it to Hermes ${ho.name} (🔌 connect the Lab to Hermes for a button here).`);
+  return h("a", { class: star ? "btn pri" : "btn", href: base + ho.path, target: "_blank", rel: "noopener",
+    title: `The Lab can't make this itself yet — ${ho.file} in this project has the ready-to-use brief` }, `${ho.icon} Take the brief to ${ho.name}${star ? " ⭐" : ""}`);
+}
 /* 🎨 only (2026-11-24): hide every model not tagged "fewer limits". Remembered. */
 function artToggle(sel, r) {
   const art = m => ((r.tags || {})[m] || {}).limits === "🎨";
@@ -1259,7 +1291,11 @@ function agentView(wb) {
   const RANK = { "": 0, free: 0, "$": 1, "$$": 2, "$$$": 3, "$$$$": 4 };
   function suggest() {
     if (!loaded || !loaded.ok) { hint.hidden = true; return; }
-    const w = wantFor(task.value); if (!w) { hint.hidden = true; return; }
+    /* 🧩 M3 (2026-11-24): the picked chips decide the kind of model; 🖼/🎬 art types try 🎨 fewer-limits models first */
+    const picked = typePicked().map(id => (CTYPES || []).find(t => t.id === id)).filter(Boolean);
+    const art = picked.some(t => t.art);
+    const w = picked.length ? { use: picked[0].use, why: `you picked ${picked.map(t => t.icon + " " + t.label).join(" + ")}`, art } : wantFor(task.value);
+    if (!w) { hint.hidden = true; return; }
     /* 2026-11-23: real code in a linked folder (Hermes, ailab) — local models got lost in the live test; claude-sonnet-5-5 finished it for ~$0.06 */
     if (/linked folders?|repo (find|pull|propose)/i.test(task.value)) {
       const strong = "claude-sonnet-5-5", here = S.providers.find(x => x.id === prov) || {};
@@ -1278,7 +1314,9 @@ function agentView(wb) {
       }
     }
     const tg = loaded.tags || {}, picks = loaded.picks || {};
-    const fits = loaded.models.filter(m => (tg[m] || {}).use === w.use || (picks[m] || "").includes(w.use.slice(3)));
+    const freer = w.art ? loaded.models.filter(m => (tg[m] || {}).limits === "🎨") : [];
+    const fits = freer.length ? freer : loaded.models.filter(m => (tg[m] || {}).use === w.use || (picks[m] || "").includes(w.use.slice(3)));
+    if (freer.length) w.why += " — 🎨 fewer limits for art";
     const pool = fits.length ? fits : loaded.models.filter(m => picks[m]);           // nothing tagged for it → the ⭐ picks
     if (!pool.length) { hint.hidden = true; return; }
     const cheapest = [...pool].sort((a, b) => (picks[b] ? 1 : 0) - (picks[a] ? 1 : 0) || RANK[(tg[a] || {}).tier || ""] - RANK[(tg[b] || {}).tier || ""])[0];
@@ -1291,8 +1329,25 @@ function agentView(wb) {
   const task = h("textarea", { id: "agtask", "aria-label": "Task", placeholder: "Say it in plain words. e.g. Add a footer with today's year, then check it's there.  (Ctrl+Enter starts)" });
   task.onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); startBtn.click(); } };
   task.value = store.get("agtask." + p.id, "");
+  /* 🧩 M2 (2026-11-24): what are you making? Tap any number of chips. Until you tap, the Lab's ⭐ guess follows your words. */
+  const tkey = "ctypes." + p.id;
+  const tstate = () => store.get(tkey, { ids: [], manual: false });
+  function typePicked() { const st = tstate(); return st.manual ? st.ids : ctypeGuess(task.value); }
+  const typeRow = h("div", { class: "typerow", id: "agtypes", role: "group", "aria-label": "What are you making?" });
+  function paintTypes() {
+    const st = tstate(), on = typePicked();
+    typeRow.replaceChildren(h("span", { class: "tlead" }, "🧩 Making:"),
+      ...(CTYPES || []).map(ty => h("button", { class: "tchip" + (on.includes(ty.id) ? " on" : ""), type: "button", "aria-pressed": String(on.includes(ty.id)),
+        title: on.includes(ty.id) && !st.manual ? "The Lab's guess from your words — tap to change" : "Tap to pick (any number)",
+        onclick: () => { const ids = on.includes(ty.id) ? on.filter(x => x !== ty.id) : on.concat(ty.id);
+          store.set(tkey, { ids, manual: true }); paintTypes(); suggest(); } },
+        `${ty.icon} ${ty.label}${on.includes(ty.id) && !st.manual ? " ⭐" : ""}`)),
+      st.manual ? h("button", { class: "tchip reset", type: "button", title: "Go back to the Lab's ⭐ guess from your words",
+        onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me") : null);
+  }
+  ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
-  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); suggest();
+  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest();
     t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
   // 2026-11-22 goal starters: fill the task box (Hermes studio tools → connected mode only)
   const GOALS = [
@@ -1364,6 +1419,7 @@ function agentView(wb) {
     final.hidden = running || !run.why; final.replaceChildren(run.why || "");
     if (run.can_continue) final.append(" ", h("button", { class: "btn pri", type: "button", title: "Give it more steps and carry on from where it stopped", onclick: () => more(run) }, "▶ Continue ⭐"));
     if (run.can_resume) final.append(" ", h("button", { class: "btn pri", type: "button", title: "The Lab restarted mid-run — carry on from the last step", onclick: () => more(run, "resume") }, "▶ Resume ⭐"));
+    if (!wb && !running && (run.state === "done" || run.state === "unproven")) (run.handoffs || []).forEach(ho => final.append(" ", handoffBtn(ho, true)));
     if (running) { clearTimeout(agTimer); agTimer = setTimeout(poll, 1000); }
     else api("/api/agent/approvals").then(a => { const n = (a.items || []).length;
       held.hidden = !n; held.textContent = wb ? `✋ ${n} waiting — look` : `✋ ${n} waiting for your approval — 📋 open`; });
@@ -1384,7 +1440,7 @@ function agentView(wb) {
   startBtn.onclick = async () => {
     if (!task.value.trim()) { status.textContent = "✏️ Tell the agent what to do first."; return; }
     startBtn.disabled = true;
-    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: task.value, ask_first: askFirst.checked });
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: task.value, ask_first: askFirst.checked, ctypes: typePicked() });
     if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
     store.set("agrun." + p.id, r.run.id); paint(r.run);
   };
@@ -1393,9 +1449,9 @@ function agentView(wb) {
     stopBtn.disabled = true; const r = await api("/api/agent/stop", { id }); if (r.ok) paint(r.run);
   };
   poll();
-  if (wb) return { picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), hint), goals, repoRow, startBtn, stopBtn, askRow, held, status, final, steps, more };
+  if (wb) return { typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), hint), goals, repoRow, startBtn, stopBtn, askRow, held, status, final, steps, more };
   return [projectRow(), h("section", { class: "agent" },
-    h("div", { class: "picker" }, provSel, modelSel), legend, task, hint, repoRow, goals,
+    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, hint, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     status, final, steps,
