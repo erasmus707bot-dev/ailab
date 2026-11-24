@@ -254,6 +254,14 @@
     background: var(--panel2); color: inherit; font-size: .95rem; display: inline-flex; gap: 4px; align-items: center; }
   .tchip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
   .tchip.reset { background: none; border-style: dashed; font-size: .88rem; }
+  /* Argus 2026-11-24: 9 chips = 4 rows (194 px) pushed ▶ Start off a 722 px phone screen → phones show the picked chips + ▾ All types */
+  .tchip.more { display: none; background: none; border-style: dashed; }
+  @media (max-width: 640px) {
+    .typerow:not(.open) .tchip:not(.on):not(.more) { display: none; }
+    .typerow .tchip.more { display: inline-flex; }
+    .typerow:not(.open) .tlead { display: none; }
+    .tchip { padding: 6px 10px; }
+  }
   .drawer pre { white-space: pre-wrap; word-break: break-word; font-size: .82rem; max-height: 30vh; overflow: auto; margin: 6px 0 0; }
   .wbtools .btn.off { opacity: .6; }
   @media (max-width: 980px) {
@@ -1334,8 +1342,10 @@ function agentView(wb) {
   const tstate = () => store.get(tkey, { ids: [], manual: false });
   function typePicked() { const st = tstate(); return st.manual ? st.ids : ctypeGuess(task.value); }
   const typeRow = h("div", { class: "typerow", id: "agtypes", role: "group", "aria-label": "What are you making?" });
+  let typesOpen = false;                                   /* phones: all chips shown only after ▾ All types */
   function paintTypes() {
     const st = tstate(), on = typePicked();
+    typeRow.classList.toggle("open", typesOpen);
     typeRow.replaceChildren(h("span", { class: "tlead" }, "🧩 Making:"),
       ...(CTYPES || []).map(ty => h("button", { class: "tchip" + (on.includes(ty.id) ? " on" : ""), type: "button", "aria-pressed": String(on.includes(ty.id)),
         title: on.includes(ty.id) && !st.manual ? "The Lab's guess from your words — tap to change" : "Tap to pick (any number)",
@@ -1343,7 +1353,9 @@ function agentView(wb) {
           store.set(tkey, { ids, manual: true }); paintTypes(); suggest(); } },
         `${ty.icon} ${ty.label}${on.includes(ty.id) && !st.manual ? " ⭐" : ""}`)),
       ...(st.manual ? [h("button", { class: "tchip reset", type: "button", title: "Go back to the Lab's ⭐ guess from your words",
-        onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me")] : []));
+        onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me")] : []),
+      h("button", { class: "tchip more", type: "button", "aria-expanded": String(typesOpen),
+        onclick: () => { typesOpen = !typesOpen; paintTypes(); } }, typesOpen ? "▴ Fewer" : on.length ? "▾ More" : "▾ Pick what you're making"));
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
