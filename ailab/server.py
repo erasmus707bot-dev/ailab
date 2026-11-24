@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review,
+from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review, ship,
                robotcheck, roster, store)
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
@@ -547,6 +547,19 @@ class App:
         return 200, review.send(self.lab, self.cfg, self._pid(b.get("project")), str(b.get("title") or ""),
                                 str(b.get("writeup") or ""), models)
 
+    # ---- 📦 Make it an app (lab-ship M3, 2026-11-24): Hermes app_ship → 🧪 test builds. Spends nothing. ----
+    def ship_options(self, q: dict) -> tuple[int, dict]:
+        pid = self._pid((q.get("project") or [""])[0])
+        return 200, {"ok": True, "mode": self.cfg["mode"], "options": ship.options(pid)}
+
+    def ship_start(self, b: dict) -> tuple[int, dict]:
+        plats = b.get("platforms") if isinstance(b.get("platforms"), list) else None
+        return 200, ship.start(self.lab, self.cfg, self._pid(b.get("project")), str(b.get("name") or ""),
+                               str(b.get("folder") or ""), plats, str(b.get("orientation") or "any"))
+
+    def ship_wait(self, b: dict) -> tuple[int, dict]:
+        return 200, ship.wait(self.lab, self.cfg, str(b.get("key") or ""))
+
     def review_apply(self, b: dict) -> tuple[int, dict]:
         return 200, review.apply(str(b.get("id") or ""), str(b.get("sha") or ""), str(b.get("confirm") or ""))
 
@@ -736,6 +749,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.live_changed, q)
             if u.path == "/api/review":
                 return self._run(app.review_list, q)
+            if u.path == "/api/ship/options":
+                return self._run(app.ship_options, q)
             if u.path == "/api/compare":
                 return self._run(app.compare_get, q)
             if u.path == "/api/agent/approvals":
@@ -799,6 +814,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.compare_capture, b)
             if p == "/api/compare/review":
                 return self._run(app.compare_review, b)
+            if p == "/api/ship/start":
+                return self._run(app.ship_start, b)
+            if p == "/api/ship/wait":
+                return self._run(app.ship_wait, b)
             if p == "/api/review/send":
                 return self._run(app.review_send, b)
             if p == "/api/review/apply":

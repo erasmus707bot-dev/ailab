@@ -227,6 +227,7 @@
   .drawer { margin-top: 0; border-top: 1px solid var(--line); padding-top: 6px; }
   /* 2026-11-24 workflow build: picture first (Before beside Now), robot verdict, question cards, plan list */
   .result { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
+  .shipbox { border: 1px solid var(--line, #8886); border-radius: 10px; padding: 10px; } .shipbox input[type=text], .shipbox select { min-height: 44px; font-size: 17px; } .shipbox .chk { min-height: 44px; display: inline-flex; align-items: center; }
   .result[hidden], .ba[hidden] { display: none; }
   .ba { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
   .ba figure, .shots figure { margin: 0; min-width: 0; }
@@ -784,7 +785,50 @@ function startView() {
   const baNow = h("iframe", { ...FR, title: "Now — the page with the AI's changes" });
   const baWrap = h("div", { class: "ba", hidden: true }, h("figure", {}, h("figcaption", {}, "⬅️ Before"), baBefore), h("figure", {}, h("figcaption", {}, "➡️ Now"), baNow));
   const resHead = h("div", { class: "final", role: "status" }), resRobot = h("div", {}), resBtns = h("div", { class: "runbar" }), resNote = h("span", { class: "note" });
-  const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, baWrap, resRobot, resBtns, resNote);
+  const shipBox = h("div", { class: "shipbox", hidden: true, "aria-live": "polite" });
+  const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, baWrap, resRobot, resBtns, resNote, shipBox);
+  /* 2026-11-24 lab-ship M3: 📦 Make it an app — Hermes builds Android / Linux / Windows onto the 🧪 test shelf. */
+  const PLAT_L = { android: "📱 Android", linux: "🐧 Linux", windows: "🪟 Windows" };
+  async function shipOpen() {
+    shipBox.hidden = false; shipBox.replaceChildren(h("p", { class: "note" }, "⏳ Looking at the project…"));
+    const o = await api(`/api/ship/options?project=${encodeURIComponent(p.id)}`);
+    if (!o.ok) { shipBox.replaceChildren(h("p", {}, `${o.icon || "⚠️"} ${o.message || "Can't ship this project."}`)); return; }
+    if (!o.options.length) { shipBox.replaceChildren(h("p", {}, "❓ Nothing to ship yet — it needs an index.html, or a folder with project.godot.")); return; }
+    const name = h("input", { type: "text", value: p.name || "", "aria-label": "App name", maxlength: 60 });
+    const sel = h("select", { "aria-label": "What to ship" }, o.options.map((x, i) => h("option", { value: String(i) }, x.label)));
+    const boxes = Object.keys(PLAT_L).map(k => h("label", { class: "chk" }, h("input", { type: "checkbox", checked: true, value: k }), " " + PLAT_L[k]));
+    const ori = h("select", { "aria-label": "Screen" }, [["any", "Any way up"], ["landscape", "Sideways"], ["portrait", "Upright"]].map(([v, l]) => h("option", { value: v }, l)));
+    const out = h("div", {});
+    const go = h("button", { class: "btn pri", type: "button" }, "📦 Build the apps ⭐");
+    go.onclick = async () => {
+      const opt = o.options[+sel.value], plats = boxes.map(b => b.firstChild).filter(c => c.checked).map(c => c.value);
+      if (!plats.length) { out.textContent = "Tick at least one."; return; }
+      go.disabled = true; out.replaceChildren(h("p", { class: "note" }, "⏳ Sending to Hermes…"));
+      const s = await api("/api/ship/start", { project: p.id, name: name.value, folder: opt.folder, platforms: plats, orientation: ori.value });
+      if (!s.ok) { go.disabled = false; out.replaceChildren(h("p", {}, `${s.icon || "⚠️"} ${s.message || "Hermes refused."}`)); return; }
+      for (let i = 0; i < 160; i++) {                       // ≤ ~70 min of 25 s waits (first Android build is slow)
+        const w = await api("/api/ship/wait", { key: s.key });
+        if (!w.ok) { out.replaceChildren(h("p", {}, `${w.icon || "⚠️"} ${w.message || "Lost the job."}`)); break; }
+        out.replaceChildren(h("p", { class: "note" }, "🔨 " + ((w.notes || []).slice(-1)[0] || "building…")));
+        if (w.finished) { shipPaint(out, s.app, w); break; }
+      }
+      go.disabled = false;
+    };
+    shipBox.replaceChildren(h("b", {}, "📦 Make it an app"),
+      h("p", { class: "note" }, "Hermes builds it on gandalf and puts it on the 🧪 test shelf — find it in Iris 📦 Apps, Hermes Downloads and Drive. Only you can ⬆ Release or share it."),
+      h("div", { class: "runbar" }, name, sel, ori), h("div", { class: "runbar" }, ...boxes), h("div", { class: "runbar" }, go), out);
+  }
+  function shipPaint(out, app, w) {
+    const r = w.result || {}, rows = [];
+    if (r.godot && r.godot.check) rows.push(h("li", {}, `${r.godot.check.ok ? "✅" : "❌"} Godot check — ${r.godot.check.why || ""}`));
+    for (const [k, v] of Object.entries(r.platforms || {}))
+      rows.push(h("li", {}, `${v.ok ? "✅" : v.ok === null ? "⏸" : "❌"} ${PLAT_L[k] || k} — ${v.ok ? "on the 🧪 test shelf" : (v.why || v.result || "failed")}`));
+    const base = (S.hermes_url || "").replace(/\/+$/, "");
+    out.replaceChildren(h("p", {}, w.state === "done" ? `✅ ${r.name || app} v${r.version || ""} built.` : `⚠️ ${r.why || w.error || "Not built."}`),
+      h("ul", {}, ...rows),
+      r.platforms && r.platforms.android && r.platforms.android.ok ? h("p", { class: "note" }, "📱 Phone check: Iris → More → 📦 Apps → 🧪 Test → ⬇ install, open it, play a minute.") : "",
+      base ? h("p", {}, h("a", { href: `${base}/downloads#app-${encodeURIComponent(app)}`, target: "_blank", rel: "noopener" }, "Open in Hermes Downloads ↗")) : "");
+  }
   let baRun = "", baSig = "";
   const changedSteps = run => run.steps.filter(s => s.diff && !s.undone);
   async function undoAll() {
@@ -822,6 +866,7 @@ function startView() {
         onclick: () => { store.set(keptKey, kept.concat(open.map(s => run.id + ":" + s.n)).slice(-200)); sig = ""; onRun(run); } }, run.can_continue ? "✓ Keep as is" : "✓ Keep all"),
       h("button", { class: "btn", type: "button", title: "Put every file back the way it was before this run", onclick: undoAll }, "↩ Undo all"));
     else if (chg.length) resNote.textContent = "✓ Kept.";
+    resBtns.append(h("button", { class: "btn", type: "button", title: "Hermes builds Android / Linux / Windows apps from this project (🧪 test builds only you see)", onclick: shipOpen }, "📦 Make it an app"));
   }
   function chgCard(icon, title, sub, diff, open, ...controls) {
     return h("div", { class: "chg" }, h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, icon), h("b", {}, title), h("span", { class: "note" }, sub)),
