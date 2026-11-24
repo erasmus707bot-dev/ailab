@@ -318,6 +318,7 @@ const PATHS = [
   { id: "review", flag: null, sym: "📋", name: "Review", tip: "Send a demo to Hermes for your OK; apply or reject held agent writes." },
   { id: "compare", flag: "compare", sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side." },
   { id: "live", flag: "live", sym: "🪞", name: "Show & change", tip: "A running page: Now beside New. Say what to change, see it, keep it or throw it away." },
+  { id: "prompt", flag: "prompt", sym: "📝", name: "Prompt builder", tip: "Say your idea → get a build prompt in your format → send it to the Lab agent or to Claude." },
   { id: "memory", flag: "memory", sym: "🧠", name: "Memory", tip: "What the Lab knows about you — copied from your Claude setup, kept up to date, yours to change." },
 ];
 let S = null;                          // server state
@@ -460,6 +461,74 @@ function settingsView() {
         inp, h("div", { class: "acts" }, save, test, rm), msg));
     });
   });
+  return [box];
+}
+
+/* ---------- 📝 Prompt builder (2026-11-24 M4) ----------
+   Idea → ✨ draft (a model, uses his memory + the project's latest handoff) or 📄 plain template (free) → he edits →
+   🤖 Lab agent (small) or ✳️ Claude (big: queues Module 0 as a night AUDIT + gives a continue line). He picks. */
+function promptView() {
+  if (!S.flags.prompt) return [offCard("prompt", "📝", "Prompt builder", "the Prompt builder build (M4)")];
+  const p = curProject();
+  const box = h("div", { class: "keys" }, h("h2", {}, "📝 Turn an idea into a build prompt"));
+  const idea = h("textarea", { id: "pbidea", placeholder: "💡 What do you want built? (plain words)", "aria-label": "Your idea",
+    style: "width:100%;min-height:110px", oninput: e => store.set("pbidea", e.target.value) });
+  idea.value = store.get("pbidea", "");
+  const repoSel = h("select", { "aria-label": "Which program" }, h("option", { value: "" }, "📁 Which program? (optional)"));
+  const provs = S.providers.filter(x => !x.off && (!p.sensitive || x.local));
+  const prov = provs.find(x => x.id === store.get("provider", "")) ? store.get("provider") : (provs[0] || {}).id;
+  const provSel = h("select", { "aria-label": "Provider", onchange: e => { store.set("provider", e.target.value); render(); } },
+    provs.map(x => h("option", { value: x.id, selected: x.id === prov }, `${x.icon} ${x.id}`)));
+  const modelSel = h("select", { "aria-label": "Model", onchange: e => store.set("model." + prov, e.target.value) }, h("option", {}, "⏳"));
+  if (prov) api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
+    modelSel.innerHTML = ""; if (!r.ok) { modelSel.append(h("option", { value: "" }, r.message || "no models")); return; }
+    const want = store.get("model." + prov, r.models[0]);
+    r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
+  });
+  const msg = h("p", { class: "note", role: "status" });
+  const say = t => { msg.textContent = t; };
+  const out = h("textarea", { id: "pbout", "aria-label": "The build prompt — edit it freely", style: "width:100%;min-height:340px;font-family:inherit",
+    oninput: e => store.set("pbout", e.target.value) });
+  out.value = store.get("pbout", "");
+  const hint = h("div", { class: "hint", hidden: !out.value });
+  let size = store.get("pbsize", null);
+  const paintHint = () => { hint.hidden = !out.value; hint.replaceChildren(size ? (size.size === "big"
+    ? `💡 Looks big (${size.why}) — ✳️ Claude suggested.` : `💡 Looks small (${size.why}) — 🤖 Lab agent suggested.`) : "", copyRow); };
+  const copyRow = h("span", {});
+  const got = (r) => { if (!r.ok) { say("✗ " + (r.message || r.code)); return; }
+    out.value = r.md; store.set("pbout", r.md); size = { size: r.size, why: r.why }; store.set("pbsize", size); paintHint();
+    say((r.fallback ? "⚠️ The model didn't follow the format — here is the plain template instead. " : "✅ Draft ready — change anything, then send. ")
+      + (r.usd ? `$${r.usd.toFixed(4)}` : "") + ((r.memory_used || []).length ? ` · 🧠 used: ${r.memory_used.join(", ")}` : "")); };
+  const draftB = h("button", { class: "btn pri", type: "button", onclick: async () => {
+    if (!idea.value.trim()) { say("Type your idea first."); idea.focus(); return; }
+    draftB.disabled = true; say("⏳ Writing your build prompt…");
+    got(await api("/api/prompt/draft", { idea: idea.value, repo: repoSel.value, project: p.id, provider: prov, model: modelSel.value }));
+    draftB.disabled = false;
+  } }, "✨ Write it");
+  const plainB = h("button", { class: "btn", type: "button", onclick: async () => {
+    if (!idea.value.trim()) { say("Type your idea first."); idea.focus(); return; }
+    got(await api("/api/prompt/plain", { idea: idea.value, repo: repoSel.value }));
+  } }, "📄 Plain template (free)");
+  const send = (target) => async () => {
+    if (!out.value.includes("## Module 0")) { say("The prompt needs a “## Module 0” (the audit + gate)."); return; }
+    const r = await api("/api/prompt/send", { md: out.value, target, repo: repoSel.value, project: p.id, provider: prov, model: modelSel.value });
+    if (!r.ok) { say("✗ " + (r.message || r.code)); return; }
+    if (target === "lab") { store.set("agrun." + p.id, r.run.id); say(`🤖 Lab agent started on Module 0 · saved ${r.file}`); go("agent"); return; }
+    const line = h("input", { type: "text", readonly: true, value: r.continue, "aria-label": "Continue line", style: "width:100%" });
+    const cp = h("button", { class: "btn", type: "button", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(r.continue); cp.textContent = "✅ Copied"; } }, "📋 Copy");
+    copyRow.replaceChildren(line, cp); paintHint();
+    say(r.order ? `✳️ Queued for the night as a Module 0 audit (no commits) — ${r.order.split("/").pop()}. Or paste the line below into Claude now.`
+      : `✳️ Saved ${r.file}. Not queued: ${(r.refused || []).join("; ")}. Paste the line below into Claude.`);
+  };
+  const toLab = h("button", { class: "btn", type: "button", onclick: send("lab") }, "🤖 Send to Lab agent");
+  const toClaude = h("button", { class: "btn", type: "button", onclick: send("claude") }, "✳️ Send to Claude");
+  const saveB = h("button", { class: "btn", type: "button", onclick: async () => {
+    const r = await api("/api/prompt/save", { md: out.value }); say(r.ok ? `💾 Saved ${r.file}` : "✗ " + (r.message || r.code)); } }, "💾 Save");
+  api("/api/prompt").then(r => { if (!r.ok) return; (r.repos || []).forEach(n => repoSel.append(h("option", { value: n, selected: n === store.get("pbrepo", "") }, `📁 ${n}`)));
+    repoSel.onchange = e => store.set("pbrepo", e.target.value); if (!r.agent_on) { toLab.disabled = true; toLab.title = "Switch 🤖 Agent on first"; } });
+  paintHint();
+  box.append(idea, h("div", { class: "picker" }, repoSel, provSel, modelSel), h("div", { class: "hint" }, draftB, plainB), msg,
+    out, hint, h("div", { class: "row" }, saveB, toLab, toClaude));
   return [box];
 }
 
@@ -1588,6 +1657,7 @@ function render() {
   else if (view === "live") kids = liveView();
   else if (view === "settings") kids = settingsView();
   else if (view === "memory") kids = memoryView();
+  else if (view === "prompt") kids = promptView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = false;

@@ -13,7 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, compare, config, livepage, memory, preview, repos, review, robotcheck, roster, store
+from . import (__version__, agent, compare, config, livepage, memory, preview, promptbuilder, repos, review, robotcheck,
+               roster, store)
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -30,7 +31,7 @@ PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'sel
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
 PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙"}
 OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models",
-       "live": "🪞 Show & change", "memory": "🧠 Memory"}
+       "live": "🪞 Show & change", "memory": "🧠 Memory", "prompt": "📝 Prompt builder"}
 # Static comparison page: our own escaped HTML; only an inline theme-toggle script, images inline.
 PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
             "frame-ancestors 'self'; form-action 'none'")
@@ -216,6 +217,48 @@ class App:
             return 200, {"ok": True, **memory.apply_answers(str(b.get("md") or "")[:500_000], ids)}
         if op == "questions":                             # 🎙️ for a voice review
             return 200, {"ok": True, "questions": memory.questions()}
+        return 404, {"ok": False, "code": "not_found"}
+
+    # ---- 📝 prompt builder (flag `prompt`, 2026-11-24 M4) ----
+    def _repo(self, name: str):
+        r = repos.linked(self.cfg)
+        return (name, r[name]) if name in r else ("", None)
+
+    def prompt_get(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"].get("prompt"):
+            return _off("prompt")
+        return 200, {"ok": True, "prompts": promptbuilder.listing(), "repos": sorted(repos.linked(self.cfg)),
+                     "agent_on": bool(self.cfg["flags"].get("agent"))}
+
+    def prompt_post(self, op: str, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"].get("prompt"):
+            return _off("prompt")
+        idea = str(b.get("idea") or "")[:4000]
+        rname, rpath = self._repo(str(b.get("repo") or ""))
+        proj = store.project(self._pid(b.get("project"))) or {"id": "scratch", "name": "Scratch"}
+        if op == "plain":                                 # no model, no cost
+            return 200, {"ok": True, "md": promptbuilder.plain(idea, f"~/{rname}" if rname else "~/"),
+                         **promptbuilder.size_hint(idea)}
+        if op == "draft":
+            if not self.cfg["flags"].get("router"):
+                return _off("router")
+            d = promptbuilder.draft(self.lab, proj, str(b.get("provider") or ""), str(b.get("model") or ""), idea, rname, rpath)
+            return 200, {"ok": True, **d, "spend": self.spend()}
+        md = str(b.get("md") or "")[:promptbuilder.MAX_PROMPT]
+        if op == "save":
+            return 200, {"ok": True, "file": str(promptbuilder.save(md, str(b.get("name") or "")))}
+        if op == "send":
+            target, f = str(b.get("target") or ""), promptbuilder.save(md, str(b.get("name") or ""))
+            if target == "lab":
+                if not self.cfg["flags"].get("agent"):
+                    return _off("agent")
+                task = ("Follow this build prompt. Do Module 0 first and stop at its gate.\n\n" + md)[:4000]
+                run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""), task)
+                return 200, {"ok": True, "file": str(f), "run": run.view()}
+            if target == "claude":
+                q = promptbuilder.queue_for_claude(f, rname or "hermes", str(rpath or Path.home() / "hermes"))
+                return 200, {"ok": True, "file": str(f), **q}
+            return 400, {"ok": False, "code": "bad_args", "message": "Pick 🤖 Lab agent or ✳️ Claude."}
         return 404, {"ok": False, "code": "not_found"}
 
     def roster(self, q: dict) -> tuple[int, dict]:
@@ -604,6 +647,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.models, q)
             if u.path == "/api/keys":
                 return self._run(app.keys, q)
+            if u.path == "/api/prompt":
+                return self._run(app.prompt_get, q)
             if u.path == "/api/memory":
                 return self._run(app.memory_get, q)
             if u.path == "/api/roster":
@@ -664,6 +709,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_stop, b)
             if p == "/api/agent/undo":
                 return self._run(app.agent_undo, b)
+            if p.startswith("/api/prompt/"):
+                return self._run(app.prompt_post, p[len("/api/prompt/"):], b)
             if p.startswith("/api/memory/"):
                 return self._run(app.memory_post, p[len("/api/memory/"):], b)
             if p == "/api/compare/start":
