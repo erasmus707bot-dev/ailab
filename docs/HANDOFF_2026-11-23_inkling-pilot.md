@@ -21,3 +21,16 @@ OpenRouter key into Hermes Vault (Keys page shows "⛔ no key in Hermes").
 Winner = 🟢 robot at lower $. Throw away after. Record result here; if Inkling wins, make it the Lab default coder in `~/hermes` model_preferences.json (ailab only).
 
 Continue phrase: `continue AI Lab Inkling pilot from the 2026-11-23 handoff`
+
+## Pilot result — 2026-11-24 (done)
+Key landed in Vault 05:2x (`/api/providers` openrouter has_key true). Run as two 🪞 Show & change lanes (⚖️ Compare has no robot),
+same ask: pointed at "Scan now" → "Rename this button to "Scan everything" and make it green", Hermes home, Scratch project.
+| lane | 🚦 robot | $ | steps |
+|---|---|---|---|
+| thinkingmachines/inkling-2-small | 🟢 (changed, clicked, no new errors) | $0.0055 | 12 — step cap, never said done |
+| deepseek/deepseek-v4.1-flash | 🟢 (same) | $0.0034 | 12 — step cap, never said done |
+**Winner: deepseek** (both green, ~38% cheaper). Inkling NOT made default; model_preferences.json untouched.
+- ZDR: privacy guard let Inkling through → a ZDR provider serves it on OpenRouter (resolves the UNVERIFIED line).
+- Both thrown away (live discard, New = Now, 0 held). Lab provider restored to claude.
+- Noticed: both hit the 12-step cap on a 1-spot edit — cap may be tight for Show & change. Robot clicks the real "Scan now" on the Now side → triggers a real (read-only) Hermes scan each run.
+- Inkling stays in the roster as an option (reads screenshots, 1M context).
