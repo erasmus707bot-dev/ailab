@@ -60,7 +60,13 @@ Add "why" (one short line) to every action. Following a build prompt? Add "modul
 Long files: a reply that is too long is CUT OFF and wasted. Put at most about 150 lines in one action — "write" the first
 part ending with a marker comment line, then "edit" that marker into the next part.
 The page runs in a locked-down preview: localStorage, sessionStorage and cookies THROW there. Wrap every use in try/catch
-with a fallback, or the whole script dies. A robot opens the finished page and presses its start button — page errors fail it."""
+with a fallback, or the whole script dies. A robot opens the finished page and presses its start button — page errors fail it.
+PHONE AND DESKTOP, always (Scott's rule): everything you build must work on a phone (390×844, touch, portrait) and a desktop
+(mouse + keyboard, wide window). No sideways scrolling. A game shows its play area AND its controls on ONE phone screen with
+no scrolling: size the board from the screen height (e.g. min(…vh, …vw)), put big touch buttons (≥48 px) under or beside it,
+fold extras (next/hold/stats) into a slim row. Keyboard keys still work on desktop. The robot checks the phone size too.
+Godot projects: there is no Godot here to test. In GDScript give types explicitly (var x: int = …) — `:=` fails when the
+type can't be inferred. Scott's 📦 Make it an app runs the real Godot check."""
 # 2026-11-24 (Tetris test run): Scott picks first — questions with choices + a recommended pick, then a plan he OKs.
 ASK_FIRST = """
 Scott chooses before you build. If the task builds something new, or leaves real choices open (look, rules, size, name):
@@ -630,7 +636,9 @@ class Run:
             if self.is_lane:
                 return {"answer": "(nobody is here to answer — go with the choice you recommend)"}
             self.question = {"kind": "ask", "text": items[0]["q"], "choices": items[0]["choices"], "items": items}
-            return {"answer": self._wait()}
+            ans = self._wait()
+            self._save_picks(items, ans)
+            return {"answer": ans}
         if kind == "plan":                                   # plan gate: Scott sees done / doing / left and presses Go
             steps = [_short(x, 160) for x in (a.get("steps") or []) if str(x).strip()][:8]   # 2026-11-24 touch test: [:80] cut "Reset butto"
             if self.prompt_plan:
@@ -727,6 +735,18 @@ class Run:
         if kind == "done":
             return {"done": True}
         return {"error": f"Unknown action {kind!r}."}
+
+    def _save_picks(self, items: list[dict], ans: str) -> None:
+        """2026-11-24: what Scott picks on a ❓ card goes to Lab memory (lab-picks), so it isn't asked again."""
+        if self.is_lane or not (self.cfg.get("flags") or {}).get("memory"):
+            return
+        try:
+            for q, a in memory.split_answer(items, ans):
+                r = memory.save_pick(q, a, self.project.get("id", ""))
+                if r.get("saved"):
+                    self.memory_saved.append(r["text"])
+        except Exception:                                     # noqa: BLE001 — memory is a help, never a blocker
+            pass
 
     def _start_msgs(self) -> list[dict]:
         linked = sorted(repos.linked(self.cfg))

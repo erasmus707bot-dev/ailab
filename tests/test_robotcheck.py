@@ -106,3 +106,22 @@ class NeverClickReal(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PhoneFit(unittest.TestCase):
+    """2026-11-24 Scott: everything works on a phone AND a desktop — a game you must scroll to play fails."""
+    BASE = {"status": 200, "button": "Start", "clicked": True, "moved": True, "errors": []}
+
+    def test_game_with_controls_below_the_fold_is_red(self):
+        r = rc.judge_play({**self.BASE, "phone": {"wide": False, "game": True, "board_cut": 0, "below": ["◀", "⟳"], "tall": 900}})
+        self.assertEqual(r["level"], "red")
+        self.assertIn("390×844", r["why"][0])
+
+    def test_sideways_scroll_is_red_and_fit_is_green(self):
+        self.assertEqual(rc.judge_play({**self.BASE, "phone": {"wide": True, "game": False}})["level"], "red")
+        r = rc.judge_play({**self.BASE, "phone": {"wide": False, "game": True, "board_cut": 0, "below": [], "tall": 0}})
+        self.assertEqual(r["level"], "green")
+        self.assertTrue(any("phone" in g for g in r["good"]))
+
+    def test_long_non_game_page_may_scroll(self):
+        self.assertEqual(rc.judge_play({**self.BASE, "phone": {"wide": False, "game": False, "below": ["More"], "tall": 2000}})["level"], "green")

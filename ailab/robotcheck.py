@@ -181,6 +181,15 @@ _START = """() => { const ok = b => { const r = b.getBoundingClientRect(), s = g
 _SEEN = """() => [...document.querySelectorAll('canvas')].map(c => { try { return c.toDataURL(); } catch (e) { return 'x'; } }).join('|')
   + '##' + (document.body ? document.body.innerText : '')"""
 PLAY_KEYS = ("ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space")
+PHONE = {"width": 390, "height": 844}       # 2026-11-24 Scott: everything must work on a phone AND a desktop
+# Phone fit: sideways overflow; for a canvas game, is the play area + every control on ONE screen (no scrolling to play)?
+_FIT = """() => { const W = innerWidth, H = innerHeight, de = document.documentElement;
+  const cv = [...document.querySelectorAll('canvas')].map(c => c.getBoundingClientRect()).filter(r => r.width * r.height > 20000)
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0];
+  const vis = e => { const r = e.getBoundingClientRect(), s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const below = [...document.querySelectorAll('button,[role=button]')].filter(vis).filter(e => e.getBoundingClientRect().top >= H - 4)
+    .map(e => (e.innerText || e.getAttribute('aria-label') || '?').trim().slice(0, 12));
+  return { wide: de.scrollWidth > W + 2, game: !!cv, board_cut: cv ? Math.round(cv.bottom - H) : 0, below: below.slice(0, 8), tall: Math.round(de.scrollHeight - H) }; }"""
 
 
 def _play_real(url, shots, cfg):
@@ -223,6 +232,23 @@ def _play_real(url, shots, cfg):
                         out["shots"].append("played.png")
             except Exception as e:                                   # noqa: BLE001
                 out["load_error"] = str(e).splitlines()[0][:200]
+            if not out.get("load_error"):                            # 📱 phone pass (2026-11-24)
+                try:
+                    ph = b.new_context(viewport=PHONE, is_mobile=True, has_touch=True, device_scale_factor=2).new_page()
+                    ph.goto(url, wait_until="load", timeout=TIMEOUT_MS)
+                    ph.wait_for_timeout(600)
+                    if ph.evaluate(_START) is not None:
+                        try:
+                            ph.locator("[data-lab-robot]").first.tap(timeout=4000)
+                            ph.wait_for_timeout(500)
+                        except Exception:                            # noqa: BLE001 — the desktop pass reports click problems
+                            pass
+                    out["phone"] = ph.evaluate(_FIT)
+                    if shots:
+                        (shots / "phone.png").write_bytes(ph.screenshot(full_page=False))
+                        out.setdefault("shots", []).append("phone.png")
+                except Exception as e:                               # noqa: BLE001
+                    out["phone"] = {"error": str(e).splitlines()[0][:200]}
         finally:
             b.close()
     out["errors"] = errs
@@ -250,6 +276,21 @@ def judge_play(v: dict) -> dict:
             good.append(f"The robot pressed “{name}” and some keys — the screen moved.")
         else:
             yellow.append(f"The robot pressed “{name}” and some keys, but nothing on screen changed. Look at it yourself.")
+    ph = v.get("phone")
+    if isinstance(ph, dict) and not ph.get("error"):
+        bad = []
+        if ph.get("wide"):
+            bad.append("the page is wider than the screen (sideways scrolling)")
+        if ph.get("game") and (ph.get("board_cut", 0) > 4 or ph.get("below")):
+            bad.append("the play area and its controls don't fit one screen" +
+                       (f" — {len(ph['below'])} button(s) ({', '.join(ph['below'][:4])}) are below the bottom edge" if ph.get("below") else "")
+                       + ": size the board to the screen height and keep the touch controls visible beside or under it")
+        if bad:
+            red.append("On a phone (390×844): " + "; ".join(bad) + ".")
+        else:
+            good.append("It fits a phone screen (390×844).")
+    elif isinstance(ph, dict):
+        yellow.append(f"📱 Phone check did not run: {ph['error']}")
     level = "red" if red else "yellow" if yellow else "green"
     return {"ran": True, "ok": level == "green", "level": level, "why": red + yellow, "good": good, "shots": v.get("shots") or []}
 

@@ -855,7 +855,7 @@ function startView() {
     resRobot.replaceChildren(); resBtns.replaceChildren(); resNote.textContent = "";
     const rb = run.robot;
     if (rb) resRobot.append(h("div", {}, h("b", {}, `${{ green: "🟢", yellow: "🟡", red: "🔴" }[rb.level] || "🟡"} Robot test: `), [...(rb.good || []), ...(rb.why || [])].join(" ")),
-      h("div", { class: "shots" }, (rb.shots || []).map(n => h("figure", {}, h("figcaption", {}, n === "opened.png" ? "📸 When it opened" : "📸 After the robot pressed start and some keys"),
+      h("div", { class: "shots" }, (rb.shots || []).map(n => h("figure", {}, h("figcaption", {}, n === "opened.png" ? "📸 When it opened" : n === "phone.png" ? "📱 On a phone (390×844)" : "📸 After the robot pressed start and some keys"),
         h("img", { src: `/api/agent/shot?id=${encodeURIComponent(run.id)}&name=${encodeURIComponent(n)}`, alt: "Robot screenshot", loading: "lazy" })))));
     if (running) return;
     const kept = store.get(keptKey, []), open = chg.filter(s => !kept.includes(run.id + ":" + s.n));
