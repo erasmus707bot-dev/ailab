@@ -246,14 +246,17 @@ class Run:
         self.memory_used: list[str] = []      # 🧠 M2: memory subjects given to the model (shown as "used: …")
         self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
         # M5 (2026-11-24): plain progress list from the prompt's "## Module N" headings + on-screen questions
-        self.plan = [m.group(1) for m in re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)", self.task, re.M)][:12]
+        heads = list(re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)[ \t]*[—:–.-]*[ \t]*(.*)$", self.task, re.M))[:12]
+        self.plan = [m.group(1) for m in heads]
+        self.prompt_plan = bool(heads)        # modules came from a build prompt (not the agent's own plan)
         self.module_now = ""
         self.question: dict | None = None
         self._answer = None
         self._answered = threading.Event()
         # 2026-11-24 workflow build (Tetris test run): no dead ends, questions first, plan gate, before/after, robot play-test
         self.ask_first = bool(ask_first) and not self.is_lane
-        self.plan_names: dict[str, str] = {}  # agent-made plan: step number -> plain name
+        self.plan_names: dict[str, str] = {m.group(1): f"{m.group(1)} · {m.group(2).strip()[:60]}"
+                                           for m in heads if m.group(2).strip()}   # number -> plain name
         self.asked = False
         self.plan_ok = bool(self.plan)        # a build prompt's modules are already the plan
         self.gate_nudged = False
@@ -265,6 +268,7 @@ class Run:
         self.selftest = None if self.is_lane else selftest
         self.robot: dict | None = None
         self.robot_tries = 0
+        self.proof_kind = ""                  # "tool" = a Hermes studio test proved it (e.g. Linux build pass)
         self.before = "" if self.is_lane else self._snapshot()
 
     # ---- public view ----
@@ -286,7 +290,7 @@ class Run:
         now = self.plan.index(self.module_now) if self.module_now in self.plan else (0 if self.steps else -1)
         out = []
         for i, m in enumerate(self.plan):
-            if i < now or (i == now and self.state == "done") or (self.plan_names and self.state == "done"):
+            if i < now or self.state == "done":
                 st = "done"
             elif i == now and self.state == "running":
                 st = "doing"
@@ -329,6 +333,14 @@ class Run:
         """🤖 The robot opens the finished page, presses its main button and some keys. None = nothing to test."""
         if not self.selftest or not self.changed:
             return None
+        page = [st.get("path", "") for st in self.steps if st.get("diff") and not st.get("undone")]
+        if not any("/" not in p and p.rsplit(".", 1)[-1].lower() in ("html", "htm", "js", "mjs", "css") for p in page):
+            if self.proof_kind == "tool":                 # a Hermes studio test already ran it for real
+                return None
+            self.robot = {"ran": False, "ok": False, "level": "yellow", "good": [], "shots": [], "skipped": True,
+                          "why": ["🤖 This build isn't the project's web page, so the robot couldn't play it — "
+                                  "nothing here proves it runs. Test it where it runs (phone / its own engine)."]}
+            return self.robot
         self.robot_tries += 1
         try:
             self.robot = self.selftest(self)
@@ -417,11 +429,11 @@ class Run:
         if step.get("action") in CHANGE_ACTIONS and not res.get("error") and not res.get("held"):
             self.changed = step["n"]
         elif step.get("action") == "run" and res.get("exit") == 0:
-            self.proved = step["n"]
+            self.proved, self.proof_kind = step["n"], "run"
         elif step.get("action") == "hermes" and step.get("tool") in PROOF_TOOLS and not res.get("error"):
             try:
                 if PROOF_TOOLS[step["tool"]](res):
-                    self.proved = step["n"]
+                    self.proved, self.proof_kind = step["n"], "tool"
             except Exception:                                        # noqa: BLE001 — odd result = no proof
                 pass
         self.steps.append(step)
@@ -506,7 +518,7 @@ class Run:
                 if not isinstance(it, dict):
                     continue
                 q = str(it.get("q") or it.get("question") or "").strip()[:300]
-                ch = [str(c)[:80] for c in (it.get("choices") or []) if str(c).strip()][:4]
+                ch = [str(c)[:160] for c in (it.get("choices") or []) if str(c).strip()][:4]
                 if not q:
                     continue
                 try:
@@ -524,7 +536,7 @@ class Run:
             return {"answer": self._wait()}
         if kind == "plan":                                   # plan gate: Scott sees done / doing / left and presses Go
             steps = [str(x).strip()[:80] for x in (a.get("steps") or []) if str(x).strip()][:8]
-            if self.plan and not self.plan_names:
+            if self.prompt_plan:
                 return {"note": "The build prompt already lists its modules — follow those."}
             if len(steps) < 2:
                 return {"error": "plan needs 2-8 short plain steps."}
@@ -625,7 +637,8 @@ class Run:
         if (self.cfg.get("flags") or {}).get("memory"):          # 🧠 M2 — what the Lab knows about Scott
             try:
                 if not self.is_lane:
-                    self.memory_saved = memory.learn(self.task, "an agent task")
+                    if not self.plan:                             # a build prompt's own rules are not Scott's words
+                        self.memory_saved = memory.learn(self.task, "an agent task")
                 mem, self.memory_used = memory.for_context(" ".join([self.project.get("name", "")] + linked), self.task)
             except Exception:                                     # noqa: BLE001 — memory is a help, never a blocker
                 mem = ""
@@ -643,6 +656,10 @@ class Run:
                 return False
             self.state = "unproven"
             self.why = ("🔴 The code checks passed, but the robot opened the page and it did not work: " + self._robot_words())[:600]
+            return True
+        if rb and rb.get("skipped"):                       # 2026-11-24 Android Tetris: a bracket count is not "it runs"
+            self.state = "unproven"
+            self.why = ("⚠️ Built, not run — nothing here could start it, so this is not a ✅. " + words)[:1800]
             return True
         self.state = "done"
         self.why = words
@@ -718,7 +735,7 @@ class Run:
                     self.undo[len(self.steps) + 1] = ch
                 self._record(step)
                 if res.get("done"):
-                    summary = str(a.get("summary") or "")[:500]
+                    summary = str(a.get("summary") or "")[:1500]   # 2026-11-24: was cut mid-sentence at 500
                     if self.proof_ok():
                         if self._finish((summary or "✅ Done") if self.changed else ("ℹ️ No files changed. " + summary)[:600]):
                             return

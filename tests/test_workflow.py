@@ -235,3 +235,58 @@ class Routes(AgentOn):
         self.assertEqual(self.req("/preview-before/scratch/..%2F..%2Fx/index.html")[0], 404)
         self.assertEqual(self.req(f"/api/agent/shot?id={rid}&name=opened.png")[0], 404)   # no robot ran: no picture
         self.assertEqual(self.req(f"/api/agent/shot?id={rid}&name=../../config.json")[0], 404)
+
+
+class LiveProofFixes(Base):
+    """2026-11-24 live proof (Android Tetris run): titles in the progress list, long choices, no prompt boilerplate in
+    memory, and no robot ✅ for a build that isn't the web page."""
+    TASK = "# T\n\n## Module 0 — Audit\nlook\n\n## Module 1 — Game logic\nbuild\n\n## Module 2: Sci-fi look\nstyle\n"
+
+    def test_progress_list_uses_module_titles(self):
+        r = agent.Run(Brain([DONE]), config.load({"mode": "standalone"}), self.project, "openrouter", "m", self.TASK)
+        self.assertEqual([p["module"] for p in r.plan_view()], ["0 · Audit", "1 · Game logic", "2 · Sci-fi look"])
+        r.loop()
+        self.assertTrue(all(p["state"] == "done" for p in r.plan_view()))
+
+    def test_build_prompt_refuses_a_second_plan(self):
+        r = agent.Run(Brain([act(action="plan", steps=["a", "b"]), DONE]), config.load({"mode": "standalone"}),
+                      self.project, "openrouter", "m", self.TASK)
+        r.loop()
+        self.assertIn("already lists", r.steps[0]["result"]["note"])
+
+    def test_long_choice_is_not_cut_at_80(self):
+        long = "Yes - write the Godot project files now (game logic + sci-fi theme), but APK build waits for the SDK"
+        r, t = Questions.start(self, Brain([act(action="ask", question="Gate?", choices=[long, "No"]), DONE]))
+        self.assertTrue(wait_for(lambda: r.question))
+        self.assertEqual(r.question["choices"][0], long)
+        r.answer("No")
+        t.join(5)
+
+    def test_robot_skips_a_build_that_is_not_the_page(self):
+        seen = []
+        r = agent.Run(Brain([act(action="write", path="game/Main.gd", content="extends Node", why="w"), OK, DONE]),
+                      config.load({"mode": "standalone"}), self.project, "openrouter", "m", "t",
+                      selftest=lambda run: seen.append(1) or {"level": "green", "why": []})
+        r.loop()
+        self.assertEqual((seen, r.state, r.robot["level"]), ([], "unproven", "yellow"))
+        self.assertIn("Built, not run", r.why)
+        self.assertIn("made it", r.why)                                  # the model's own words still shown
+
+
+import ailab.memory as _mem  # noqa: E402
+
+
+class PromptNotMemory(Base):
+    def test_build_prompt_text_is_not_learned(self):
+        calls = []
+        old = _mem.learn
+        _mem.learn = lambda *a, **k: calls.append(a) or []
+        try:
+            agent.Run(Brain([DONE]), config.load({"mode": "standalone", "flags": {"memory": True}}), self.project,
+                      "openrouter", "m", LiveProofFixes.TASK + "\nNever `git add -A`").loop()
+            agent.Run(Brain([DONE]), config.load({"mode": "standalone", "flags": {"memory": True}}), self.project,
+                      "openrouter", "m", "always use dark mode").loop()
+        finally:
+            _mem.learn = old
+        self.assertEqual(len(calls), 1)
+        self.assertIn("dark mode", calls[0][0])
