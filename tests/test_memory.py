@@ -104,5 +104,16 @@ class Server(Base):
         self.assertEqual(app.memory_get({"name": ["prefs"]})[1]["subject"]["lines"][0]["source"], "scott")
         self.assertEqual(app.memory_post("nope", {})[0], 404)
 
+
+class Learn(Base):
+    def test_learns_stated_preferences_only(self):
+        saved = M.learn("Make the button green. I prefer big buttons with icons. Never use red for small errors.")
+        self.assertEqual(len(saved), 2)
+        texts = [l["text"] for l in M.read("lab-learned")["lines"]]
+        self.assertTrue(any("big buttons" in t for t in texts))
+        self.assertFalse(any("Make the button" in t for t in texts))
+        self.assertEqual(M.learn("I want my medication reminders at 8"), [])        # sensitive → never auto-saved
+        self.assertEqual(M.learn("I prefer big buttons with icons."), [])           # already known
+
 if __name__ == "__main__":
     unittest.main()

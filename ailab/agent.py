@@ -17,7 +17,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import config, preview, repos, secretscan, store
+from . import config, memory, preview, repos, secretscan, store
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
 from .spend import SpendBlocked
@@ -220,6 +220,8 @@ class Run:
         self.refused_done = 0
         self.stuck_after = float(cfg.get("stuck_after_s", STUCK_AFTER_S))
         self.last_progress = time.time()
+        self.memory_used: list[str] = []      # 🧠 M2: memory subjects given to the model (shown as "used: …")
+        self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
 
     # ---- public view ----
     def view(self) -> dict:
@@ -227,7 +229,8 @@ class Run:
                 "step_cap": self.step_cap, "usd": round(self.usd, 6), "cap_usd": self.cap_usd,
                 "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
                 "project": self.project["id"], "provider": self.provider, "model": self.model,
-                "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info()}
+                "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info(),
+                "memory_used": self.memory_used, "memory_saved": self.memory_saved}
 
     def proof_ok(self) -> bool:
         """True when nothing was changed, or a check passed after the last change."""
@@ -437,8 +440,17 @@ class Run:
 
     def loop(self) -> None:
         linked = sorted(repos.linked(self.cfg))
+        mem = ""
+        if (self.cfg.get("flags") or {}).get("memory"):          # 🧠 M2 — what the Lab knows about Scott
+            try:
+                if not self.is_lane:
+                    self.memory_saved = memory.learn(self.task, "an agent task")
+                mem, self.memory_used = memory.for_context(" ".join([self.project.get("name", "")] + linked), self.task)
+            except Exception:                                     # noqa: BLE001 — memory is a help, never a blocker
+                mem = ""
         msgs = [{"role": "system", "content": SYSTEM + (HERMES_GUIDE if self.connected else "")
-                 + (REPO_GUIDE.format(names=", ".join(linked)) if linked else "")},
+                 + (REPO_GUIDE.format(names=", ".join(linked)) if linked else "")
+                 + (("\n\n" + mem + "\nUse it to match how Scott likes things; the task still wins.") if mem else "")},
                 {"role": "user", "content": f"Task: {self.task}\nFiles: "
                  + ", ".join(f["path"] for f in preview.list_root(self.root))}]
         try:

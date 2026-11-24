@@ -318,3 +318,24 @@ def for_context(project: str = "", ask: str = "", budget_chars: int = 6000) -> t
         if size >= budget_chars:
             break
     return ("What you know about Scott (from his Lab memory):\n" + "\n\n".join(out)) if out else "", used
+
+
+# ---- auto-save what Scott states (M2) ---------------------------------------------------------------------------
+# Only his own durable statements about how he wants things ("I prefer…", "always…", "never…", "from now on…").
+# A guess at intent is never saved; sensitive lines never are. Goes to the "lab-learned" subject, tagged [lab].
+STATED_RX = re.compile(r"(?:^|(?<=[.!?\n]))\s*((?:i (?:always |really )?(?:like|love|prefer|want|need|hate|dislike|don'?t like|"
+                       r"don'?t want|can'?t read|use|work)|i'?m (?:a|an|not)|always |never |from now on|going forward|"
+                       r"please always|please never|my (?:rule|preference) is)[^.!?\n]{4,240})", re.I)
+LEARNED = "lab-learned"
+
+
+def learn(text: str, where: str = "") -> list[str]:
+    saved = []
+    for m in STATED_RX.finditer(text or ""):
+        fact = m.group(1).strip().rstrip(",;:")
+        fact = fact[0].upper() + fact[1:]
+        r = add_fact(LEARNED, f"{fact}" + (f" (said in {where})" if where else ""), "lab",
+                     "Things Scott said in Lab sessions about how he wants things")
+        if r.get("saved"):
+            saved.append(fact)
+    return saved

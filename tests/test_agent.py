@@ -214,6 +214,31 @@ class AgentOn(Srv):
         self.assertEqual(r["code"], "bad_args")
 
 
+
+class MemoryInRun(Base):
+    """🧠 M2 (2026-11-24): with the memory flag on, the agent gets Scott's memory and saves what he states."""
+    def test_memory_flows_into_system_prompt(self):
+        from ailab import memory
+        memory.add_fact("claude-preferences", "numbered menus with a recommendation", "scott")
+        seen = []
+        b = Brain([act(action="done", summary="nothing to do")])
+        orig = b.chat
+        b.chat = lambda project, prov, model, msgs, *a, **k: (seen.append(msgs[0]["content"]), orig(project, prov, model, msgs, *a, **k))[1]
+        r = self.run_agent(b, task="I prefer dark mode by default. Look at the page.",
+                           flags={**config.DEFAULTS["flags"], "memory": True})
+        self.assertIn("numbered menus", seen[0])
+        self.assertIn("claude-preferences", r.view()["memory_used"])
+        self.assertTrue(r.view()["memory_saved"])
+
+    def test_memory_off_means_nothing_added(self):
+        seen = []
+        b = Brain([act(action="done", summary="x")])
+        orig = b.chat
+        b.chat = lambda project, prov, model, msgs, *a, **k: (seen.append(msgs[0]["content"]), orig(project, prov, model, msgs, *a, **k))[1]
+        r = self.run_agent(b, task="I prefer dark mode.")
+        self.assertNotIn("Lab memory", seen[0])
+        self.assertEqual(r.view()["memory_saved"], [])
+
 if __name__ == "__main__":
     unittest.main()
 

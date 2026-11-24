@@ -451,10 +451,21 @@ class App:
         msgs = b.get("messages")
         if not isinstance(msgs, list) or not msgs:
             return 400, {"ok": False, "code": "bad_args", "message": "Nothing to send."}
+        used, saved = [], []
+        if self.cfg["flags"].get("memory"):                        # 🧠 M2: what the Lab knows + save what he states
+            last = next((str(m.get("content") or "") for m in reversed(msgs) if isinstance(m, dict) and m.get("role") == "user"), "")
+            try:
+                saved = memory.learn(last, "Ask models")
+                mem, used = memory.for_context(proj.get("name", ""), last, budget_chars=3000)
+                if mem:
+                    msgs = [{"role": "system", "content": mem}] + [m for m in msgs if isinstance(m, dict)]
+            except Exception:                                     # noqa: BLE001 — memory never blocks a chat
+                pass
         r = self.lab.chat(proj, str(b.get("provider") or ""), str(b.get("model") or ""), msgs,
                           int(b.get("max_tokens") or 1024), task=f"lab:{proj['id']}")
         return 200, {"ok": True, "text": r.text, "provider": r.provider, "model": r.model, "usd": r.usd,
-                     "priced": r.priced, "tokens_in": r.tokens_in, "tokens_out": r.tokens_out, "spend": self.spend()}
+                     "priced": r.priced, "tokens_in": r.tokens_in, "tokens_out": r.tokens_out, "spend": self.spend(),
+                     "memory_used": used, "memory_saved": saved}
 
 
 ERRORS = ((PrivacyRefused, 403, "privacy", "🔒"), (SpendBlocked, 402, "over_cap", "💲"),

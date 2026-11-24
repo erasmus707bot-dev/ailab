@@ -807,7 +807,16 @@ function msgEl(m) {
   const e = h("div", { class: "msg" + (m.role === "user" ? " me" : "") + (m.err ? " err" : "") }, m.content);
   if (m.meta) e.append(h("span", { class: "meta" },
     `${m.meta.model} · $${m.meta.usd.toFixed(4)}${m.meta.priced ? "" : " ~"} · ${m.meta.tokens_in}+${m.meta.tokens_out} tok`));
+  if (m.meta) e.append(memLine(m.meta));
   return e;
+}
+
+/* 🧠 M2: which memory the model got, and what was saved from what Scott said */
+function memLine(x) {
+  const used = x.memory_used || [], saved = x.memory_saved || [];
+  if (!used.length && !saved.length) return null;
+  return h("span", { class: "meta" }, (used.length ? `🧠 used: ${used.join(", ")}` : "") +
+    (saved.length ? `${used.length ? " · " : ""}📝 saved to memory: ${saved.map(t => "“" + t + "”").join(" ")}` : ""));
 }
 
 /* ---------- live preview (flag `preview`) ---------- */
@@ -1024,6 +1033,7 @@ function agentView(wb) {
   function paint(run) {
     status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
+    const ml = memLine(run); if (ml) steps.append(h("div", { class: "step" }, ml));
     run.steps.forEach(s => {
       const r = s.result || {};
       const cls = "step" + (r.held ? " held" : "") + (r.error ? " err" : "");
