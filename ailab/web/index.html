@@ -258,6 +258,20 @@
   .stagebox.busy .si { animation: stagepulse 1.6s ease-in-out infinite; }
   @keyframes stagepulse { 50% { transform: scale(1.12); opacity: .75; } }
   @media (prefers-reduced-motion: reduce) { .stagebox.busy .si { animation: none; } }
+  /* 📦 What was made + ✏️ Change it (2026-11-24: "I need the output more available and obvious") */
+  .madecard, .changebox { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px;
+    border: 1px solid var(--accent); background: var(--panel); }
+  .madecard h3, .changebox h3 { margin: 0; font-size: 1.08rem; }
+  .mtiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+  .mtile { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); min-width: 0; }
+  .mtile .mhd { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; overflow-wrap: anywhere; }
+  .mtile img { width: 100%; height: auto; border-radius: 8px; }
+  .mtile .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .docview.short { max-height: 40vh; }
+  .changebox textarea { width: 100%; min-height: 66px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel2); color: inherit; padding: 10px; font: inherit; }
+  .changebox .btn { min-height: 44px; }
+  .gatebtn { min-height: 48px; font-size: 1.02rem; }
   /* 🖼 picture results */
   .made { display: flex; flex-direction: column; gap: 10px; }
   .pics { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
@@ -596,7 +610,9 @@ function promptView() {
   } }, "📄 Plain template (free)");
   const send = (target) => async () => {
     if (!out.value.includes("## Module 0")) { say("The prompt needs a “## Module 0” (the audit + gate)."); return; }
-    const r = await api("/api/prompt/send", { md: out.value, target, repo: repoSel.value, project: p.id,
+    await ctypesLoad();
+    const tst = store.get("ctypes." + p.id, { ids: [], manual: false });
+    const r = await api("/api/prompt/send", { md: out.value, target, repo: repoSel.value, project: p.id, ctypes: tst.manual ? tst.ids : ctypeGuess(idea.value),
       provider: target === "lab" && agentModel() ? agentProv : prov, model: target === "lab" && agentModel() ? agentModel() : modelSel.value });
     if (!r.ok) { say("✗ " + (r.message || r.code)); return; }
     if (target === "lab") { store.set("agrun." + p.id, r.run.id); say(`🤖 Lab agent started on Module 0 · saved ${r.file}`); go("agent"); return; }
@@ -859,13 +875,7 @@ function startView() {
       }
       return;
     }
-    const doc = [...chg].reverse().find(s => /\.(md|txt)$/i.test(s.path || ""));
-    if (doc && run.robot_mode === "none") {                    /* 📝 text runs: show the writing itself */
-      madeBox.hidden = false;
-      const pre = h("div", { class: "docview" }, "⏳");
-      madeBox.append(h("b", {}, `📝 ${doc.path}`), pre);
-      fetch(`/preview/${p.id}/${doc.path}?v=${Date.now()}`).then(r => r.ok ? r.text() : Promise.reject()).then(t => { pre.textContent = t; }).catch(() => { pre.textContent = "Couldn't open it — see 🔎 Step by step."; });
-    }
+    if (!running) { const mc = madeCard(p.id, run); if (mc) { madeBox.hidden = false; madeBox.append(mc); } }   /* 📦 every file made, one tile each */
   }
   /* 2026-11-24 (Scott: "too difficult to navigate"): 📦 is ALWAYS on screen at the top of this pane — no run needed. */
   const shipBar = h("div", { class: "shipbar" },
@@ -1087,6 +1097,52 @@ function autosave(text) {
 /* 2026-11-23: every model shows a best-use tag + $ tier (ailab/roster.py). ⭐ rows keep their hand-picked job. */
 const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "", lim = t.limits ? `${t.limits} ` : "";
   return r.picks && r.picks[m] ? `⭐ ${lim}${m} — ${r.picks[m]}${tier}` : `${lim}${m} — ${t.use || ""}${tier}`; };
+/* 📦 What was made: one tile per file made or changed — pictures shown, writing shown, pages one tap away */
+const KIND_ICON = { picture: "🖼", page: "🌐", doc: "📝", code: "📄" };
+function madeCard(pid, run) {
+  const made = run.made || [];
+  if (!made.length) return null;
+  const tiles = made.map(m => {
+    const url = `/preview/${pid}/${m.path}`, name = m.path.split("/").pop(), dir = m.path.split("/").slice(0, -1).join("/");
+    let body = null;
+    if (m.kind === "picture") body = h("a", { href: url, target: "_blank", rel: "noopener", title: "Full size" }, h("img", { src: `${url}?v=${run.id}`, alt: name, loading: "lazy" }));
+    if (m.kind === "doc") { body = h("div", { class: "docview short" }, "⏳");
+      fetch(`${url}?v=${Date.now()}`).then(r => r.ok ? r.text() : Promise.reject()).then(t => { body.textContent = t.length > 1500 ? t.slice(0, 1500) + "\n…" : t; }).catch(() => { body.textContent = "Couldn't open it here — use ⤢ Read all."; }); }
+    const open = { page: "👁 Open it", doc: "⤢ Read all", picture: "⤢ Full size" }[m.kind] || "📄 View";
+    return h("div", { class: "mtile" },
+      h("div", { class: "mhd" }, h("span", { "aria-hidden": "true" }, KIND_ICON[m.kind] || "📄"), h("b", {}, name), h("span", { class: "note" }, (m.new ? "new" : "changed") + (dir ? ` · ${dir}` : ""))),
+      body,
+      h("div", { class: "runbar" }, h("a", { class: "btn" + (m.kind === "page" ? " pri" : ""), href: url, target: "_blank", rel: "noopener" }, open),
+        h("a", { class: "btn", href: url, download: name }, "⬇ Download")));
+  });
+  return h("section", { class: "madecard", "aria-label": "What was made" }, h("h3", {}, `📦 What was made (${made.length})`), h("div", { class: "mtiles" }, tiles));
+}
+/* ✏️ Change it: your own words, or 🪄 Help me say it (the writer model makes them clear — you see and edit before it runs) */
+function changeBox(pid, run, startWith, pm) {
+  if (!run || run.state === "running" || !startWith || !((run.made || []).length || run.why)) return null;
+  const ta = h("textarea", { rows: 2, "aria-label": "What to change", placeholder: "What should change? Your own words are fine — e.g. make the title bigger, add a camel" });
+  const note = h("span", { class: "note", role: "status" });
+  const ids = run.ctypes && run.ctypes.length ? run.ctypes : null;
+  const build = text => {
+    if (run.picture) { const pics = run.pictures || [], last = pics[pics.length - 1] || {};
+      const base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].trim();
+      return `${base}\nChange: ${text}` + (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : ""); }
+    const made = (run.made || []).map(m => m.path);
+    return `Change what you just made${made.length ? ` (${made.join(", ")})` : ""}: ${text}\nRead those files first, change only what this asks, keep everything else the same, check it, then done.`;
+  };
+  const go = h("button", { class: "btn pri", type: "button", onclick: () => {
+    const t = ta.value.trim(); if (!t) { note.textContent = "✏️ Type what to change first."; ta.focus(); return; }
+    note.textContent = "▶ Starting…"; startWith(build(t), ids, false); } }, "▶ Make this change ⭐");
+  const help = h("button", { class: "btn", type: "button", title: "Type a few rough words — the writer model makes them clear, you check them before anything runs", onclick: async () => {
+    const t = ta.value.trim(); if (!t) { note.textContent = "✏️ Type a few rough words first — I'll make them clear."; ta.focus(); return; }
+    help.disabled = true; note.textContent = "🪄 Writing it clearly…";
+    const r = await api("/api/agent/rephrase", { project: pid, text: t, provider: pm.prov, model: pm.model, made: (run.made || []).map(m => m.path) });
+    help.disabled = false;
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't help just now — your own words work too."}`; return; }
+    ta.value = r.text; note.textContent = `🪄 Here it is ($${(r.usd || 0).toFixed(4)}) — change anything you like, then ▶ Make this change.`; ta.focus(); } }, "🪄 Help me say it");
+  ta.onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); go.click(); } };
+  return h("section", { class: "changebox" }, h("h3", {}, "✏️ Change it"), ta, h("div", { class: "runbar" }, go, help), note);
+}
 /* 📣 stage card: what the run is doing right now, in plain words, plus time and money so far */
 const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
 function stageCard(run) {
@@ -1480,6 +1536,13 @@ function agentView(wb) {
     status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.real_steps != null ? run.real_steps : run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
     steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
+    if (run.state !== "running") {                         /* 📦 + ✏️ right under it (2026-11-24) */
+      if (run.gate) steps.append(h("button", { class: "btn pri gatebtn", type: "button", title: "Carry on with the build prompt — it stops again at the next check-in",
+        onclick: () => startWith(run.gate.next_task, run.ctypes && run.ctypes.length ? run.ctypes : null, false) }, `▶ Go on to ${run.gate.next_name} ⭐`));
+      const mc = madeCard(p.id, run); if (mc) steps.append(mc);
+      else if (run.state === "done" && !run.gate) steps.append(h("div", { class: "step" }, "ℹ️ No files were made or changed in this run."));
+      const cb = changeBox(p.id, run, startWith, { prov, model: modelSel.value }); if (cb) steps.append(cb);
+    }
     const ml = memLine(run); if (ml) steps.append(h("div", { class: "step" }, ml));
     /* M5: plain progress list from the build prompt's modules */
     if ((run.plan || []).length) { const IC = { done: "✅", doing: "🔨", left: "⏳" };

@@ -258,7 +258,10 @@ class App:
                 if not self.cfg["flags"].get("agent"):
                     return _off("agent")
                 task = ("Follow this build prompt. Do Module 0 first and stop at its gate.\n\n" + md)[:4000]
-                run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""), task)
+                # 2026-11-24: the 🧩 chips go along (🖼 → a picture, not an audit) and the robot still tests pages
+                run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""), task,
+                                        selftest=self._play_test,
+                                        ctypes=b.get("ctypes") if isinstance(b.get("ctypes"), list) else [])
                 return 200, {"ok": True, "file": str(f), "run": run.view()}
             if target == "claude":
                 q = promptbuilder.queue_for_claude(f, rname or "hermes", str(rpath or Path.home() / "hermes"))
@@ -348,6 +351,28 @@ class App:
         return robotcheck.play(f"http://{host}:{port}/preview/{run.project['id']}/",
                                run.log.parent / "shots" / run.id, self.cfg,
                                mode=creation.robot_mode(getattr(run, "ctypes", [])))
+
+    REPHRASE_SYS = ("Scott wants to change something the AI Lab just made. Rewrite his rough words as ONE clear, specific "
+                    "change request (1-3 short sentences) that an AI builder can follow. Keep everything he asked for, "
+                    "add nothing he didn't ask for, use plain words, no lists, no quotes. Reply with the request only.")
+
+    def agent_rephrase(self, b: dict) -> tuple[int, dict]:
+        """🪄 Help me say it: rough words → a clear change request Scott can edit before it runs."""
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        text = str(b.get("text") or "").strip()[:1500]
+        if not text:
+            return 400, {"ok": False, "code": "bad_args", "icon": "✏️", "message": "Type what you want changed first."}
+        proj = store.project(self._pid(b.get("project")))
+        made = ", ".join(str(x)[:80] for x in (b.get("made") or [])[:8] if isinstance(x, str))
+        ctx = f"What was made: {made}.\n" if made else ""
+        r = self.lab.chat(proj, str(b.get("provider") or ""), str(b.get("model") or ""),
+                          [{"role": "system", "content": self.REPHRASE_SYS},
+                           {"role": "user", "content": ctx + "His words: " + text}], 300, cap_usd=0.05, task="lab-rephrase")
+        out = (r.text or "").strip().strip('"').strip()
+        if not out or len(out) > 1200:
+            out = text
+        return 200, {"ok": True, "text": out, "usd": round(float(r.usd or 0), 6)}
 
     def agent_more(self, b: dict) -> tuple[int, dict]:
         """▶ Continue a run that hit its step limit."""
@@ -796,6 +821,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(getattr(app, LIVE_POST[p]), b)
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)
+            if p == "/api/agent/rephrase":
+                return self._run(app.agent_rephrase, b)
             if p == "/api/agent/more":
                 return self._run(app.agent_more, b)
             if p == "/api/agent/resume":

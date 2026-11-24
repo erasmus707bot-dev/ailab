@@ -319,7 +319,8 @@ class Run:
                 "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None,
                 "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored,
                 **self.type_view(), "picture": getattr(self, "picture", False), "pictures": getattr(self, "pictures", []),
-                "stage": self.stage_view(), "elapsed_s": int(time.time() - getattr(self, "started", time.time()))}
+                "stage": self.stage_view(), "elapsed_s": int(time.time() - getattr(self, "started", time.time())),
+                "made": self.made_view(), "gate": self.gate_info()}
 
     # 📣 M3 (2026-11-24, "I need to know what is going on"): one plain line for what the run is doing right now
     STAGE_WORDS = {"list": ("📂", "Looking at the files"), "read": ("📖", "Reading {path}"), "write": ("✍️", "Writing {path}"),
@@ -329,6 +330,9 @@ class Run:
 
     def stage_view(self) -> dict:
         st = getattr(self, "stage", None)
+        g = self.gate_info() if self.state != "running" else None
+        if g:
+            return {"icon": "⏸", "text": f"{g['done_name']} is done — check it, then go on to {g['next_name']}", "busy": False}
         if self.state != "running":
             done = {"done": ("✅", "Done"), "unproven": ("⚠️", "Finished — not proven, look before you keep it"),
                     "capped": ("⏸", "Stopped at the step or money limit"), "stopped": ("⏹", "Stopped"),
@@ -357,14 +361,59 @@ class Run:
         return {"ctypes": ids, "ship": creation.ship_targets(ids), "handoffs": creation.handoffs(ids),
                 "robot_mode": creation.robot_mode(ids)}
 
+    GATE_RX = re.compile(r"^Follow this build prompt\.\s*(?:Modules already done: [^.]*\.\s*)?Do Module (\S+?) (?:first|next) and stop at its gate\.")
+
+    def gate_info(self) -> dict | None:
+        """A build-prompt run told to stop at a module gate, now finished: which module is done, which comes next."""
+        m = self.GATE_RX.match(self.task or "")
+        if not m or self.state not in ("done", "unproven") or not self.plan:
+            return None
+        done = self.module_now or m.group(1)
+        idx = self.plan.index(done) if done in self.plan else -1
+        nxt = self.plan[idx + 1] if 0 <= idx < len(self.plan) - 1 else None
+        if not nxt:
+            return None
+        body = self.GATE_RX.sub("", self.task, count=1).lstrip()
+        before = [x for x in self.plan[:idx + 1]]
+        return {"done": done, "done_name": self.plan_names.get(done) or f"Module {done}", "next": nxt,
+                "next_name": self.plan_names.get(nxt) or f"Module {nxt}",
+                "next_task": (f"Follow this build prompt. Modules already done: {', '.join(before)}. "
+                              f"Do Module {nxt} next and stop at its gate.\n\n" + body)[:4000]}
+
+    # 📦 What was made (2026-11-24, Scott: "I need the output more available and obvious")
+    KIND_EXT = {"picture": ("png", "jpg", "jpeg", "webp", "gif", "svg"), "page": ("html", "htm"), "doc": ("md", "txt")}
+
+    def made_view(self) -> list[dict]:
+        out: dict[str, dict] = {}
+        for st in self.steps:
+            path = str(st.get("path") or "")
+            if not path or st.get("undone"):
+                continue
+            res = st.get("result") if isinstance(st.get("result"), dict) else {}
+            if st.get("action") in CHANGE_ACTIONS and st.get("diff") and not res.get("error") and not res.get("held"):
+                new = path not in out and "--- /dev/null" in str(st.get("diff"))[:200]
+            elif st.get("action") == "picture" and not res.get("error"):
+                new = True
+            else:
+                continue
+            ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+            kind = next((k for k, exts in self.KIND_EXT.items() if ext in exts), "code")
+            out[path] = {"path": path, "kind": kind, "new": out.get(path, {}).get("new", new), "step": st.get("n")}
+        for pic in getattr(self, "pictures", []) or []:
+            out.setdefault(pic["path"], {"path": pic["path"], "kind": "picture", "new": True, "step": None})
+        return list(out.values())
+
     def plan_view(self) -> list[dict]:
         """✅ done / 🔨 doing / ⏳ left for each module of the build prompt."""
         if not self.plan:
             return []
         now = self.plan.index(self.module_now) if self.module_now in self.plan else (0 if self.steps else -1)
         out = []
+        gated = self.gate_info()                              # stopped at a module check-in: later modules are NOT done
         for i, m in enumerate(self.plan):
-            if i < now or self.state == "done":
+            if gated and i > now:
+                st = "left"
+            elif i < now or self.state == "done":
                 st = "done"
             elif i == now and self.state == "running":
                 st = "doing"
