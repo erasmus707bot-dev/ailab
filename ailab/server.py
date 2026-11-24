@@ -317,6 +317,10 @@ class App:
     def agents(self):
         if getattr(self, "_agents", None) is None:
             self._agents = agent.Agents()
+            try:                                                   # 2026-11-24: runs saved before a restart come back
+                self._agents.restore(self.lab, self.cfg, self._play_test)
+            except Exception:                                      # noqa: BLE001 — never block the Lab starting
+                pass
         return self._agents
 
     def agent_start(self, b: dict) -> tuple[int, dict]:
@@ -348,6 +352,12 @@ class App:
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
         return 200, {"ok": True, "run": self.agents.more(str(b.get("id") or "")).view()}
+
+    def agent_resume(self, b: dict) -> tuple[int, dict]:
+        """▶ Resume a run a Lab restart caught mid-step (2026-11-24)."""
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        return 200, {"ok": True, "run": self.agents.resume(str(b.get("id") or "")).view()}
 
     def agent_shot(self, rid: str, name: str) -> bytes | None:
         """A robot screenshot of one run (png)."""
@@ -769,6 +779,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_start, b)
             if p == "/api/agent/more":
                 return self._run(app.agent_more, b)
+            if p == "/api/agent/resume":
+                return self._run(app.agent_resume, b)
             if p == "/api/agent/answer":
                 return self._run(app.agent_answer, b)
             if p == "/api/agent/stop":

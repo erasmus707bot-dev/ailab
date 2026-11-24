@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -34,6 +35,8 @@ AGENT_TOOLS = ("jobs_list", "job_get", "job_wait", "addon_build", "print3d_submi
                "pidima_status", "pidima_source", "pidima_propose")
 MAX_OUT = 4000
 RUN_TIMEOUT_S = 60
+RESTORE_WITHIN_S = 24 * 3600   # 2026-11-24 touch test: runs saved to disk come back after a Lab restart for a day
+UNDO_SAVE_MAX = 2_000_000      # undo texts kept on disk per run (bigger ones lose ↩ Undo after a restart)
 STUCK_AFTER_S = 600        # 2026-11-23 fix 5: no new step for this long = stuck (cfg "stuck_after_s")
 # Hermes tool results that prove the work (fix 5). Anything else is not a check.
 PROOF_TOOLS = {"mario_level_check": lambda r: r.get("playable") is True,
@@ -279,6 +282,12 @@ class Run:
         self.robot_tries = 0
         self.proof_kind = ""                  # "tool" = a Hermes studio test proved it (e.g. Linux build pass)
         self.before = "" if self.is_lane else self._snapshot()
+        # 2026-11-24 touch test finding 4: a Lab restart dropped the run ("No such run" on ▶ Go) → saved to disk as it goes
+        self.pending_action: dict | None = None   # the action being carried out right now (replayed after a restart)
+        self._replay: dict | None = None
+        self.restored = False
+        self.live = False                         # a loop thread is working on this run in this Lab process
+        self.shutting_down = False
 
     # ---- public view ----
     def view(self) -> dict:
@@ -290,7 +299,8 @@ class Run:
                 "memory_used": self.memory_used, "memory_saved": self.memory_saved,
                 "plan": self.plan_view(), "question": self.question,
                 "real_steps": len(self.steps) - self.bad, "long_replies": self.long_used, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
-                "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None}
+                "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None,
+                "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored}
 
     def plan_view(self) -> list[dict]:
         """✅ done / 🔨 doing / ⏳ left for each module of the build prompt."""
@@ -328,6 +338,7 @@ class Run:
 
     def _wait(self) -> str:
         """Block until Scott answers the on-screen card. Waiting for him is not "stuck"."""
+        self.save()                                                   # the card comes back after a restart
         try:
             while not self._answered.wait(1.0):
                 self._check_stop()
@@ -390,7 +401,7 @@ class Run:
 
     def stuck_info(self) -> dict:
         quiet = max(0.0, time.time() - self.last_progress)
-        return {"quiet_s": round(quiet), "stuck": self.state == "running" and quiet >= self.stuck_after,
+        return {"quiet_s": round(quiet), "stuck": self.state == "running" and not self.question and quiet >= self.stuck_after,
                 "stuck_after_s": round(self.stuck_after)}
 
     def undo_step(self, n: int) -> dict:
@@ -418,6 +429,81 @@ class Run:
     def stop(self, why: str = "⏹ Stopped by you") -> None:
         self.why = why
         self.stop_flag.set()
+        if not self.live and self.state in ("running", "interrupted"):    # restored run, nothing working on it
+            self.state, self.question = "stopped", None
+            self.save()
+
+    # ---- survive a Lab restart (2026-11-24 touch test finding 4) ----
+    TRANSIENT = ("lab", "cfg", "project", "root", "log", "stop_flag", "_answered", "selftest", "_change", "undo",
+                 "live", "shutting_down", "_replay")
+
+    def state_file(self) -> Path:
+        return self.log.with_suffix(".state.json")
+
+    def save(self) -> None:
+        """Everything needed to pick the run up again, written whole or not at all. ⚖️ Compare lanes are not kept."""
+        if self.is_lane or self.shutting_down:
+            return
+        try:
+            d = {k: v for k, v in vars(self).items() if k not in self.TRANSIENT}
+            d.update(project_id=self.project["id"], root=str(self.root), log=str(self.log), saved_at=time.time())
+            undo, room = {}, UNDO_SAVE_MAX
+            for n in sorted(self.undo, reverse=True):                 # newest first; old big ones drop off
+                rel, before, after = self.undo[n]
+                size = len(before or "") + len(after)
+                if size <= room:
+                    undo[str(n)], room = [rel, before, after], room - size
+            d["undo"] = undo
+            f = self.state_file()
+            tmp = f.with_name(f".{f.name}.tmp")
+            tmp.write_text(json.dumps(d, default=str))
+            os.replace(tmp, f)
+        except Exception:                                             # noqa: BLE001 — saving is a help, never a blocker
+            pass
+
+    @classmethod
+    def restore(cls, lab, cfg: dict, f: Path, selftest=None) -> "Run | None":
+        """Bring a saved run back. Waiting on a card → still waiting. Caught mid-step → interrupted (▶ Resume).
+        Never starts working by itself."""
+        try:
+            d = json.loads(f.read_text())
+            project = store.project(d["project_id"])
+            if not project:
+                return None
+            r = cls.__new__(cls)
+            for k, v in d.items():
+                if k not in ("project_id", "saved_at"):
+                    setattr(r, k, v)
+            r.lab, r.cfg, r.project, r.selftest = lab, cfg, project, selftest
+            r.root, r.log = Path(d["root"]), Path(d["log"])
+            r.undo = {int(n): tuple(v) for n, v in (d.get("undo") or {}).items()}
+            r.stop_flag, r._answered, r._change, r._replay = threading.Event(), threading.Event(), None, None
+            r.live = r.shutting_down = False
+            r.restored = True
+            r.connected = cfg.get("mode") == "connected"
+            r.last_progress = time.time()
+            if r.state == "running":
+                if r.question:
+                    r.why = "🔄 The Lab restarted — your answer carries the run on."
+                else:
+                    r.state, r.why = "interrupted", "🔄 The Lab restarted while this run was working. Tap ▶ Resume to carry on."
+            return r
+        except Exception:                                             # noqa: BLE001 — a bad file is skipped, not fatal
+            return None
+
+    def prepare_resume(self) -> None:
+        """After a restart: replay a pending question/plan; any other half-done step is told to the model."""
+        a = self.pending_action
+        if a and a.get("action") in ("ask", "plan"):
+            self._replay = a
+        elif self.msgs and self.msgs[-1]["role"] == "assistant":
+            self.pending_action = None
+            note = {"error": "The Lab restarted during this step, so it may or may not have happened. "
+                             "Check the files (list/read), then carry on."}
+            self.msgs.append({"role": "user", "content": "RESULT: " + json.dumps(note)})
+        self.state, self.why = "running", ""
+        self.stop_flag.clear()
+        self.last_progress = time.time()
 
     # ---- loop ----
     def _check_stop(self) -> None:
@@ -446,8 +532,10 @@ class Run:
             except Exception:                                        # noqa: BLE001 — odd result = no proof
                 pass
         self.steps.append(step)
+        self.pending_action = None
         with open(self.log, "a") as fh:
             fh.write(json.dumps(step, default=str) + "\n")
+        self.save()
 
     def _inside(self, rel: str) -> Path | None:
         if not rel or rel.startswith(("/", "~")) or "\\" in rel:
@@ -691,53 +779,68 @@ class Run:
                 pass
         return self.lab.chat(self.project, self.provider, self.model, msgs, base, cap_usd=left, task=task)
 
+    def _next_action(self, msgs: list[dict]):
+        """One model reply → (action, reply). (None, None) = a limit ended the run (state set) or an unreadable reply."""
+        if len(self.steps) - self.bad >= self.step_cap:
+            # the Tetris run: every check had passed, the limit hit one step before it could say "done"
+            if self.changed and self.proof_ok() and self._finish(
+                    "✅ Finished — its checks passed. (The step limit ended the run before it could say so.)"):
+                return None, None
+            self.state, self.why, self.cap_kind = "capped", f"🔢 Step limit reached ({self.step_cap}).", "steps"
+            return None, None
+        left = self.cap_usd - self.usd
+        if left <= 0:
+            self.state, self.why = "capped", f"💲 Run cap reached (${self.cap_usd:.2f})."
+            return None, None
+        r = self._ask(msgs, left)
+        self.usd += float(r.usd or 0)
+        self.tokens_in += int(r.tokens_in or 0)
+        self.tokens_out += int(r.tokens_out or 0)
+        self._check_stop()                                    # Stop pressed while the model thought
+        msgs.append({"role": "assistant", "content": r.text})
+        try:
+            a = parse_action(r.text)
+        except ValueError as e:
+            cut = "no JSON object" not in str(e) and "no \"action\"" not in str(e)
+            self.long_next = cut
+            res = {"error": f"Reply was not one JSON action ({e}).", "tip": CUT_TIP if cut else JSON_TIP, "cut": cut}
+            self.bad += 1
+            self.bad_row += 1
+            self._record({"action": "bad_reply", "why": "", "result": res, "usd": r.usd})
+            msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res)})
+            if self.bad_row >= BAD_ROW_MAX:
+                self.state = "failed"
+                self.why = (f"⚠️ This model sent {BAD_ROW_MAX} replies in a row the Lab can't read"
+                            + (" (too long, cut off)" if cut else "") + ". Try another model.")
+                return None, None
+            return None, None
+        return a, r
+
     def loop(self) -> None:
         if self.msgs is None:
             self.msgs = self._start_msgs()
         msgs = self.msgs
+        self.live = True
         try:
             while True:
                 self._check_stop()
-                if len(self.steps) - self.bad >= self.step_cap:
-                    # the Tetris run: every check had passed, the limit hit one step before it could say "done"
-                    if self.changed and self.proof_ok() and self._finish(
-                            "✅ Finished — its checks passed. (The step limit ended the run before it could say so.)"):
-                        return
-                    self.state, self.why, self.cap_kind = "capped", f"🔢 Step limit reached ({self.step_cap}).", "steps"
-                    return
-                left = self.cap_usd - self.usd
-                if left <= 0:
-                    self.state, self.why = "capped", f"💲 Run cap reached (${self.cap_usd:.2f})."
-                    return
-                r = self._ask(msgs, left)
-                self.usd += float(r.usd or 0)
-                self.tokens_in += int(r.tokens_in or 0)
-                self.tokens_out += int(r.tokens_out or 0)
-                self._check_stop()                                    # Stop pressed while the model thought
-                msgs.append({"role": "assistant", "content": r.text})
-                try:
-                    a = parse_action(r.text)
-                except ValueError as e:
-                    cut = "no JSON object" not in str(e) and "no \"action\"" not in str(e)
-                    self.long_next = cut
-                    res = {"error": f"Reply was not one JSON action ({e}).", "tip": CUT_TIP if cut else JSON_TIP, "cut": cut}
-                    self.bad += 1
-                    self.bad_row += 1
-                    self._record({"action": "bad_reply", "why": "", "result": res, "usd": r.usd})
-                    msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res)})
-                    if self.bad_row >= BAD_ROW_MAX:
-                        self.state = "failed"
-                        self.why = (f"⚠️ This model sent {BAD_ROW_MAX} replies in a row the Lab can't read"
-                                    + (" (too long, cut off)" if cut else "") + ". Try another model.")
-                        return
-                    continue
+                a, r = self._replay, None
+                self._replay = None
+                if a is None:
+                    a, r = self._next_action(msgs)
+                    if a is None:
+                        if self.state != "running":
+                            return
+                        continue
+                self.pending_action = a
                 self.bad_row = 0
                 self.long_next = False
                 res = self.act(a)
+                usd = float(r.usd or 0) if r else 0.0
                 shown = {k: (v if k not in ("find", "replace") else str(v)[:300]) for k, v in a.items() if k != "content"}
                 if "content" in a:
                     shown["bytes"] = len(str(a["content"]).encode())
-                step = {**shown, "result": res, "usd": r.usd}
+                step = {**shown, "result": res, "usd": usd}
                 ch, self._change = self._change, None
                 if ch:                                                # shown to Scott as a diff; ↩ Undo puts `before` back
                     step["diff"] = make_diff(ch[0], ch[1], ch[2])
@@ -777,6 +880,8 @@ class Run:
         except Exception as e:                                        # noqa: BLE001 — report, never crash the Lab
             self.state, self.why = "failed", f"⚠️ {type(e).__name__}: {str(e)[:300]}"
         finally:
+            self.live = False
+            self.save()
             store.autosave(self.project["id"], self.autosave_field, json.dumps(self.view())[:100_000])
 
 
@@ -810,7 +915,40 @@ class Agents:
     def answer(self, rid: str, text: str) -> Run:
         r = self.get(rid)
         r.answer(text)
+        if not r.live:                                   # restored after a restart: the answer starts it again
+            r.prepare_resume()
+            threading.Thread(target=r.loop, daemon=True, name=f"agent-{r.id}").start()
         return r
+
+    def resume(self, rid: str) -> Run:
+        """▶ Resume a run the Lab restart caught mid-step."""
+        r = self.get(rid)
+        with self.lock:
+            if r.state != "interrupted" or r.live or r.msgs is None:
+                raise ValueError("This run can't be resumed. Start a new one.")
+            if any(x.state == "running" and x.project["id"] == r.project["id"] for x in self.runs.values()):
+                raise ValueError("An agent is already working on this project. Stop it first.")
+            r.prepare_resume()
+        threading.Thread(target=r.loop, daemon=True, name=f"agent-{r.id}").start()
+        return r
+
+    def restore(self, lab, cfg: dict, selftest=None) -> int:
+        """At Lab start: runs saved in the last day come back (oldest first, so the newest are listed last)."""
+        cut = time.time() - RESTORE_WITHIN_S
+        files = []
+        for f in (config.home() / "projects").glob("*/agent/*.state.json"):
+            try:
+                if f.stat().st_mtime >= cut:
+                    files.append((f.stat().st_mtime, f))
+            except OSError:
+                pass
+        n = 0
+        for _, f in sorted(files):
+            r = Run.restore(lab, cfg, f, selftest)
+            if r and r.id not in self.runs:
+                self.runs[r.id] = r
+                n += 1
+        return n
 
     def get(self, rid: str) -> Run:
         r = self.runs.get(rid)
@@ -820,4 +958,5 @@ class Agents:
 
     def stop_all(self) -> None:
         for r in self.runs.values():
+            r.shutting_down = True                       # keep the saved copy as it was → it comes back next start
             r.stop("⏹ Lab shutting down")

@@ -816,8 +816,9 @@ function startView() {
     if (running) return;
     const kept = store.get(keptKey, []), open = chg.filter(s => !kept.includes(run.id + ":" + s.n));
     if (run.can_continue && ag) resBtns.append(h("button", { class: "btn pri", type: "button", title: "Give it more steps and carry on from where it stopped", onclick: () => ag.more(run) }, "▶ Continue ⭐"));
+    if (run.can_resume && ag) resBtns.append(h("button", { class: "btn pri", type: "button", title: "The Lab restarted mid-run — carry on from the last step", onclick: () => ag.more(run, "resume") }, "▶ Resume ⭐"));
     if (open.length) resBtns.append(
-      h("button", { class: run.can_continue ? "btn" : "btn pri", type: "button", title: "The changes are already in this project. Keep clears them from this list.",
+      h("button", { class: run.can_continue || run.can_resume ? "btn" : "btn pri", type: "button", title: "The changes are already in this project. Keep clears them from this list.",
         onclick: () => { store.set(keptKey, kept.concat(open.map(s => run.id + ":" + s.n)).slice(-200)); sig = ""; onRun(run); } }, run.can_continue ? "✓ Keep as is" : "✓ Keep all"),
       h("button", { class: "btn", type: "button", title: "Put every file back the way it was before this run", onclick: undoAll }, "↩ Undo all"));
     else if (chg.length) resNote.textContent = "✓ Kept.";
@@ -1179,7 +1180,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && (v
 /* ---------- agent (flag `agent`) ---------- */
 let agTimer = null;
 const ICON = { list: "📂", read: "📖", write: "📝", edit: "✏️", repo: "🔗", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "↻", ask: "❓", plan: "🗺" };
-const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", unproven: "⚠️ Not proven", stopped: "⏹ Stopped", capped: "🧢 Hit a limit",
+const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", unproven: "⚠️ Not proven", stopped: "⏹ Stopped", capped: "🧢 Hit a limit", interrupted: "⏸ Paused — Lab restarted",
                 refused: "🔒 Refused", failed: "⚠️ Failed" };
 function agentView(wb) {
   if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
@@ -1317,13 +1318,14 @@ function agentView(wb) {
     startBtn.disabled = running; stopBtn.disabled = !running;
     final.hidden = running || !run.why; final.replaceChildren(run.why || "");
     if (run.can_continue) final.append(" ", h("button", { class: "btn pri", type: "button", title: "Give it more steps and carry on from where it stopped", onclick: () => more(run) }, "▶ Continue ⭐"));
+    if (run.can_resume) final.append(" ", h("button", { class: "btn pri", type: "button", title: "The Lab restarted mid-run — carry on from the last step", onclick: () => more(run, "resume") }, "▶ Resume ⭐"));
     if (running) { clearTimeout(agTimer); agTimer = setTimeout(poll, 1000); }
     else api("/api/agent/approvals").then(a => { const n = (a.items || []).length;
       held.hidden = !n; held.textContent = wb ? `✋ ${n} waiting — look` : `✋ ${n} waiting for your approval — 📋 open`; });
     if (wb) wb.onRun(run);
   }
-  async function more(run) {
-    const a = await api("/api/agent/more", { id: run.id });
+  async function more(run, how) {                        /* ▶ Continue (step limit) or ▶ Resume (Lab restarted, 2026-11-24) */
+    const a = await api(how === "resume" ? "/api/agent/resume" : "/api/agent/more", { id: run.id });
     if (!a.ok) { status.textContent = `${a.icon || "⚠️"} ${a.message || "Could not continue — start a new run."}`; return; }
     store.set("agrun." + p.id, a.run.id); paint(a.run);
   }

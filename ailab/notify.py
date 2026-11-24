@@ -60,6 +60,10 @@ class Watcher:
     def __init__(self, agents, cfg: dict, every: float = 30.0, sender=send):
         self.agents, self.cfg, self.every, self.sender = agents, cfg, every, sender
         self.sent: dict[str, str] = {}
+        # 2026-11-24: runs brought back after a Lab restart already pinged (or ended) before it — don't ping again
+        for rid, run in list(agents.runs.items()):
+            if getattr(run, "restored", False) and run.state not in ("running", "interrupted"):
+                self.sent[rid] = verdict(run) or "ended"
         self._stop = threading.Event()
 
     def tick(self) -> list[tuple[str, str]]:
