@@ -75,3 +75,48 @@ class Builder(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---- 2026-11-24: the 🎨 prompt writer with backups ----
+from ailab import promptbuilder as _pb  # noqa: E402
+from ailab.mcp_client import HermesRefused as _HR  # noqa: E402
+from ailab.providers.base import ChatResult as _CR  # noqa: E402
+
+
+class _WriterLab:
+    def __init__(self, fail=()):
+        self.fail, self.calls = set(fail), []
+
+    def chat(self, project, prov, model, msgs, max_tokens, cap_usd=None, task=""):
+        self.calls.append(model)
+        if model in self.fail:
+            raise _HR("provider_error", "No endpoints found matching your data policy")
+        return _CR("# T\n\n## Module 0\naudit", prov, model, 1, 1, 0.001, True)
+
+
+class WriterBackups(unittest.TestCase):
+    def setUp(self):
+        self._mem = _pb.memory.for_context
+        _pb.memory.for_context = lambda *a, **k: ("", [])
+
+    def tearDown(self):
+        _pb.memory.for_context = self._mem
+
+    B = [["openrouter", "nousresearch/hermes-4-405b"], ["openrouter", "venice/uncensored"]]
+
+    def test_chosen_model_writes_and_is_named(self):
+        lab = _WriterLab()
+        d = _pb.draft(lab, {"id": "t"}, "openrouter", "nousresearch/hermes-4-405b", "make tetris", backups=self.B)
+        self.assertEqual((lab.calls, d["writer"], d["skipped"]), (["nousresearch/hermes-4-405b"], "nousresearch/hermes-4-405b", []))
+
+    def test_backup_takes_over_and_says_so(self):
+        lab = _WriterLab(fail={"nousresearch/hermes-4-405b"})
+        d = _pb.draft(lab, {"id": "t"}, "openrouter", "nousresearch/hermes-4-405b", "make tetris", backups=self.B)
+        self.assertEqual((d["writer"], d["skipped"]), ("venice/uncensored", ["nousresearch/hermes-4-405b"]))
+        self.assertIn("## Module 0", d["md"])
+
+    def test_all_fail_raises_the_last_reason(self):
+        lab = _WriterLab(fail={"nousresearch/hermes-4-405b", "venice/uncensored"})
+        with self.assertRaises(_HR):
+            _pb.draft(lab, {"id": "t"}, "openrouter", "nousresearch/hermes-4-405b", "x", backups=self.B)
+        self.assertEqual(lab.calls, ["nousresearch/hermes-4-405b", "venice/uncensored"])     # no repeats

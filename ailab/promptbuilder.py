@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 
 from . import memory
+from .mcp_client import HermesRefused
+from .transport import HttpError
 
 PROMPTS_DIR = Path.home() / "hermes-forge" / "lab-prompts"
 NIGHT_ORDERS = Path.home() / "hermes-forge" / "night" / "orders"
@@ -111,8 +113,10 @@ def plain(idea: str, repo: str = "~/", title: str = "") -> str:
                            modules="## Module 1 — Build it\n\n- (fill in)\n- **Check:** (a command that proves it)\n", last=2)
 
 
-def draft(lab, project: dict, provider: str, model: str, idea: str, repo_name: str = "", repo: Path | None = None) -> dict:
-    """Model-written draft in his format, using his memory + the project's latest handoff."""
+def draft(lab, project: dict, provider: str, model: str, idea: str, repo_name: str = "", repo: Path | None = None,
+          backups: list | None = None) -> dict:
+    """Model-written draft in his format, using his memory + the project's latest handoff.
+    backups: [(provider, model), …] tried in order when the chosen model can't answer (2026-11-24)."""
     idea = (idea or "").strip()
     if not idea:
         raise ValueError("Say what you want built first.")
@@ -121,13 +125,26 @@ def draft(lab, project: dict, provider: str, model: str, idea: str, repo_name: s
     msgs = [{"role": "system", "content": SYSTEM.replace("{skeleton}", sk) + ("\n\n" + mem if mem else "")},
             {"role": "user", "content": f"Scott's idea: {idea}\n\nProject: {repo_name or project.get('name', '')}\n\n"
                                         + latest_handoff(repo)}]
-    r = lab.chat(project, provider, model, msgs, 4096, task=f"lab-prompt:{project.get('id', '')}")
+    tried, r, last = [], None, None
+    for prov, mod in [(provider, model)] + [tuple(x) for x in (backups or []) if len(x) == 2]:
+        if (prov, mod) in tried or not prov or not mod:
+            continue
+        tried.append((prov, mod))
+        try:
+            r = lab.chat(project, prov, mod, msgs, 4096, task=f"lab-prompt:{project.get('id', '')}")
+            break
+        except (HermesRefused, HttpError) as e:            # can't answer (no private route, model gone…) → next one
+            last = e
+    if r is None:
+        raise last or ValueError("No model could write the prompt.")
+    who = {"writer": f"{tried[-1][0]}/{tried[-1][1]}" if tried[-1][0] != "openrouter" else tried[-1][1],
+           "skipped": [m for _, m in tried[:-1]]}
     md = (r.text or "").strip()
     md = re.sub(r"^```(?:markdown|md)?\s*|\s*```$", "", md)
     if "## Module 0" not in md:                           # the model ignored the skeleton → fall back, say so
         return {"md": plain(idea, f"~/{repo_name}" if repo_name else "~/"), "usd": r.usd, "fallback": True,
-                "memory_used": used, **size_hint(idea)}
-    return {"md": md[:MAX_PROMPT], "usd": r.usd, "fallback": False, "memory_used": used, **size_hint(idea)}
+                "memory_used": used, **who, **size_hint(idea)}
+    return {"md": md[:MAX_PROMPT], "usd": r.usd, "fallback": False, "memory_used": used, **who, **size_hint(idea)}
 
 
 def save(md: str, name: str = "", root: Path | None = None) -> Path:

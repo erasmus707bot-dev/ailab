@@ -42,6 +42,11 @@ DEFAULTS: dict = {
     "agent_max_tokens": 4096,             # per model reply — Hermes answers up to 4096 at once
     "agent_long_max_tokens": 16384,       # 2026-11-24: one bigger reply after a cut-off (Hermes runs it as a job; 0 = off)
     "extra_models": {},                   # {"openrouter": ["vendor/model-id"]} — added to that provider's model list
+    # 📝 Prompt builder writer (Scott 2026-11-24: "best LLM with the least censorship in charge of prompts by default").
+    # Hermes 4 405B = strongest 🎨 fewer-limits model on OpenRouter (morphllm 2026-11-05). If it fails (e.g. no private
+    # no-data-kept route), the backups are tried in order and the page says which model wrote it.
+    "prompt_writer": ["openrouter", "nousresearch/hermes-4-405b"],
+    "prompt_writer_backups": [["openrouter", "venice/uncensored"], ["openrouter", "deepseek/deepseek-v4.1-flash"]],
     "agent_cap_usd": 0.50,                # $ per agent run (inside the daily cap)
     "port": 8850,                         # 8795 is Hermes SiteGen; 8850 unused in ~/hermes (2026-11-20)
     "repos": {},                          # 🔗 linked code folders the agent may read + propose changes to: {"hermes": "~/hermes"}

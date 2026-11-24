@@ -77,6 +77,7 @@ class App:
     def state(self) -> dict:
         return {"ok": True, "version": __version__, "mode": self.cfg["mode"], "flags": self.cfg["flags"],
                 "spend": self.spend(), "projects": store.projects(), "hermes_url": self.cfg.get("hermes_url") or "", "repos": sorted(repos.linked(self.cfg)), "programs": repos.programs(self.cfg), "sandbox": preview.sandbox_kind(),
+                "prompt_writer": self.cfg.get("prompt_writer") or [],
                 "providers": [{"id": n, "icon": PROVIDER_ICONS.get(n, "◆"), "local": n == "ollama", **({"off": True} if n in self._hermes_off() else {})}
                               for n in sorted(NAMES, key=lambda n: n != "ollama")],
                 # fix 5: what's running / stuck / ended without proof — for the Hermes card (and later Iris "finished or stuck")
@@ -228,7 +229,7 @@ class App:
         if not self.cfg["flags"].get("prompt"):
             return _off("prompt")
         return 200, {"ok": True, "prompts": promptbuilder.listing(), "repos": sorted(repos.linked(self.cfg)),
-                     "agent_on": bool(self.cfg["flags"].get("agent"))}
+                     "agent_on": bool(self.cfg["flags"].get("agent")), "writer": self.cfg.get("prompt_writer") or []}
 
     def prompt_post(self, op: str, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"].get("prompt"):
@@ -242,7 +243,9 @@ class App:
         if op == "draft":
             if not self.cfg["flags"].get("router"):
                 return _off("router")
-            d = promptbuilder.draft(self.lab, proj, str(b.get("provider") or ""), str(b.get("model") or ""), idea, rname, rpath)
+            d = promptbuilder.draft(self.lab, proj, str(b.get("provider") or ""), str(b.get("model") or ""), idea, rname, rpath,
+                                    backups=[] if b.get("no_backup") else
+                                    [self.cfg.get("prompt_writer") or []] + list(self.cfg.get("prompt_writer_backups") or []))
             return 200, {"ok": True, **d, "spend": self.spend()}
         md = str(b.get("md") or "")[:promptbuilder.MAX_PROMPT]
         if op == "save":
