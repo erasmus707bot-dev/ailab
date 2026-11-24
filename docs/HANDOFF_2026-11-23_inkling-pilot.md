@@ -34,3 +34,8 @@ same ask: pointed at "Scan now" → "Rename this button to "Scan everything" and
 - Both thrown away (live discard, New = Now, 0 held). Lab provider restored to claude.
 - Noticed: both hit the 12-step cap on a 1-spot edit — cap may be tight for Show & change. Robot clicks the real "Scan now" on the Now side → triggers a real (read-only) Hermes scan each run.
 - Inkling stays in the roster as an option (reads screenshots, 1M context).
+
+## 2026-11-24 — robot fix
+`f3094fc`: the robot never clicks the Now (real) page, only New (the test copy). After New's click, the look-only 403 is expected (shown as a note); any other new error → 🔴. 146 tests OK. **Loads at next Lab restart.**
+Live re-check owed: 🪞 on "Scan now" → no new Hermes scan starts; 🚦 still 🟢.
+Next: `~/hermes/prompts/BUILD_PROMPT_2026-11-24_ai-lab-memory-prompt-builder.md` — continue phrase in that file.
