@@ -24,17 +24,17 @@ Pass:
 Finding → fixed (`0626afd`):
 - 9 chips wrapped to 4 rows (194 px) and pushed ▶ Start to 865 on a 722 screen. Phones (≤640 px) now show only the picked
   chips + **▾ More** (or **▾ Pick what you're making** when none) in one 44 px line; label hidden; tap ▾ More → all 9 + ▴ Fewer (real tap OK).
-Left as is (not mine to change):
-- ▶ Start still starts at 715 px (bottom edge of a 722 screen) — the model picker above it is 202 px tall. Before the chips it was 671.
-  Compacting the picker on phones would bring it back on screen.
+Picker squeeze 10:35 (`6d38ecd`), Argus:
+- Phones (≤640 px): ▶ Start moved right under the task box (model picker after it); picker 202 → 133 px
+  (provider + model on one row, tag help + 🎨 on one row). ▶ Start 865 → **503** on a 722 screen, page 393 wide,
+  tag help opens/closes by real tap. Desktop layout unchanged.
 
 ## Still open
 1. 🖼/🎬 hand-off button live (needs a picture task; unit-tested only).
 2. Scratch has a `letter.md` from the 📝 test run (test project).
-3. Phone model picker 202 px (see above) — offer to Scott.
 
 ## Known gaps
 - Lab still can't make pictures/video itself — needs a Hermes MCP tool (later module).
 - Parallel session active on ~/ailab today — check `git log` before editing.
 
-Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — picker compact`
+Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — image hand-off`
