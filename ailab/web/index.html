@@ -318,6 +318,7 @@ const PATHS = [
   { id: "review", flag: null, sym: "📋", name: "Review", tip: "Send a demo to Hermes for your OK; apply or reject held agent writes." },
   { id: "compare", flag: "compare", sym: "⚖️", name: "Compare models", tip: "Same task, 2–4 models, side by side." },
   { id: "live", flag: "live", sym: "🪞", name: "Show & change", tip: "A running page: Now beside New. Say what to change, see it, keep it or throw it away." },
+  { id: "memory", flag: "memory", sym: "🧠", name: "Memory", tip: "What the Lab knows about you — copied from your Claude setup, kept up to date, yours to change." },
 ];
 let S = null;                          // server state
 let view = "start", trail = [];        // ← retraces this trail
@@ -458,6 +459,79 @@ function settingsView() {
         inp, h("div", { class: "acts" }, save, test, rm), msg));
     });
   });
+  return [box];
+}
+
+/* ---------- 🧠 Memory (2026-11-24 M1) ----------
+   One card per subject. [claude-import] lines come from his Claude setup (🔄 replaces them), [lab] lines the Lab
+   saved, [scott] lines he added. Sensitive info is never saved automatically — only typed here by Scott. */
+const MSRC = { "claude-import": "📥 from Claude", lab: "🧪 Lab saved", scott: "✋ you added" };
+function memoryView() {
+  if (!S.flags.memory) return [offCard("memory", "🧠", "Memory", "the Memory build (M1–M3)")];
+  const box = h("div", { class: "keys" }, h("h2", {}, "🧠 What the Lab knows about you"),
+    h("p", { class: "note" }, "Copied from your Claude setup and kept up to date. Keys, health, money and identity are never saved on their own — only if you type them here yourself."));
+  const msg = h("p", { class: "note", id: "memmsg", role: "status" });
+  const list = h("div", { id: "memlist" }, "⏳");
+  const say = (t) => { msg.textContent = t; };
+  const imp = h("button", { class: "btn pri", type: "button", onclick: async () => {
+    imp.disabled = true; say("⏳ Copying your Claude setup…");
+    const r = await api("/api/memory/import", {}); imp.disabled = false;
+    if (!r.ok) { say("✗ " + (r.message || r.code)); return; }
+    const sk = Object.entries(r.report.skipped || {}).map(([k, n]) => `${n} ${k}`).join(", ");
+    say(`✅ ${r.report.subjects.length} subjects checked · ${r.report.added} lines copied · ${r.report.unchanged} unchanged` +
+        (sk ? ` · skipped (never saved, not shown): ${sk}` : ""));
+    load();
+  } }, "🔄 Copy from my Claude setup");
+  const undo = h("button", { class: "btn", type: "button", onclick: async () => {
+    const r = await api("/api/memory/undo", {}); say(r.ok ? `↶ Undid the last change to “${r.undone}”.` : "✗ " + (r.message || r.code)); load();
+  } }, "↶ Undo last change");
+  const q = h("input", { type: "search", placeholder: "🔎 Search what it knows", "aria-label": "Search memory",
+    style: "width:100%;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:inherit;padding:8px 10px;font:inherit" });
+  q.oninput = () => load();
+  box.append(h("div", { class: "hint" }, imp, undo), msg, q, list);
+
+  function card(sub) {
+    const body = h("div", {}, "⏳");
+    const d = h("details", { class: "keyrow", style: "display:block" },
+      h("summary", { style: "cursor:pointer;min-height:44px" }, h("b", {}, sub.name), " ",
+        h("span", { class: "st" }, `${sub.count} · ${sub.description || ""}`)), body);
+    d.ontoggle = async () => {
+      if (!d.open) return;
+      const r = await api("/api/memory?name=" + encodeURIComponent(sub.name)); body.textContent = "";
+      if (!r.ok) { body.textContent = "✗ " + (r.message || r.code); return; }
+      const lines = r.subject.lines.slice();
+      const save = async () => {
+        const w = await api("/api/memory/save", { name: sub.name, description: r.subject.description, lines });
+        say(w.ok ? `💾 Saved “${sub.name}”.` : "✗ " + (w.message || w.code));
+      };
+      const ul = h("ul", { style: "padding-left:1.1em" });
+      const paint = () => { ul.textContent = ""; lines.forEach((l, i) => ul.append(h("li", { style: "margin:6px 0" },
+        h("span", { class: "st" }, MSRC[l.source] || l.source), " ", l.text, " ",
+        h("button", { class: "ib", type: "button", title: "Remove this line", "aria-label": "Remove this line",
+          onclick: async () => { lines.splice(i, 1); paint(); await save(); } }, "🗑")))); };
+      paint();
+      const add = h("input", { type: "text", placeholder: "Add a line yourself", "aria-label": "Add a line" });
+      const addb = h("button", { class: "btn", type: "button", onclick: async () => {
+        if (!add.value.trim()) return; lines.push({ source: "scott", text: add.value.trim() }); add.value = ""; paint(); await save();
+      } }, "➕ Add");
+      body.append(ul, h("div", { class: "hint" }, add, addb));
+    };
+    return d;
+  }
+  async function load() {
+    const term = q.value.trim();
+    const r = await api("/api/memory");
+    list.textContent = "";
+    if (!r.ok) { list.textContent = "✗ " + (r.message || r.code); return; }
+    let subs = r.subjects;
+    if (term) {
+      const hits = await api("/api/memory?q=" + encodeURIComponent(term));
+      const names = new Set((hits.hits || []).map(x => x.name)); subs = subs.filter(s => names.has(s.name));
+    }
+    if (!subs.length) list.append(h("p", { class: "note" }, term ? "Nothing matches." : "Empty so far — press 🔄 to copy your Claude setup."));
+    subs.forEach(s => list.append(card(s)));
+  }
+  load();
   return [box];
 }
 
@@ -1448,6 +1522,7 @@ function render() {
   else if (view === "compare") kids = compareView();
   else if (view === "live") kids = liveView();
   else if (view === "settings") kids = settingsView();
+  else if (view === "memory") kids = memoryView();
   else kids = [offCard(path.flag, path.sym, path.name, path.later)];
   main.append(...kids);
   $("#back").disabled = false;

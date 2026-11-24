@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, agent, compare, config, livepage, preview, repos, review, robotcheck, roster, store
+from . import __version__, agent, compare, config, livepage, memory, preview, repos, review, robotcheck, roster, store
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -29,7 +29,7 @@ PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'sel
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
 PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙"}
 OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models",
-       "live": "🪞 Show & change"}
+       "live": "🪞 Show & change", "memory": "🧠 Memory"}
 # Static comparison page: our own escaped HTML; only an inline theme-toggle script, images inline.
 PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
             "frame-ancestors 'self'; form-action 'none'")
@@ -175,6 +175,33 @@ class App:
         r = self.lab.list_models(name, {})
         n = len(r.get("models") or [])
         return 200, {"ok": True, "provider": name, "models": n, "source": r.get("source")}
+
+    # ---- 🧠 memory (flag `memory`, 2026-11-24 M1) ----
+    def memory_get(self, q: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"].get("memory"):
+            return _off("memory")
+        name, qq = (q.get("name") or [""])[0], (q.get("q") or [None])[0]
+        if name:
+            return 200, {"ok": True, "subject": memory.read(name)}
+        if qq is not None:
+            return 200, {"ok": True, "hits": memory.search(qq)}
+        return 200, {"ok": True, "subjects": memory.subjects(),
+                     "sources": [{"name": n, "file": str(f)} for n, _, f in memory.import_sources()]}
+
+    def memory_post(self, op: str, b: dict) -> tuple[int, dict]:
+        if not self.cfg["flags"].get("memory"):
+            return _off("memory")
+        if op == "import":
+            return 200, {"ok": True, "report": memory.import_all()}
+        if op == "add":                                   # typed by Scott on the Memory page → his own line
+            return 200, {"ok": True, **memory.add_fact(str(b.get("name") or "notes"), str(b.get("text") or ""), "scott")}
+        if op == "save":
+            lines = b.get("lines") if isinstance(b.get("lines"), list) else []
+            return 200, {"ok": True, "subject": memory.write_subject(str(b.get("name") or ""), str(b.get("description") or ""),
+                                                                    [l for l in lines if isinstance(l, dict)], "edit")}
+        if op == "undo":
+            return 200, {"ok": True, **memory.undo_last()}
+        return 404, {"ok": False, "code": "not_found"}
 
     def roster(self, q: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["router"]:
@@ -476,6 +503,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             except livepage.LiveError as e:
                 code = {"not_found": 404, "port_busy": 409}.get(e.code, 400)
                 body = {"ok": False, "code": e.code, "icon": e.icon, "message": e.message[:400]}
+            except memory.MemError as e:
+                code = {"not_found": 404, "nothing": 409}.get(e.code, 400)
+                body = {"ok": False, "code": e.code, "icon": "🧠", "message": e.message[:400]}
             except review.ReviewError as e:
                 code = {"sensitive": 403, "outside_home": 403, "dotfile": 403, "symlink": 403, "too_big": 413,
                         "stale": 409, "state": 409, "secret": 422}.get(e.code, 400)
@@ -548,6 +578,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.models, q)
             if u.path == "/api/keys":
                 return self._run(app.keys, q)
+            if u.path == "/api/memory":
+                return self._run(app.memory_get, q)
             if u.path == "/api/roster":
                 return self._run(app.roster, q)
             if u.path == "/api/preview/files":
@@ -606,6 +638,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_stop, b)
             if p == "/api/agent/undo":
                 return self._run(app.agent_undo, b)
+            if p.startswith("/api/memory/"):
+                return self._run(app.memory_post, p[len("/api/memory/"):], b)
             if p == "/api/compare/start":
                 return self._run(app.compare_start, b)
             if p == "/api/compare/stop":

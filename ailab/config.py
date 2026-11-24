@@ -30,7 +30,8 @@ DEFAULTS: dict = {
         "openrouter/qwen/qwen3.8-max-0902": {"in": 2.0, "out": 6.0}},
     "base_urls": {},                      # override any provider's base URL
     # Feature flags. Switched on one at a time by Scott (M7). There is deliberately no API to flip them.
-    "flags": {"router": False, "preview": False, "agent": False, "compare": False, "live": False},
+    "flags": {"router": False, "preview": False, "agent": False, "compare": False, "live": False,
+              "memory": False, "prompt": False},       # 🧠 Memory, 📝 Prompt builder (2026-11-24)
     # 🪞 Show & change (2026-11-23): a running app's pages, Now beside New. Loopback apps only; "repo" must be a linked folder.
     "live_apps": {"hermes": {"url": "http://127.0.0.1:8780", "repo": "hermes", "web": "dist/hermes-local/hermes_local/web"}},
     "live_ports": [8860, 8861],          # Now, New — unused in ~/hermes (grep 2026-11-23); UNVERIFIED on the live box
