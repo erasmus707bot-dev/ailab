@@ -1037,8 +1037,8 @@ function ctypeGuess(text) {
     .filter(x => x[0]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, 3).map(x => x[2]);
 }
 function handoffBtn(ho, star) {
-  const base = (S.hermes_url || "").replace(/\/+$/, "");
-  if (!base) return h("span", { class: "note" }, `${ho.icon} The brief is in ${ho.file} — take it to Hermes ${ho.name} (🔌 connect the Lab to Hermes for a button here).`);
+  const base = (homeUrl() || "").replace(/\/+$/, "");          /* same Hermes address as the ⌂ Home button (hermes_url, else where the Lab was opened from) */
+  if (!base) return h("span", { class: "note" }, `${ho.icon} The brief is in ${ho.file} — take it to Hermes ${ho.name} (open the Lab from Hermes once for a button here).`);
   return h("a", { class: star ? "btn pri" : "btn", href: base + ho.path, target: "_blank", rel: "noopener",
     title: `The Lab can't make this itself yet — ${ho.file} in this project has the ready-to-use brief` }, `${ho.icon} Take the brief to ${ho.name}${star ? " ⭐" : ""}`);
 }
