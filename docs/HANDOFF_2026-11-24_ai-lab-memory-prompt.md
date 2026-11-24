@@ -51,3 +51,13 @@ acceptance:
 - Keys: qwen/kimi warning shows. **Kimi now reads "⏸ off in Hermes"** (earlier today it listed with a key) — check Hermes → Settings → API keys.
 - Fixes after proof (`see next commit`): project rules now load before the long global rules file (rules-hermes was crowded out); order slug no longer "lab-lab-".
 - Owed: Argus phone touch test (Memory + Prompt pages); a real 📱 ping (not sent — would buzz Scott's phone for a test); pull dolphin3:8b / hermes3:8b if wanted (`ollama pull dolphin3:8b`).
+
+## Argus touch test — 2026-11-24 06:45 (Pixel 5 AVD, real Chrome, http://10.0.2.2:8850)
+Findings fixed (index.html, loads per page view — no restart):
+- 🧠 + 📝 had **no button** in the workbench → added to 🧰 More tools + a "📝 Idea → build prompt" button in the 🤖 pane.
+- Prompt page was **658 px wide** on a 393 px phone (long model names in the select) → select fills its row, ellipsis.
+- Selects/buttons 39–42 px, 🗑 36 px wide → all ≥ 44 px on .keys pages.
+Pass after fix: width 393 = 393 · 0 controls under 44 px · ⌂ → 🧰 → 🧠 by touch · card opens · ➕ Add line saved · 🗑 removed it (server 3 lines) ·
+📄 Plain template by touch · page swipe scrolls (a swipe that starts in the prompt box scrolls the box — normal) · Send buttons reachable ·
+no late shift (Send top 989 px at 1 s and 10 s) · 0 console errors.
+Not testable on the rig: ⬆ file picker, the soft keyboard typing path (values set by script), multi-touch.

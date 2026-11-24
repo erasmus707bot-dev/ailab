@@ -92,7 +92,11 @@
   /* ⚙️ Settings → 🔑 Keys (2026-11-23) */
   .hint { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--calm, var(--panel2)); font-size: .95rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .legend { font-size: .9rem; color: var(--dim); flex-basis: 100%; } .legend summary { cursor: pointer; }
-  .keys { max-width: 760px; margin: 0 auto; }
+  .keys { max-width: 760px; margin: 0 auto; min-width: 0; overflow-wrap: anywhere; }
+  /* 2026-11-24 Argus touch test: long model names widened the phone page to 658 px; controls were 39–42 px tall */
+  .keys .picker select { flex: 1 1 100%; width: 100%; min-width: 0; text-overflow: ellipsis; }
+  .keys .btn, .keys select, .keys input[type=text], .keys input[type=search], .keys summary, .keys .ib { min-height: 44px; }
+  .keys .ib { min-width: 44px; }
   .keyrow { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); margin: 10px 0; background: var(--panel); }
   .keyrow .st { font-size: .92rem; color: var(--dim); }
   .keyrow input { width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: inherit; padding: 8px 10px; font: inherit; }
@@ -428,7 +432,7 @@ function settingsView() {
       (k.providers || []).forEach(p => box.append(h("div", { class: "keyrow" },
         h("div", {}, h("b", {}, `${p.icon} ${p.id}`)),
         h("div", { class: "st" }, !p.listed ? "⏸ Off in Hermes, or no key yet — turn it on in Hermes → Settings → API keys" : p.set ? `✅ key in Hermes · ${p.models.length} model${p.models.length === 1 ? "" : "s"}` : "⛔ no key in Hermes",
-          ["qwen", "kimi"].includes(p.id) ? h("div", {}, "⚠️ Goes straight to " + (p.id === "qwen" ? "Alibaba" : "Moonshot") + " — not the private (no-data-kept) 🌐 OpenRouter route. 🔒 strict filters.") : null),
+          ["qwen", "kimi", "gemini"].includes(p.id) ? h("div", {}, "⚠️ Goes straight to " + ({qwen: "Alibaba", kimi: "Moonshot", gemini: "Google"})[p.id] + " — not the private (no-data-kept) 🌐 OpenRouter route. 🔒 strict filters.") : null),
         h("div", { class: "acts" }))));
       return;
     }
@@ -795,12 +799,14 @@ function startView() {
   loadHeld();
 
   /* ---- panes ---- */
-  const TOOLS = [["live", "live", "🪞 Show & change a page"], ["chat", "router", "💬 Ask a model"], ["compare", "compare", "⚖️ Compare models"], ["review", null, "📋 Send a demo"], ["preview", "preview", "👁 Big preview"]];
+  const TOOLS = [["live", "live", "🪞 Show & change a page"], ["chat", "router", "💬 Ask a model"], ["compare", "compare", "⚖️ Compare models"], ["review", null, "📋 Send a demo"], ["preview", "preview", "👁 Big preview"],
+    ["prompt", "prompt", "📝 Idea → build prompt"], ["memory", "memory", "🧠 What the Lab knows about you"]];   // 2026-11-24 touch test: were unreachable
   const tools = h("div", { class: "runbar wbtools" }, TOOLS.map(([id, flag, name]) =>
     h("button", { class: "btn" + (!flag || S.flags[flag] ? "" : " off"), onclick: () => go(id), "data-path": id }, name)));
   const panes = {};
   const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Ask the AI", sec, panes),
     h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
+    S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
     S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
     ...(ag ? [ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.held), ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
