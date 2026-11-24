@@ -45,3 +45,13 @@ Still open: **4. runs survive a Lab restart** (runs live in memory only).
   long steps wrap whole; a real tap on ▶ Go hit the button (sample run → "No such run", as expected). 0 console errors.
 - Not covered: a mid-step restart (▶ Resume) on gandalf — unit + headless only.
 Still open: question answers → Lab memory.
+
+## Answers → memory + Claude import top-up — 2026-11-24 09:45 (ailab `483463d`, `0a011dc`; 251 tests OK)
+- ❓ card answers → subject **lab-picks**, tagged [scott], "Q? → pick (project x)"; same question again → newest wins. Run shows them under 🧠 saved.
+  (The agent.py call `_save_picks` landed in `a6f6d51` with another session's commit.) Memory flag off → nothing saved. Plan answers are not saved.
+- Agent context: lab-picks right after profile/preferences, only picks that fit the task ("don't ask these again"); plus up to 12 single lines
+  from any other subject that fit the task (so imported rules files reach the agent, not only subjects whose name matches).
+- Claude export topped up (`~/hermes-data/claude-memory-export/`): new **standing-rules.md** (16 rules: nav, libraries, releases, testing, sounds,
+  sharing, local models, offline-first), 4 lines added to ai-lab.md. Imported live via `/api/memory/import`: claude-standing-rules 16, claude-ai-lab 14; 1 line skipped (health).
+- Not proven live: needs a Lab restart (memory.py is server code). Check: run with ❓ → answer → Memory page shows lab-picks → a second run with
+  the same kind of task doesn't ask that question.
