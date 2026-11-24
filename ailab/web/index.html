@@ -1342,8 +1342,8 @@ function agentView(wb) {
         onclick: () => { const ids = on.includes(ty.id) ? on.filter(x => x !== ty.id) : on.concat(ty.id);
           store.set(tkey, { ids, manual: true }); paintTypes(); suggest(); } },
         `${ty.icon} ${ty.label}${on.includes(ty.id) && !st.manual ? " ⭐" : ""}`)),
-      st.manual ? h("button", { class: "tchip reset", type: "button", title: "Go back to the Lab's ⭐ guess from your words",
-        onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me") : null);
+      ...(st.manual ? [h("button", { class: "tchip reset", type: "button", title: "Go back to the Lab's ⭐ guess from your words",
+        onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me")] : []));
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;

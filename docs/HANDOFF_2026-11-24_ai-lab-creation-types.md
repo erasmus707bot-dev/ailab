@@ -10,15 +10,20 @@
 - **M5 Test + ship** — robot per type: game = play (screen must move) · website/apps/edit = page (a still screen is fine, errors still red) · text/image/video = none (✅ without "built, not run"). Done run: 📦 **Make it an app: 📱 Android ⭐** with only the chip platforms ticked; 🖼/🎬 → **Take the brief to Image Studio (/models) / Media Studio (/media) ⭐** (`image_brief.md` / `video_brief.md`).
 - No chips = old behaviour exactly (play test, "built, not run" for non-page files).
 
-## Not proven live (needs a Lab restart — desktop icon)
-1. Chips show; typing "tetris for my phone" stars 🎮 + 📱; tap → ↺ appears.
-2. Run with 📝 Text → ends ✅ with no robot.
-3. Run with 📱 → result shows 📦 Make it an app: 📱 Android ⭐, only Android ticked.
-4. 🖼 run → image_brief.md + Image Studio button (needs `hermes_url` set; standalone shows a note).
-5. Argus touch test of the chip row (phone width wrap, 44 px).
+## Proven live 10:05 (gandalf, after Scott's restart)
+- 9 chips load; ⭐ guess live: "tetris … android phone" → 📱 + 🎮 · "thank-you note … letter.md" → 📝 · Hermes repo task → 🔧. 💡 model tip follows the chips.
+- 📝 run `ab05cfd3fc` (deepseek v4.1 flash): ✅ done, no robot, $0.0012 (before chips this ended "built, not run").
+- 📱 run `8ebb402641`: ✅ done, robot 🟢 page mode + phone fit, $0.003; result shows **📦 Make it an app: 📱 Android**, ship box opens with only Android ticked. ↩ Undo all → Scratch restored.
+- Bug found + fixed live: stray "null" after the 🎬 chip (`<this commit>`).
+- Chips 44 px, wrap to 3 rows in the agent pane, no sideways scroll (desktop). Chrome window would not resize to phone width.
+
+## Still open
+1. **Argus touch test** of the chip row on the phone (not done).
+2. 🖼/🎬 hand-off button live (needs a picture task; unit-tested only).
+3. Scratch now has a `letter.md` from the 📝 test run (test project).
 
 ## Known gaps
 - Lab still can't make pictures/video itself — needs a Hermes MCP tool (later module).
 - Parallel session active on ~/ailab today — check `git log` before editing.
 
-Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — live check`
+Continue phrase: `continue AI Lab creation types from the 2026-11-24 handoff — Argus touch test`
