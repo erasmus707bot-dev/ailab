@@ -61,3 +61,4 @@ Pass after fix: width 393 = 393 · 0 controls under 44 px · ⌂ → 🧰 → �
 📄 Plain template by touch · page swipe scrolls (a swipe that starts in the prompt box scrolls the box — normal) · Send buttons reachable ·
 no late shift (Send top 989 px at 1 s and 10 s) · 0 console errors.
 Not testable on the rig: ⬆ file picker, the soft keyboard typing path (values set by script), multi-touch.
+- ⚠️ Another session is adding a **Gemini** provider in ~/ailab right now (uncommitted: keys.py, openai_compat.py, roster.py, server.py, tests). Commit `762fd69` swept in ONE of its index.html lines (Keys warning lists gemini → "Google") — UI-only, harmless. `test_keys_page` fails until that session finishes (expects no gemini). Not touched.
