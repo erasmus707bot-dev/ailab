@@ -243,6 +243,8 @@
   .qitem .opts .btn { min-height: 44px; } .qitem .opts .btn[aria-pressed=true] { outline: 3px solid var(--accent, var(--ok)); outline-offset: 1px; }
   .qitem .rec { color: var(--dim); font-size: .92rem; margin-top: 6px; }
   .planlist { margin: 0; padding-left: 1.4em; } .planlist li { padding: 3px 0; }
+  /* 2026-11-24 Argus touch test: plan Go / Later / Send change were 42 px */
+  #askdlg .btn, #askdlg input[type=text] { min-height: 44px; } .planlist li { overflow-wrap: anywhere; }
   .askrow { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; font-size: .95rem; }
   .drawer pre { white-space: pre-wrap; word-break: break-word; font-size: .82rem; max-height: 30vh; overflow: auto; margin: 6px 0 0; }
   .wbtools .btn.off { opacity: .6; }
@@ -262,7 +264,10 @@
   }
   @media (max-width: 640px) {
     header #projnew { display: none; }                      /* phone: "➕ New project…" is the last entry of the project list */
-    header .projsel { min-width: 5.5rem; flex: 1 1 5.5rem; max-width: none; }
+    /* 2026-11-24 Argus touch test: top bar was 438 px on a 393 px phone — picker 88 px min + "$0.07 / $2.00" + ✋ chip */
+    header .projsel { min-width: 4rem; flex: 1 1 4rem; max-width: none; width: 0; text-overflow: ellipsis; }
+    #spend .cap { display: none; }                          /* phone: today's spend only; tap ⚙️ for the cap */
+    header .chip { padding: 4px 6px; } header .chips { gap: 2px; flex-shrink: 0; }
     .wb[data-tab="files"] > .wbfiles, .wb[data-tab="code"] > .wbcode, .wb[data-tab="agent"] > .wbagent { display: flex; }
     .wbcode .code { min-height: 46vh; }
     .wbcode .frame { min-height: 56vh; }
@@ -401,7 +406,7 @@ function paintBar() {
   $("#mode").title = connected ? "Connected to Hermes — one budget, Hermes holds the keys" : "Standalone — own keys, own $ cap";
   const sp = S.spend || {};
   if (sp.today_usd == null) { $("#spendtxt").textContent = "?"; $("#spendbar").style.width = "0"; return; }
-  $("#spendtxt").textContent = `$${sp.today_usd.toFixed(2)} / $${sp.cap_usd.toFixed(2)}`;
+  $("#spendtxt").replaceChildren(`$${sp.today_usd.toFixed(2)}`, h("span", { class: "cap" }, ` / $${sp.cap_usd.toFixed(2)}`));
   const pct = Math.min(100, (sp.today_usd / (sp.cap_usd || 1)) * 100);
   $("#spendbar").style.width = pct + "%";
   $("#spendbar").style.background = pct >= 90 ? "var(--bad)" : pct >= 70 ? "var(--warn)" : "var(--ok)";

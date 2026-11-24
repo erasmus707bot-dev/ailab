@@ -100,6 +100,15 @@ time), check it with "run" (python3 -m py_compile repos/NAME/x.py, or node --che
 changed. Scott sees each as a diff and applies it himself. Keep changes small and matching the code around them."""
 
 
+def _short(x, n):
+    """Trim to n chars at a word break with … — never cut mid-word (2026-11-24 Argus touch test)."""
+    t = " ".join(str(x).split())
+    if len(t) <= n:
+        return t
+    cut = t[:n - 1].rsplit(" ", 1)[0] if " " in t[:n - 1] else t[:n - 1]
+    return cut.rstrip(" ,;:-") + "…"
+
+
 class Stopped(Exception):
     pass
 
@@ -535,7 +544,7 @@ class Run:
             self.question = {"kind": "ask", "text": items[0]["q"], "choices": items[0]["choices"], "items": items}
             return {"answer": self._wait()}
         if kind == "plan":                                   # plan gate: Scott sees done / doing / left and presses Go
-            steps = [str(x).strip()[:80] for x in (a.get("steps") or []) if str(x).strip()][:8]
+            steps = [_short(x, 160) for x in (a.get("steps") or []) if str(x).strip()][:8]   # 2026-11-24 touch test: [:80] cut "Reset butto"
             if self.prompt_plan:
                 return {"note": "The build prompt already lists its modules — follow those."}
             if len(steps) < 2:

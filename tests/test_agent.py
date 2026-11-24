@@ -399,3 +399,15 @@ class WorkbenchChanges(unittest.TestCase):
             r.state = "running"
             with self.assertRaises(ValueError):
                 r.undo_step(2)
+
+
+class PlanNames(unittest.TestCase):
+    """2026-11-24 Argus touch test: plan steps were cut mid-word at 80 chars ("Tap + Reset butto")."""
+
+    def test_short_keeps_whole_words(self):
+        s = "Add a Tap + Reset button under the counter that asks for a confirm step before it clears the number back to zero"
+        self.assertEqual(agent._short(s, 160), s)                      # 115 chars: kept whole now
+        t = agent._short("word " * 50, 40)
+        self.assertTrue(t.endswith("…") and len(t) <= 40 and not t[:-1].endswith(" "))
+        self.assertTrue(all(w == "word" for w in t[:-1].split()))
+        self.assertEqual(agent._short("x" * 200, 10), "x" * 9 + "…")  # no space: hard cut, still marked
