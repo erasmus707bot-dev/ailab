@@ -338,11 +338,17 @@ def for_context(project: str = "", ask: str = "", budget_chars: int = 6000) -> t
         if f"rules-{w}" in names and f"rules-{w}" not in pick:
             pick.append(f"rules-{w}")
     pick += [n for n in ALWAYS[2:] if n in names]
+    if PICKS in names:
+        pick.insert(min(2, len(pick)), PICKS)
     scored = sorted(((sum(w in n for w in words), n) for n in names if n not in pick), reverse=True)
     pick += [n for sc, n in scored if sc > 0][:4]
     out, used, size = [], [], 0
     for n in pick:
         lines = [l["text"] for l in read(n)["lines"]]
+        if n == PICKS:                                    # only the picks that fit this task (else the newest few)
+            fit = [t for t in lines if sum(w in t.lower() for w in words) >= 2]
+            lines = (fit or lines[-5:])[-10:]
+            n = PICKS + " (what Scott already chose — don't ask these again)"
         block = f"## {n}\n" + "\n".join(f"- {t}" for t in lines)
         if size + len(block) > budget_chars:
             block = block[: max(0, budget_chars - size)]
@@ -363,6 +369,8 @@ STATED_RX = re.compile(r"(?:^|(?<=[.!?\n]))\s*((?:i (?:always |really )?(?:like|
                        r"don'?t want|can'?t read|use|work)|i'?m (?:a|an|not)|always |never |from now on|going forward|"
                        r"please always|please never|my (?:rule|preference) is)[^.!?\n]{4,240})", re.I)
 LEARNED = "lab-learned"
+PICKS = "lab-picks"                    # 2026-11-24: what Scott picked on the Lab's ❓ question cards
+PICKS_DESC = "Choices Scott picked on Lab question cards — newest answer to the same question wins"
 
 
 def learn(text: str, where: str = "") -> list[str]:
@@ -375,6 +383,47 @@ def learn(text: str, where: str = "") -> list[str]:
         if r.get("saved"):
             saved.append(fact)
     return saved
+
+
+def save_pick(question: str, answer: str, project: str = "") -> dict:
+    """One ❓ card answer → lab-picks, tagged [scott] (he chose it). Same question again → the old answer is replaced."""
+    q = re.sub(r"\s+", " ", question or "").strip().rstrip("?").strip()[:200]
+    a = re.sub(r"\s+", " ", answer or "").strip()[:200]
+    if not q or not a or a.lower() in ("(no answer)", "later"):
+        return {"saved": False, "why": "empty"}
+    text = f"{q}? → {a}" + (f" (project {project})" if project else "")
+    head = f"{q}?".lower() + " →"
+    with _lock():
+        p = _path(PICKS)
+        cur = parse(p.read_text(errors="replace")) if p.exists() else {"meta": {}, "lines": []}
+        old = [l for l in cur["lines"] if not l["text"].lower().startswith(head)]
+        if any(l["text"].lower() == text.lower() for l in cur["lines"]):
+            return {"saved": False, "why": "already known"}
+        _write(PICKS, render(PICKS, PICKS_DESC, old + [{"source": "scott", "text": text}]), "add:pick")
+    return {"saved": True, "name": PICKS, "text": text}
+
+
+def split_answer(items: list[dict], answer: str) -> list[tuple[str, str]]:
+    """The card's one answer string → (question, pick) pairs. Formats the page sends:
+    one question: "pick · anything typed" · several: "Q1 → pick · Q2 → pick · anything typed"."""
+    parts = [x.strip() for x in str(answer or "").split(" · ") if x.strip()]
+    if not items or not parts:
+        return []
+    if len(items) == 1:
+        return [(items[0]["q"], " · ".join(parts))]
+    out, extra = [], []
+    for part in parts:
+        it = next((i for i in items if part.startswith(i["q"] + " → ")), None)
+        if it:
+            out.append((it["q"], part[len(it["q"]) + 3:]))
+        else:
+            extra.append(part)
+    if extra:                                                    # typed words: added to the last pick, or the first question
+        if out:
+            out[-1] = (out[-1][0], out[-1][1] + " · " + " · ".join(extra))
+        else:
+            out.append((items[0]["q"], " · ".join(extra)))
+    return out
 
 
 # ---- review round-trip (M3): ⬇ .md → any chatbot → ⬆ answers .md → before/after → Scott confirms -------------
