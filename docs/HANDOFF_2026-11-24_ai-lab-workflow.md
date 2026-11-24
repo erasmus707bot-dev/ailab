@@ -21,3 +21,10 @@ Findings (not fixed — another session was editing index.html):
 3. Page **438 px wide on 393** — top bar chips + ☀️ (worse than the 10–60 px noted above).
 4. A Lab restart mid-run (another session's restart, 08:16) drops the run: phone showed "❓ 'No such run.'" on ▶ Go. Runs live in memory only.
 Rig note: tapSel landed ~24 css px low on this page twice (toolbar show/hide); direct device-pixel tap from the frame worked.
+
+## Touch-test fixes 1–3 — 2026-11-24 08:40 (ailab `31d224e`, 226 tests OK)
+- Plan Go / Later / Send change + change box → 44 px (`#askdlg .btn`).
+- Plan step names: `_short(x, 160)` trims at a word break with … (was `[:80]` mid-word). Test `PlanNames`.
+- Phone top bar: ≤640 px the spend chip shows today only (`.cap` hidden), picker min 4rem, tighter chips. Headless Chrome 393×722 with ✋ chip + "$0.07 / $2.00": **446 → 393 px**, all header buttons 44 px.
+- index.html/agent.py change → **Lab restart needed** (agent.py is server code). Argus re-check owed.
+Still open: **4. runs survive a Lab restart** (runs live in memory only).
