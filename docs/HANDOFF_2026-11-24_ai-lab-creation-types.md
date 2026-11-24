@@ -14,7 +14,7 @@
 - 9 chips load; ⭐ guess live: "tetris … android phone" → 📱 + 🎮 · "thank-you note … letter.md" → 📝 · Hermes repo task → 🔧. 💡 model tip follows the chips.
 - 📝 run `ab05cfd3fc` (deepseek v4.1 flash): ✅ done, no robot, $0.0012 (before chips this ended "built, not run").
 - 📱 run `8ebb402641`: ✅ done, robot 🟢 page mode + phone fit, $0.003; result shows **📦 Make it an app: 📱 Android**, ship box opens with only Android ticked. ↩ Undo all → Scratch restored.
-- Bug found + fixed live: stray "null" after the 🎬 chip (`<this commit>`).
+- Bug found + fixed live: stray "null" after the 🎬 chip (`edeb2bd`).
 - Chips 44 px, wrap to 3 rows in the agent pane, no sideways scroll (desktop). Chrome window would not resize to phone width.
 
 ## Still open
