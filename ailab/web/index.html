@@ -227,6 +227,7 @@
   .drawer { margin-top: 0; border-top: 1px solid var(--line); padding-top: 6px; }
   /* 2026-11-24 workflow build: picture first (Before beside Now), robot verdict, question cards, plan list */
   .result { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
+  .shipbar { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; } .shipbar > .btn { align-self: flex-start; min-height: 48px; font-size: 17px; }
   .shipbox { border: 1px solid var(--line, #8886); border-radius: 10px; padding: 10px; } .shipbox input[type=text], .shipbox select { min-height: 44px; font-size: 17px; } .shipbox .chk { min-height: 44px; display: inline-flex; align-items: center; }
   .result[hidden], .ba[hidden] { display: none; }
   .ba { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
@@ -801,12 +802,17 @@ function startView() {
   const baWrap = h("div", { class: "ba", hidden: true }, h("figure", {}, h("figcaption", {}, "⬅️ Before"), baBefore), h("figure", {}, h("figcaption", {}, "➡️ Now"), baNow));
   const resHead = h("div", { class: "final", role: "status" }), resRobot = h("div", {}), resBtns = h("div", { class: "runbar" }), resNote = h("span", { class: "note" });
   const shipBox = h("div", { class: "shipbox", hidden: true, "aria-live": "polite" });
-  const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, baWrap, resRobot, resBtns, resNote, shipBox);
+  const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, baWrap, resRobot, resBtns, resNote);
+  /* 2026-11-24 (Scott: "too difficult to navigate"): 📦 is ALWAYS on screen at the top of this pane — no run needed. */
+  const shipBar = h("div", { class: "shipbar" },
+    h("button", { class: "btn pri", type: "button", title: "Hermes builds Android / Linux / Windows apps from this project (🧪 test builds only you see)",
+      onclick: () => { if (!shipBox.hidden) { shipBox.hidden = true; return; } shipOpen(); } }, "📦 Make it an app"), shipBox);
   /* 2026-11-24 lab-ship M3: 📦 Make it an app — Hermes builds Android / Linux / Windows onto the 🧪 test shelf. */
   const PLAT_L = { android: "📱 Android", linux: "🐧 Linux", windows: "🪟 Windows" };
   async function shipOpen(want) {   /* want: platforms picked by the 🧩 chips (Android / Windows / Linux) */
     want = Array.isArray(want) && want.length ? want : null;
     shipBox.hidden = false; shipBox.replaceChildren(h("p", { class: "note" }, "⏳ Looking at the project…"));
+    shipBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const o = await api(`/api/ship/options?project=${encodeURIComponent(p.id)}`);
     if (!o.ok) { shipBox.replaceChildren(h("p", {}, `${o.icon || "⚠️"} ${o.message || "Can't ship this project."}`)); return; }
     if (!o.options.length) { shipBox.replaceChildren(h("p", {}, "❓ Nothing to ship yet — it needs an index.html, or a folder with project.godot.")); return; }
@@ -985,12 +991,12 @@ function startView() {
       h("div", { class: "bar2" }, "Editing: ", fileName, h("span", { class: "note" }, ` in ${p.name || p.id}`), h("span", { class: "seg", role: "group", "aria-label": "Edit or preview" }, segBtns), pv.saveBtn),
       pv.note, pv.restore, edWrap, prevWrap);
     codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, paneBar("code", "✋ Waiting for you", sec, panes),
-      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), resultBox, waitNone, changes, filesEd, drawer);
+      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), shipBar, resultBox, waitNone, changes, filesEd, drawer);
     filesPane = h("div", { class: "pane wbfiles", "data-pane": "files" }, paneBar("files", "📂 Files", sec, panes),
       h("p", { class: "panesub" }, "This project's files. Tap one to open it in the editor."), pv.tabs);
   } else {
     codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, paneBar("code", "✋ Waiting for you", sec, panes),
-      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), resultBox, waitNone, changes, offCard("preview", "👁", "Files & code"), drawer);
+      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), shipBar, resultBox, waitNone, changes, offCard("preview", "👁", "Files & code"), drawer);
     filesPane = h("div", { class: "pane wbfiles", "data-pane": "files" }, paneBar("files", "📂 Files", sec, panes), h("p", { class: "note" }, "⏸ Not switched on yet."));
   }
   Object.assign(panes, { files: filesPane, code: codePane, agent: agentPane });
