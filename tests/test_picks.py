@@ -65,3 +65,13 @@ class FromARun(Base):
     def test_memory_off_saves_nothing(self):
         self._run(memory_on=False)
         self.assertNotIn(M.PICKS, [x["name"] for x in M.subjects()])
+
+
+class RulesByLine(Base):
+    def test_a_rules_line_that_fits_the_task_goes_in(self):
+        M.add_fact("claude-standing-rules", "Every library has range filters (size, length, time)", "claude-import")
+        M.add_fact("claude-standing-rules", "Background events are silent", "claude-import")
+        txt, used = M.for_context("scratch", "build a video library with filters")
+        self.assertIn("range filters", txt)
+        self.assertNotIn("silent", txt)
+        self.assertIn("claude-standing-rules", used)

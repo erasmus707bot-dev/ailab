@@ -359,7 +359,34 @@ def for_context(project: str = "", ask: str = "", budget_chars: int = 6000) -> t
         size += len(block)
         if size >= budget_chars:
             break
+    fit = _fitting_lines([x for x in names if x not in used], words, 12)   # 2026-11-24: rules files are found by their lines,
+    if fit and size < budget_chars + 1500:                                   # not only by their names
+        out.append("## other lines that fit this task\n" + "\n".join(f"- {t} ({nm})" for nm, t in fit))
+        used += sorted({nm for nm, _ in fit})
     return ("What you know about Scott (from his Lab memory):\n" + "\n\n".join(out)) if out else "", used
+
+
+STOP = {"this", "that", "with", "from", "have", "make", "into", "your", "when", "then", "them", "they", "what", "will",
+        "would", "should", "could", "there", "their", "about", "page", "only", "just", "more", "some", "also", "each"}
+
+
+def _fitting_lines(names: list[str], words: set, limit: int) -> list[tuple[str, str]]:
+    """The best-matching single lines across other subjects (≥2 task words each, or 1 long word ≥7 letters)."""
+    words = {w for w in words if w not in STOP}
+    scored = []
+    for nm in names:
+        try:
+            lines = read(nm)["lines"]
+        except MemError:
+            continue
+        for l in lines:
+            t = l["text"].lower()
+            hit = {w for w in words if w in t}
+            sc = len(hit) + sum(len(w) >= 7 for w in hit)
+            if sc >= 2:
+                scored.append((sc, nm, l["text"][:220]))
+    scored.sort(key=lambda x: -x[0])
+    return [(nm, t) for _, nm, t in scored[:limit]]
 
 
 # ---- auto-save what Scott states (M2) ---------------------------------------------------------------------------
