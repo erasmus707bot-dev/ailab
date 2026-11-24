@@ -27,7 +27,9 @@ DEFAULTS: dict = {
         "openrouter/minimax/minimax-m3.1-flash": {"in": 0.15, "out": 0.60},
         "openrouter/z-ai/glm-5.3": {"in": 1.40, "out": 4.40},
         "openrouter/moonshotai/kimi-k3.1-pro": {"in": 2.0, "out": 10.0},
-        "openrouter/qwen/qwen3.8-max-0902": {"in": 2.0, "out": 6.0}},
+        "openrouter/qwen/qwen3.8-max-0902": {"in": 2.0, "out": 6.0},
+        "openrouter/nousresearch/hermes-4-405b": {"in": 1.0, "out": 3.0},     # 🎨 morphllm 2026-11-05, UNVERIFIED
+        "openrouter/venice/uncensored": {"in": 0.20, "out": 0.90}},          # 🎨 morphllm 2026-11-05, UNVERIFIED
     "base_urls": {},                      # override any provider's base URL
     # Feature flags. Switched on one at a time by Scott (M7). There is deliberately no API to flip them.
     "flags": {"router": False, "preview": False, "agent": False, "compare": False, "live": False,

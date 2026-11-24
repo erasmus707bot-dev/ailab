@@ -31,6 +31,16 @@ ROSTER: list[dict] = [
     {"provider": "openrouter", "id": "qwen/qwen3.8-max-0902", "match": [r"^qwen/qwen3\.8-max"],
      "job": "pictures + tools in one model", "from": "Alibaba Qwen · China · closed",
      "price": "about $2 in / $6 out per million", "zdr": "UNVERIFIED — Alibaba is the only host", "id_checked": True},
+    # ---- 🎨 fewer limits (Scott 2026-11-24: "label the less censored models so I may make art in the most free ways") ----
+    # Sources: morphllm "best uncensored llm" (2026-11-05), atlascloud / featherless 2026 guides. UNVERIFIED until a Compare probe.
+    {"provider": "openrouter", "id": "nousresearch/hermes-4-405b", "match": [r"^nousresearch/hermes-4-405b"],
+     "job": "🎨 fewer limits — big general model, neutral alignment (stories, art prompts)", "from": "Nous Research · USA · open weights (Llama 3.1 base)",
+     "price": "about $1 in / $3 out per million — UNVERIFIED", "zdr": "UNVERIFIED (open weights, several hosts)", "id_checked": False,
+     "limits": "fewer"},
+    {"provider": "openrouter", "id": "venice/uncensored", "match": [r"^venice/uncensored$"],
+     "job": "🎨 fewer limits — chat + creative writing; NO tool calling (not for builds)", "from": "Venice · USA · open-weight fine-tune",
+     "price": "about $0.20 in / $0.90 out per million — UNVERIFIED",
+     "zdr": "UNVERIFIED — never the :free endpoint (logs prompts)", "id_checked": False, "limits": "fewer"},
     # ---- local (Ollama on gandalf: RTX 2060 6 GB, 31 GB RAM) ----
     {"provider": "ollama", "id": "qwen3.5:4b", "match": [r"^qwen3\.5:4b"],
      "job": "fast local helper — fits fully on the 6 GB card", "from": "Alibaba Qwen · local", "price": "free", "pull": "qwen3.5:4b"},
@@ -42,6 +52,12 @@ ROSTER: list[dict] = [
      "price": "free", "pull": "qwen3.8:27b", "id_checked": False},
     {"provider": "ollama", "id": "qwen3.5:9b", "match": [r"^qwen3\.5:9b"],
      "job": "middle local model (already on gandalf; slow off the card)", "from": "Alibaba Qwen · local", "price": "free", "pull": "qwen3.5:9b"},
+    {"provider": "ollama", "id": "dolphin3:8b", "match": [r"^dolphin3:8b"],
+     "job": "🎨 fewer limits, local and private — stories, art prompts (fits the 6 GB card)", "from": "Dolphin (Eric Hartford) · local",
+     "price": "free", "pull": "dolphin3:8b", "limits": "fewer"},
+    {"provider": "ollama", "id": "hermes3:8b", "match": [r"^hermes3:8b"],
+     "job": "🎨 fewer limits, local — follows your system prompt closely (fits the 6 GB card)", "from": "Nous Research · local",
+     "price": "free", "pull": "hermes3:8b", "limits": "fewer"},
 ]
 
 
@@ -85,6 +101,7 @@ def status(lab, project: dict | None = None) -> list[dict]:
         ids, err, live = cache[prov]
         hit = sorted((m for m in (ids or []) if any(re.search(p, m) for p in e["match"])), reverse=True)
         row = {k: e.get(k) for k in ("provider", "job", "from", "price", "zdr")}
+        row["limits"] = limits_tag(prov, e["id"])
         row["model"] = hit[0] if hit else e["id"]
         if hit:
             row["state"], row["todo"] = "ready", ""
@@ -112,9 +129,32 @@ USE_RULES: list[tuple[str, str]] = [
     (r"flash|mini|lite|haiku|nano|tiny|small|turbo|fast|instant|:[1-9](\.[0-9])?b\b", "⚡ fast & cheap"),
     (r"opus|ultra|max\b|large|405b|235b|480b|:[1-9][0-9]{1,2}b\b", "🧠 hardest work"),
 ]
+# ---- 🎨 how strict a model is (2026-11-24) ----------------------------------------------------------------------
+# 🎨 fewer limits = a fine-tune made to refuse less (stories, art prompts, mature themes). 🔒 strict = the company that
+# runs it filters on its side. No icon = normal. A guide from public write-ups, not a test — UNVERIFIED per model.
+# Whatever the model: nothing sexual involving minors, no real person's likeness without consent.
+LIMITS_FEWER_RX = re.compile(r"uncensored|abliterat|dolphin|(^|/)hermes-?[34]|nousresearch/hermes|venice/|lumimaid|euryale|"
+                             r"mythomax|magnum|rocinante|cydonia|nemomix|unslop", re.I)
+STRICT_PROVIDERS = {"claude", "qwen", "kimi"}           # first-party APIs with provider-side filters
+LIMITS_LEGEND = (" 🎨 = fewer limits (made to refuse less — stories, art prompts, mature themes) · 🔒 = strict "
+                 "(the company filters on its side). A guide, not a test.")
+
+
+def limits_tag(provider_name: str, model_id: str) -> str:
+    """'🎨' fewer limits · '🔒' strict · '' normal."""
+    for e in ROSTER:
+        if e["provider"] == provider_name and e.get("limits") and any(re.search(p, model_id or "") for p in e["match"]):
+            return "🎨" if e["limits"] == "fewer" else "🔒"
+    if LIMITS_FEWER_RX.search(model_id or ""):
+        return "🎨"
+    if provider_name in STRICT_PROVIDERS or re.match(r"^(anthropic|openai|google)/", model_id or ""):
+        return "🔒"
+    return ""
+
+
 USE_LEGEND = ("Tags come from the model's name (💻 coding · 🖼 sees images · 🔬 reasoning · ⚡ fast & cheap · 🧠 hardest work) "
               "— a guide, not a test. ⭐ rows were picked by hand. $ tiers: output price per million tokens — "
-              "$ under 1 · $$ under 5 · $$$ under 15 · $$$$ above; free = local.")
+              "$ under 1 · $$ under 5 · $$$ under 15 · $$$$ above; free = local." + LIMITS_LEGEND)
 
 
 def use_tag(model_id: str) -> str:
@@ -155,5 +195,5 @@ def tags(provider_name: str, models: list[dict], price_of=None) -> dict[str, dic
                     tier = cost_tier(pout) if priced else ""
                 except Exception:                                 # noqa: BLE001 — a price is a nicety
                     tier = ""
-        out[mid] = {"use": use_tag(mid), "tier": tier}
+        out[mid] = {"use": use_tag(mid), "tier": tier, "limits": limits_tag(provider_name, mid)}
     return out

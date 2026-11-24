@@ -426,7 +426,8 @@ function settingsView() {
       if (k.note) box.append(h("p", { class: "note" }, k.note));
       (k.providers || []).forEach(p => box.append(h("div", { class: "keyrow" },
         h("div", {}, h("b", {}, `${p.icon} ${p.id}`)),
-        h("div", { class: "st" }, !p.listed ? "⏸ Off in Hermes, or no key yet — turn it on in Hermes → Settings → API keys" : p.set ? `✅ key in Hermes · ${p.models.length} model${p.models.length === 1 ? "" : "s"}` : "⛔ no key in Hermes"),
+        h("div", { class: "st" }, !p.listed ? "⏸ Off in Hermes, or no key yet — turn it on in Hermes → Settings → API keys" : p.set ? `✅ key in Hermes · ${p.models.length} model${p.models.length === 1 ? "" : "s"}` : "⛔ no key in Hermes",
+          ["qwen", "kimi"].includes(p.id) ? h("div", {}, "⚠️ Goes straight to " + (p.id === "qwen" ? "Alibaba" : "Moonshot") + " — not the private (no-data-kept) 🌐 OpenRouter route. 🔒 strict filters.") : null),
         h("div", { class: "acts" }))));
       return;
     }
@@ -735,8 +736,20 @@ function autosave(text) {
 
 /* ⭐ recommended models (ailab/roster.py): starred + first in every model list; this card says what each is for */
 /* 2026-11-23: every model shows a best-use tag + $ tier (ailab/roster.py). ⭐ rows keep their hand-picked job. */
-const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "";
-  return r.picks && r.picks[m] ? `⭐ ${m} — ${r.picks[m]}${tier}` : `${m} — ${t.use || ""}${tier}`; };
+const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "", lim = t.limits ? `${t.limits} ` : "";
+  return r.picks && r.picks[m] ? `⭐ ${lim}${m} — ${r.picks[m]}${tier}` : `${lim}${m} — ${t.use || ""}${tier}`; };
+/* 🎨 only (2026-11-24): hide every model not tagged "fewer limits". Remembered. */
+function artToggle(sel, r) {
+  const art = m => ((r.tags || {})[m] || {}).limits === "🎨";
+  const n = (r.models || []).filter(art).length;
+  const cb = h("input", { type: "checkbox", checked: !!store.get("artonly", false), "aria-label": "Show only fewer-limits models" });
+  const apply = () => { store.set("artonly", cb.checked);
+    [...sel.options].forEach(o => { o.hidden = cb.checked && !art(o.value); });
+    if (cb.checked && sel.selectedOptions[0] && sel.selectedOptions[0].hidden) { const f = [...sel.options].find(o => !o.hidden); if (f) { f.selected = true; sel.dispatchEvent(new Event("change")); } } };
+  cb.onchange = apply; if (n) apply();
+  return h("label", { class: "note", style: "display:inline-flex;gap:6px;align-items:center;min-height:44px" }, cb,
+    n ? `🎨 only (${n} here)` : "🎨 only — none on this provider; try 🌐 openrouter or 🏠 ollama");
+}
 const legendNote = (r) => h("details", { class: "note" }, h("summary", {}, "What do the tags and $ mean?"), r.legend || "");
 function rosterCard(pid) {
   const box = h("div", { id: "rosterbox" }, "⏳");
@@ -747,7 +760,7 @@ function rosterCard(pid) {
       if (!r.ok) { box.append(`${r.icon || "⚠️"} ${r.message || "could not load"}`); return; }
       r.rows.forEach(x => box.append(h("p", {},
         h("b", {}, `${x.state.startsWith("ready") ? "✅" : x.provider === "ollama" ? "⬇️" : "🔑"} ${x.model}`), h("br", {}),
-        `${x.job} · ${x.from} · ${x.price}`, h("br", {}),
+        `${x.limits ? x.limits + " " : ""}${x.job} · ${x.from} · ${x.price}`, h("br", {}),
         h("span", { class: "note" }, x.state + (x.todo ? ` — ${x.todo}` : "") + (x.zdr ? ` · private routing: ${x.zdr}` : "")))));
     }); });
   return d;
@@ -766,7 +779,7 @@ function chatView() {
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
     const want = store.get("model." + prov, r.models[0]);
     r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
-    if (r.legend) legend.replaceChildren(legendNote(r));
+    if (r.legend) legend.replaceChildren(legendNote(r), artToggle(modelSel, r));
   });
   const log = h("div", { class: "log", id: "log" }, chatLog.map(msgEl));
   const ta = h("textarea", { id: "draft", placeholder: "💬 …", "aria-label": "Message",
@@ -930,7 +943,7 @@ function agentView(wb) {
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
     const want = store.get("model." + prov, r.models[0]);
     r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
-    if (r.legend) legend.replaceChildren(legendNote(r));
+    if (r.legend) legend.replaceChildren(legendNote(r), artToggle(modelSel, r));
     loaded = r; suggest();
   });
   /* 💡 Suggested model (2026-11-23): reads the task, picks from the list already loaded for this provider —

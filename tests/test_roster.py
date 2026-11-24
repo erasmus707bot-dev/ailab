@@ -17,7 +17,7 @@ class Roster(unittest.TestCase):
         self.assertIn("moonshotai/kimi-k3.1-pro", out)
         self.assertTrue(all("not confirmed" in v for v in picks.values()))
         out, picks = roster.arrange("ollama", ["qwen3.5:4b", "dolphin3:8b"], live=True)
-        self.assertEqual((out, list(picks)), (["qwen3.5:4b", "dolphin3:8b"], ["qwen3.5:4b"]))
+        self.assertEqual((out, list(picks)), (["qwen3.5:4b", "dolphin3:8b"], ["qwen3.5:4b", "dolphin3:8b"]))   # dolphin = 🎨 pick since 2026-11-24
 
     def test_status_says_pull_or_key(self):
         class Lab:
@@ -30,6 +30,21 @@ class Roster(unittest.TestCase):
         self.assertEqual(rows["qwen3.8:27b"]["todo"], "ollama pull qwen3.8:27b")
         self.assertEqual(rows["z-ai/glm-5.3"]["state"], "needs a key")
 
+
+
+class Limits(unittest.TestCase):
+    """2026-11-24: 🎨 fewer limits / 🔒 strict labels."""
+    def test_tags(self):
+        from ailab import roster as R
+        self.assertEqual(R.limits_tag("openrouter", "nousresearch/hermes-4-405b"), "🎨")
+        self.assertEqual(R.limits_tag("openrouter", "venice/uncensored"), "🎨")
+        self.assertEqual(R.limits_tag("ollama", "dolphin3:8b"), "🎨")
+        self.assertEqual(R.limits_tag("openrouter", "someone/llama-3-abliterated"), "🎨")
+        self.assertEqual(R.limits_tag("kimi", "kimi-k3"), "🔒")
+        self.assertEqual(R.limits_tag("claude", "claude-sonnet-5-5"), "🔒")
+        self.assertEqual(R.limits_tag("openrouter", "anthropic/claude-x"), "🔒")
+        self.assertEqual(R.limits_tag("openrouter", "deepseek/deepseek-v4.1-flash"), "")
+        self.assertIn("🎨", R.USE_LEGEND)
 
 if __name__ == "__main__":
     unittest.main()
@@ -52,5 +67,5 @@ class BestUse(unittest.TestCase):
         from ailab import roster as R
         self.assertEqual([R.cost_tier(x) for x in (0.5e-6, 3e-6, 10e-6, 20e-6, None)], ["$", "$$", "$$$", "$$$$", ""])
         t = R.tags("openrouter", [{"id": "a/b-coder", "price_out": 2e-6}, {"id": "c/d"}], lambda m, l: (0, 30e-6, True))
-        self.assertEqual(t, {"a/b-coder": {"use": "💻 coding", "tier": "$$"}, "c/d": {"use": "💬 general", "tier": "$$$$"}})
+        self.assertEqual(t, {"a/b-coder": {"use": "💻 coding", "tier": "$$", "limits": ""}, "c/d": {"use": "💬 general", "tier": "$$$$", "limits": ""}})
         self.assertEqual(R.tags("ollama", [{"id": "qwen3.5:4b"}])["qwen3.5:4b"]["tier"], "free")

@@ -114,7 +114,8 @@ class App:
             pass
         tg = roster.tags(prov, r.get("models", []), price_of)
         return 200, {"ok": True, "provider": prov, "source": r.get("source"), "models": ids[:500], "picks": picks,
-                     "tags": {m: tg.get(m, {"use": roster.use_tag(m), "tier": ""}) for m in ids[:500]},
+                     "tags": {m: tg.get(m, {"use": roster.use_tag(m), "tier": "", "limits": roster.limits_tag(prov, m)})
+                              for m in ids[:500]},
                      "legend": roster.USE_LEGEND}
 
     # ---- 🔑 Keys page (2026-11-23). Standalone: the Lab's own store (keyring → environment → keys.env, 0600).
