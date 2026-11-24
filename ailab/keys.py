@@ -9,7 +9,8 @@ from pathlib import Path
 from . import config
 
 ENV_NAMES = {"openrouter": "OPENROUTER_API_KEY", "hf": "HF_TOKEN", "qwen": "DASHSCOPE_API_KEY",
-             "kimi": "MOONSHOT_API_KEY", "claude": "ANTHROPIC_API_KEY"}
+             "kimi": "MOONSHOT_API_KEY", "gemini": "GEMINI_API_KEY",
+             "claude": "ANTHROPIC_API_KEY"}
 
 
 class KeyMissing(Exception):

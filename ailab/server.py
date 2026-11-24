@@ -29,7 +29,7 @@ MAX_CAPTURE_BODY = 12_000_000
 PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'self' data: blob:; "
                "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
-PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙"}
+PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙", "gemini": "💎"}
 OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models",
        "live": "🪞 Show & change", "memory": "🧠 Memory", "prompt": "📝 Prompt builder"}
 # Static comparison page: our own escaped HTML; only an inline theme-toggle script, images inline.

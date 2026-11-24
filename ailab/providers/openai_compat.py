@@ -1,4 +1,4 @@
-"""One adapter for every OpenAI-compatible host: OpenRouter, Hugging Face router, Qwen, Kimi, Ollama."""
+"""One adapter for every OpenAI-compatible host: OpenRouter, Hugging Face router, Qwen, Kimi, Gemini, Ollama."""
 from __future__ import annotations
 
 from .base import ChatResult, Provider
@@ -9,6 +9,7 @@ HOSTS: dict[str, tuple[str, str | None]] = {
     "hf": ("https://router.huggingface.co/v1", "hf"),
     "qwen": ("https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "qwen"),
     "kimi": ("https://api.moonshot.ai/v1", "kimi"),
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini"),   # 2026-11-24, Hermes-held key
     "ollama": ("http://127.0.0.1:11434/v1", None),
 }
 

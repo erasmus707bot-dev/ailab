@@ -54,7 +54,7 @@ class KeysRoutes(Srv):
         self.lab.models = type("M", (), {"forget": lambda s, n: None})()
         code, j, _ = self.req("/api/keys")
         self.assertEqual(code, 200)
-        self.assertEqual({p["id"] for p in j["providers"]}, {"openrouter", "hf", "qwen", "kimi", "claude"})
+        self.assertEqual({p["id"] for p in j["providers"]}, {"openrouter", "hf", "qwen", "kimi", "gemini", "claude"})
         code, j, _ = self.req("/api/keys/set", {"provider": "qwen", "key": "sk-test-1234567890"})
         self.assertEqual((code, j["source"]), (200, "file"))
         code, j, _ = self.req("/api/keys")

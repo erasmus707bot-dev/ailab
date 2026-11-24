@@ -135,7 +135,7 @@ USE_RULES: list[tuple[str, str]] = [
 # Whatever the model: nothing sexual involving minors, no real person's likeness without consent.
 LIMITS_FEWER_RX = re.compile(r"uncensored|abliterat|dolphin|(^|/)hermes-?[34]|nousresearch/hermes|venice/|lumimaid|euryale|"
                              r"mythomax|magnum|rocinante|cydonia|nemomix|unslop", re.I)
-STRICT_PROVIDERS = {"claude", "qwen", "kimi"}           # first-party APIs with provider-side filters
+STRICT_PROVIDERS = {"claude", "qwen", "kimi", "gemini"}           # first-party APIs with provider-side filters
 LIMITS_LEGEND = (" 🎨 = fewer limits (made to refuse less — stories, art prompts, mature themes) · 🔒 = strict "
                  "(the company filters on its side). A guide, not a test.")
 
