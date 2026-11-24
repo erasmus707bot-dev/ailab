@@ -22,6 +22,7 @@ DEFAULTS: dict = {
     # Without these the fallback ($15/$75) made a Sonnet step look 4x dearer and stopped a live run early.
     "prices_per_mtok": {
         "claude-sonnet-5-5": {"in": 2.0, "out": 10.0}, "claude-opus-5-5": {"in": 4.0, "out": 20.0},
+        "thinkingmachines/inkling-2-small": {"in": 0.30, "out": 1.00},   # higher of two listed prices, 2026-11-23
         "openrouter/deepseek/deepseek-v4.1-flash": {"in": 0.30, "out": 1.20},
         "openrouter/minimax/minimax-m3.1-flash": {"in": 0.15, "out": 0.60},
         "openrouter/z-ai/glm-5.3": {"in": 1.40, "out": 4.40},
