@@ -41,6 +41,15 @@ ROSTER: list[dict] = [
      "job": "🎨 fewer limits — chat + creative writing; NO tool calling (not for builds)", "from": "Venice · USA · open-weight fine-tune",
      "price": "about $0.20 in / $0.90 out per million — UNVERIFIED",
      "zdr": "UNVERIFIED — never the :free endpoint (logs prompts)", "id_checked": False, "limits": "fewer"},
+    # ---- 🎨 Venice direct (2026-11-24 art freedom). IDs + prices from docs.venice.ai/overview/models (2026-11-24). ----
+    {"provider": "venice", "id": "venice-uncensored-1-2", "match": [r"^venice-uncensored-1-2$"],
+     "job": "🎨 fewer limits — picture prompt writer (keeps your words exactly); chat + creative writing",
+     "from": "Venice · USA · open-weight fine-tune", "price": "$0.20 in / $0.90 out per million",
+     "zdr": "Venice says private (no prompt storage) — UNVERIFIED by us", "id_checked": True, "limits": "fewer"},
+    {"provider": "venice", "id": "deepseek-v4-1-flash-uncensored", "match": [r"^deepseek-v4-1-flash-uncensored$"],
+     "job": "🎨 fewer limits — stronger writer, longer stories", "from": "DeepSeek weights · hosted by Venice (USA)",
+     "price": "$0.33 in / $1.32 out per million", "zdr": "Venice says private — UNVERIFIED by us", "id_checked": True,
+     "limits": "fewer"},
     # ---- local (Ollama on gandalf: RTX 2060 6 GB, 31 GB RAM) ----
     {"provider": "ollama", "id": "qwen3.5:4b", "match": [r"^qwen3\.5:4b"],
      "job": "fast local helper — fits fully on the 6 GB card", "from": "Alibaba Qwen · local", "price": "free", "pull": "qwen3.5:4b"},

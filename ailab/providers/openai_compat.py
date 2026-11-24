@@ -10,6 +10,7 @@ HOSTS: dict[str, tuple[str, str | None]] = {
     "qwen": ("https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "qwen"),
     "kimi": ("https://api.moonshot.ai/v1", "kimi"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini"),   # 2026-11-24, Hermes-held key
+    "venice": ("https://api.venice.ai/api/v1", "venice"),     # 2026-11-24 art freedom (docs.venice.ai)
     "ollama": ("http://127.0.0.1:11434/v1", None),
 }
 
@@ -28,6 +29,9 @@ class OpenAICompat(Provider):
         if self.name == "openrouter":
             # Zero data retention + no training providers + return real cost in usage.
             return {"provider": {"zdr": True, "data_collection": "deny"}, "usage": {"include": True}}
+        if self.name == "venice":
+            # No Venice house system prompt (it would reshape Scott's words); no <think> blocks in the answer.
+            return {"venice_parameters": {"include_venice_system_prompt": False, "strip_thinking_response": True}}
         if self.name == "ollama":
             # 2026-11-21 real run: qwen3.5 on gandalf's CPU spent minutes "thinking" before the first word and
             # timed out. Ollama's /v1 endpoint honours reasoning_effort "none" (it ignores think:false there).
