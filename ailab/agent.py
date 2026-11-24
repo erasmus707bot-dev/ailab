@@ -278,6 +278,11 @@ class Run:
         heads = list(re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)[ \t]*[—:–.-]*[ \t]*(.*)$", self.task, re.M))[:12]
         self.plan = [m.group(1) for m in heads]
         self.prompt_plan = bool(heads)        # modules came from a build prompt (not the agent's own plan)
+        self.plan_text: dict[str, str] = {    # 2026-11-24: each module's heading + body (for the empty-module guard)
+            m.group(1): self.task[m.start(): heads[i + 1].start() if i + 1 < len(heads) else len(self.task)][:3000]
+            for i, m in enumerate(heads)}
+        self.empty_tries = 0
+        self.empty_module = ""                # set when a make-module ended with nothing made (⚠️, no ▶ Go on)
         self.module_now = ""
         self.question: dict | None = None
         self._answer = None
@@ -366,7 +371,7 @@ class Run:
     def gate_info(self) -> dict | None:
         """A build-prompt run told to stop at a module gate, now finished: which module is done, which comes next."""
         m = self.GATE_RX.match(self.task or "")
-        if not m or self.state not in ("done", "unproven") or not self.plan:
+        if not m or self.state not in ("done", "unproven") or not self.plan or self.empty_module:
             return None
         done = self.module_now or m.group(1)
         idx = self.plan.index(done) if done in self.plan else -1
@@ -500,6 +505,32 @@ class Run:
             raise ValueError("The agent is not asking anything right now.")
         self._answer = str(text or "").strip()[:500] or "(no answer)"
         self._answered.set()
+
+    MAKE_RX = re.compile(r"\b(create|creates|generate|build|builds|make|makes|write|writes|draw|render|design|implement|add|produce)\b", re.I)
+    READ_RX = re.compile(r"\b(audit|read-only|read only|review|verify|verification|plan only|inspect|survey)\b", re.I)
+    FILE_RX = re.compile(r"[\w./-]+\.(?:md|html?|css|js|ts|py|json|txt|svg|png|jpe?g|webp|gif|kt|xml|sh|toml|ya?ml)\b", re.I)
+
+    def empty_module_claim(self) -> str:
+        """2026-11-24 (Scott: a run said '1 · Generate base image' was done with no files): the module this run is on
+        is meant to MAKE something, yet this run changed no file and made no picture. '' = nothing wrong."""
+        if not self.prompt_plan or self.changed or getattr(self, "pictures", None):
+            return ""
+        g = self.GATE_RX.match(self.task or "")
+        mod = self.module_now or (g.group(1) if g else "")
+        text = self.plan_text.get(mod, "")
+        if not mod or not text:
+            return ""
+        head = text.splitlines()[0] if text else ""
+        if self.READ_RX.search(head) or not self.MAKE_RX.search(text):
+            return ""
+        for name in self.FILE_RX.findall(text):            # a file it names is already there → "already in place" is honest
+            name = name.strip("./")
+            try:
+                if name and ((self.root / name).exists() or next(self.root.rglob(Path(name).name), None)):
+                    return ""
+            except (OSError, ValueError):
+                pass
+        return self.plan_names.get(mod) or f"Module {mod}"
 
     def proof_ok(self) -> bool:
         """True when nothing was changed, or a check passed after the last change."""
@@ -984,6 +1015,20 @@ class Run:
                 self._record(step)
                 if res.get("done"):
                     summary = str(a.get("summary") or "")[:1500]   # 2026-11-24: was cut mid-sentence at 500
+                    empty = self.empty_module_claim()
+                    if empty and self.empty_tries >= 1:              # asked once already: say so plainly, never ✅
+                        self.state, self.empty_module = "unproven", empty
+                        self.why = (f"⚠️ {empty} was meant to make something, but nothing was made — not counted as done. "
+                                    "Its words: " + summary)[:700]
+                        return
+                    if empty:
+                        self.empty_tries += 1
+                        res = {"error": f"Not accepted: {empty} is meant to make something, but this run made no file and "
+                                        "no picture. Make it now (and check it), or say plainly why it can't be made — "
+                                        "then say done."}
+                        step["result"] = res
+                        msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res, default=str)})
+                        continue
                     if self.proof_ok():
                         if self._finish((summary or "✅ Done") if self.changed else ("ℹ️ No files changed. " + summary)[:600]):
                             return

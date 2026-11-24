@@ -40,8 +40,10 @@ class Made(Base):
 
 
 class Gate(Base):
-    def run_gated(self, task=GATED, module="0"):
-        b = Brain([act(action="list", module=module), act(action="done", summary="audit done", module=module)])
+    def run_gated(self, task=GATED, module="0", make=False):
+        # a module meant to make something must make it (empty-module guard, 2026-11-24)
+        b = Brain(([act(action="write", path=f"m{module}.html", content="<p>x</p>", why="w", module=module), OK] if make
+                   else [act(action="list", module=module)]) + [act(action="done", summary="done", module=module)])
         r = agent.Run(b, config.load({"mode": "standalone"}), self.project, "openrouter", "m", task)
         r.loop()
         return r
@@ -58,9 +60,9 @@ class Gate(Base):
 
     def test_next_task_gates_again_then_last_module_has_no_gate(self):
         r1 = self.run_gated()
-        r2 = self.run_gated(r1.view()["gate"]["next_task"], "1")
+        r2 = self.run_gated(r1.view()["gate"]["next_task"], "1", make=True)
         self.assertEqual(r2.view()["gate"]["next"], "2")
-        r3 = self.run_gated(r2.view()["gate"]["next_task"], "2")
+        r3 = self.run_gated(r2.view()["gate"]["next_task"], "2", make=True)
         self.assertIsNone(r3.view()["gate"])
         self.assertTrue(all(m["state"] == "done" for m in r3.view()["plan"]))
 
