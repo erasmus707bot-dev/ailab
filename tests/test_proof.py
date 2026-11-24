@@ -65,3 +65,13 @@ class Proof(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Prices(unittest.TestCase):
+    def test_known_prices_and_config_json_adds_not_wipes(self):
+        from ailab import config, providers
+        c = config.load({"prices_per_mtok": {"my/model": {"in": 1, "out": 2}}})
+        self.assertIn("claude-sonnet-5-5", c["prices_per_mtok"])
+        self.assertIn("my/model", c["prices_per_mtok"])
+        pin, pout, known = providers.build(c, None)["claude"].price("claude-sonnet-5-5")
+        self.assertEqual((pin * 1e6, pout * 1e6, known), (2.0, 10.0, True))

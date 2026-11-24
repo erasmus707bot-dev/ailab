@@ -18,7 +18,15 @@ DEFAULTS: dict = {
     # Used when a model has no price from /models or the table below. Deliberately high so caps hold.
     "fallback_price_per_mtok": {"in": 15.0, "out": 75.0},
     # USD per million tokens. Edit in config.json; prices drift — UNVERIFIED until checked.
-    "prices_per_mtok": {},
+    # Defaults checked 2026-11-23 (Claude: web search of Anthropic list prices; OpenRouter: roster notes, "about").
+    # Without these the fallback ($15/$75) made a Sonnet step look 4x dearer and stopped a live run early.
+    "prices_per_mtok": {
+        "claude-sonnet-5-5": {"in": 2.0, "out": 10.0}, "claude-opus-5-5": {"in": 4.0, "out": 20.0},
+        "openrouter/deepseek/deepseek-v4.1-flash": {"in": 0.30, "out": 1.20},
+        "openrouter/minimax/minimax-m3.1-flash": {"in": 0.15, "out": 0.60},
+        "openrouter/z-ai/glm-5.3": {"in": 1.40, "out": 4.40},
+        "openrouter/moonshotai/kimi-k3.1-pro": {"in": 2.0, "out": 10.0},
+        "openrouter/qwen/qwen3.8-max-0902": {"in": 2.0, "out": 6.0}},
     "base_urls": {},                      # override any provider's base URL
     # Feature flags. Switched on one at a time by Scott (M7). There is deliberately no API to flip them.
     "flags": {"router": False, "preview": False, "agent": False, "compare": False, "live": False},
@@ -58,6 +66,7 @@ def load(overrides: dict | None = None) -> dict:
     if f.exists():
         cfg.update(json.loads(f.read_text() or "{}"))
     cfg.update(overrides or {})
+    cfg["prices_per_mtok"] = {**DEFAULTS["prices_per_mtok"], **(cfg.get("prices_per_mtok") or {})}   # config.json adds/overrides, never wipes
     cfg["flags"] = {**DEFAULTS["flags"], **{k: bool(v) for k, v in (cfg.get("flags") or {}).items()
                                            if k in DEFAULTS["flags"]}}
     if cfg["mode"] not in ("standalone", "connected"):
