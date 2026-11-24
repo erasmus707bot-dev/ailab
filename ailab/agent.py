@@ -194,13 +194,13 @@ def read_range(text: str, start=None, lines=None) -> dict:
 class Run:
     def __init__(self, lab, cfg: dict, project: dict, provider: str, model: str, task: str,
                  root: Path | None = None, log_dir: Path | None = None, cap_usd: float | None = None,
-                 autosave_field: str = "agent-last"):
+                 autosave_field: str = "agent-last", step_cap: int | None = None):
         """root/log_dir/cap_usd: ⚖️ Compare (M8) runs one lane in its own copy of the project."""
         self.id = uuid.uuid4().hex[:10]
         self.lab, self.cfg, self.project = lab, cfg, project
         self.provider, self.model, self.task = provider, model, task.strip()[:4000]
         self.root = (root or preview.ensure_site(project["id"])).resolve()
-        self.step_cap = int(cfg.get("agent_step_cap", 12))
+        self.step_cap = int(step_cap or cfg.get("agent_step_cap", 12))
         self.cap_usd = float(cfg.get("agent_cap_usd", 0.50) if cap_usd is None else cap_usd)
         self.usd, self.steps, self.state, self.why = 0.0, [], "running", ""
         self.tokens_in = self.tokens_out = 0
@@ -511,13 +511,13 @@ class Agents:
         self.runs: dict[str, Run] = {}
         self.lock = threading.Lock()
 
-    def start(self, lab, cfg, project, provider, model, task) -> Run:
+    def start(self, lab, cfg, project, provider, model, task, step_cap: int | None = None) -> Run:
         if not task.strip():
             raise ValueError("Tell the agent what to do.")
         with self.lock:
             if any(r.state == "running" and r.project["id"] == project["id"] for r in self.runs.values()):
                 raise ValueError("An agent is already working on this project. Stop it first.")
-            run = Run(lab, cfg, project, provider, model, task)
+            run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap)
             self.runs[run.id] = run
         threading.Thread(target=run.loop, daemon=True, name=f"agent-{run.id}").start()
         return run

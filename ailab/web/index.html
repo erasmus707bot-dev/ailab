@@ -1161,7 +1161,7 @@ function liveView() {
     const pm = await model();
     if (!pm) { status.textContent = "⚠️ No AI model is ready. Pick one on the main screen first."; return; }
     goBtn.disabled = true; status.textContent = `🤖 Starting (${pm.m})…`;
-    const r = await api("/api/agent/start", { project: p.id, provider: pm.prov, model: pm.m, task: taskText() });
+    const r = await api("/api/agent/start", { project: p.id, provider: pm.prov, model: pm.m, task: taskText(), kind: "live" });
     if (!r.ok) { goBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
     store.set("liverun." + p.id, r.run.id); store.set("agrun." + p.id, r.run.id); busy = true; paintLight(); poll();
   };

@@ -233,8 +233,10 @@ class App:
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
         proj = store.project(self._pid(b.get("project")))
+        # 🪞 Show & change runs get their own, larger step cap (2026-11-24: 12 capped both pilot lanes on a 1-spot edit)
+        cap = int(self.cfg.get("live_step_cap", 60)) if b.get("kind") == "live" else None
         run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""),
-                                str(b.get("task") or ""))
+                                str(b.get("task") or ""), step_cap=cap)
         return 200, {"ok": True, "run": run.view()}
 
     def agent_run(self, q: dict) -> tuple[int, dict]:
