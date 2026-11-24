@@ -320,9 +320,40 @@ class App:
         proj = store.project(self._pid(b.get("project")))
         # 🪞 Show & change runs get their own, larger step cap (2026-11-24: 12 capped both pilot lanes on a 1-spot edit)
         cap = int(self.cfg.get("live_step_cap", 60)) if b.get("kind") == "live" else None
+        live = b.get("kind") == "live"          # 🪞 runs: Scott already pointed at the spot, and that flow has its own robot
         run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""),
-                                str(b.get("task") or ""), step_cap=cap)
+                                str(b.get("task") or ""), step_cap=cap, ask_first=bool(b.get("ask_first")) and not live,
+                                selftest=None if live else self._play_test)
         return 200, {"ok": True, "run": run.view()}
+
+    def _play_test(self, run) -> dict | None:
+        """🤖 Robot play-test of the project page when a run finishes (2026-11-24). None = no page to test."""
+        if not self.cfg["flags"].get("preview") or not (run.root / "index.html").is_file():
+            return None
+        port = getattr(self, "bind_port", 0)
+        if not port:
+            return None
+        host = getattr(self, "bind_host", "127.0.0.1")
+        host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+        return robotcheck.play(f"http://{host}:{port}/preview/{run.project['id']}/",
+                               run.log.parent / "shots" / run.id, self.cfg)
+
+    def agent_more(self, b: dict) -> tuple[int, dict]:
+        """▶ Continue a run that hit its step limit."""
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        return 200, {"ok": True, "run": self.agents.more(str(b.get("id") or "")).view()}
+
+    def agent_shot(self, rid: str, name: str) -> bytes | None:
+        """A robot screenshot of one run (png)."""
+        if not self.cfg["flags"]["agent"] or not re.fullmatch(r"[a-z]{1,20}\.png", name or ""):
+            return None
+        try:
+            r = self.agents.get(rid)
+        except KeyError:
+            return None
+        f = r.log.parent / "shots" / r.id / name
+        return f.read_bytes() if f.is_file() else None
 
     def agent_run(self, q: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["agent"]:
@@ -609,6 +640,21 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 code, ctype, data = 503, "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
             return self._send(code, data, ctype, csp=PREVIEW_CSP)
 
+        def _before_page(self, rest: str):
+            """/preview-before/<pid>/<run id>/<rel> → the project page as it was when that run started (↔ Before)."""
+            if not app.cfg["flags"]["preview"]:
+                return self._send(403, b"Live preview is not switched on yet.", "text/plain; charset=utf-8")
+            parts = rest.split("/", 2)
+            try:
+                pid, rid = app._pid(parts[0]), parts[1] if len(parts) > 1 else ""
+                root = config.home() / "projects" / pid / "agent" / "before" / rid
+                if not re.fullmatch(r"[0-9a-f]{10}", rid) or not root.is_dir():
+                    return self._send(404, b"No Before copy for this run.", "text/plain; charset=utf-8")
+                code, ctype, data = app.pv.get(f"{pid}--b{rid}", parts[2] if len(parts) > 2 else "", root)
+            except preview.PreviewError as e:
+                code, ctype, data = 503, "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
+            return self._send(code, data, ctype, csp=PREVIEW_CSP)
+
         def _compare_page(self, rest: str):
             """/compare-page/<pid>/<cid>/ → saved page · …/lanes/<k>/<rel> → that lane, served from its srt sandbox."""
             if not app.cfg["flags"]["compare"]:
@@ -639,6 +685,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             q = parse_qs(u.query)
             if u.path.startswith("/preview/"):
                 return self._preview_page(u.path[len("/preview/"):])
+            if u.path.startswith("/preview-before/"):
+                return self._before_page(u.path[len("/preview-before/"):])
             if u.path.startswith("/compare-page/"):
                 return self._compare_page(u.path[len("/compare-page/"):])
             if u.path.startswith("/api/") and self._foreign():
@@ -677,6 +725,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.compare_get, q)
             if u.path == "/api/agent/approvals":
                 return self._run(app.agent_approvals, q)
+            if u.path == "/api/agent/shot":
+                png = app.agent_shot((q.get("id") or [""])[0], (q.get("name") or [""])[0])
+                return self._send(200, png, "image/png") if png else self._send(404, b"No such picture.", "text/plain; charset=utf-8")
             if u.path == "/api/recover":
                 return self._run(lambda: (200, {"ok": True, "fields": store.recover((q.get("project") or [""])[0])}))
             return self._send(404, {"ok": False, "code": "not_found"})
@@ -711,6 +762,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(getattr(app, LIVE_POST[p]), b)
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)
+            if p == "/api/agent/more":
+                return self._run(app.agent_more, b)
             if p == "/api/agent/answer":
                 return self._run(app.agent_answer, b)
             if p == "/api/agent/stop":
@@ -743,7 +796,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                     str(b.get("name") or ""), bool(b.get("sensitive")))}))
             return self._send(404, {"ok": False, "code": "not_found"})
 
-    return ThreadingHTTPServer((host, port), H)
+    httpd = ThreadingHTTPServer((host, port), H)
+    app.bind_port = httpd.server_address[1]     # 🤖 the play-test robot opens the Lab's own preview page
+    return httpd
 
 
 def serve(host: str = "127.0.0.1", port: int | None = None) -> int:

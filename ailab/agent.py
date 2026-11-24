@@ -10,6 +10,7 @@ from __future__ import annotations
 import difflib
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -46,10 +47,29 @@ object per turn and nothing else. Actions:
 {"action":"edit","path":"game.js","find":"<exact text now in the file, found once>","replace":"<new text>"}   (big files: change one spot)
 {"action":"run","cmd":"grep -c footer index.html"}      (sh, inside the folder, no network, 60 s)
 {"action":"hermes","tool":"addon_build","args":{"template":"hello"}}   (connected mode only)
-{"action":"ask","question":"Scott, which colour?","choices":["green","blue"]}   (a real decision only he can make — waits for his answer)
+{"action":"ask","questions":[{"q":"Which look?","choices":["Classic","Neon","Wood"],"best":0,"why":"matches your other pages"}]}
+      (1-3 questions, 2-4 short choices each. "best" = the number of the choice YOU recommend, "why" = a few plain words. Waits for Scott.)
+{"action":"plan","steps":["Page layout","Game rules","Controls","Test it"]}   (3-7 short plain steps. Scott sees the list and presses Go. After Go, add "module":"1","2",... = the step you are on.)
 {"action":"done","summary":"what changed and how you checked it"}
 Add "why" (one short line) to every action. Following a build prompt? Add "module":"M1" (the module you are on). Paths are relative to the project folder. Check your work with
-"run" before "done". "done" is refused until a check you ran AFTER your last change exited 0."""
+"run" before "done". "done" is refused until a check you ran AFTER your last change exited 0.
+Long files: a reply that is too long is CUT OFF and wasted. Put at most about 150 lines in one action — "write" the first
+part ending with a marker comment line, then "edit" that marker into the next part.
+The page runs in a locked-down preview: localStorage, sessionStorage and cookies THROW there. Wrap every use in try/catch
+with a fallback, or the whole script dies. A robot opens the finished page and presses its start button — page errors fail it."""
+# 2026-11-24 (Tetris test run): Scott picks first — questions with choices + a recommended pick, then a plan he OKs.
+ASK_FIRST = """
+Scott chooses before you build. If the task builds something new, or leaves real choices open (look, rules, size, name):
+FIRST "ask", THEN "plan", and only then write. Never ask what his memory below already answers — use it. A small exact
+change (one spot, nothing to choose) needs neither."""
+GATE_NUDGE = ("Scott wants to choose first. If this builds something new or leaves real choices open: \"ask\" (1-3 questions, "
+              "choices, your recommended pick), then \"plan\". If it is a small exact change with nothing to choose, send this action again.")
+CUT_TIP = ("Your reply was cut off because it was too long. Send a shorter action: write the first ~150 lines ending with a "
+           "marker comment, then use \"edit\" to turn the marker into the next part.")
+JSON_TIP = "Reply with ONE JSON object only — no words before or after it."
+BAD_ROW_MAX = 3            # this many unreadable replies in a row = the model can't do the job; stop, don't burn money
+SNAP_MAX = 20_000_000      # ↔ Before copy of the project page (bytes); bigger projects get no Before picture
+SNAP_KEEP = 3
 # Added to the system prompt in connected mode only (standalone has no Hermes tools).
 HERMES_GUIDE = """
 Hermes studio tools (use with {"action":"hermes","tool":...,"args":{...}}):
@@ -195,7 +215,8 @@ def read_range(text: str, start=None, lines=None) -> dict:
 class Run:
     def __init__(self, lab, cfg: dict, project: dict, provider: str, model: str, task: str,
                  root: Path | None = None, log_dir: Path | None = None, cap_usd: float | None = None,
-                 autosave_field: str = "agent-last", step_cap: int | None = None):
+                 autosave_field: str = "agent-last", step_cap: int | None = None, ask_first: bool = False,
+                 selftest=None):
         """root/log_dir/cap_usd: ⚖️ Compare (M8) runs one lane in its own copy of the project."""
         self.id = uuid.uuid4().hex[:10]
         self.lab, self.cfg, self.project = lab, cfg, project
@@ -229,6 +250,19 @@ class Run:
         self.question: dict | None = None
         self._answer = None
         self._answered = threading.Event()
+        # 2026-11-24 workflow build (Tetris test run): no dead ends, questions first, plan gate, before/after, robot play-test
+        self.ask_first = bool(ask_first) and not self.is_lane
+        self.plan_names: dict[str, str] = {}  # agent-made plan: step number -> plain name
+        self.asked = False
+        self.plan_ok = bool(self.plan)        # a build prompt's modules are already the plan
+        self.gate_nudged = False
+        self.bad = self.bad_row = 0           # unreadable replies: never count against the step limit
+        self.cap_kind = ""                    # "steps" → ▶ Continue is possible
+        self.msgs: list[dict] | None = None   # kept so ▶ Continue picks up where the run stopped
+        self.selftest = None if self.is_lane else selftest
+        self.robot: dict | None = None
+        self.robot_tries = 0
+        self.before = "" if self.is_lane else self._snapshot()
 
     # ---- public view ----
     def view(self) -> dict:
@@ -238,7 +272,9 @@ class Run:
                 "project": self.project["id"], "provider": self.provider, "model": self.model,
                 "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info(),
                 "memory_used": self.memory_used, "memory_saved": self.memory_saved,
-                "plan": self.plan_view(), "question": self.question}
+                "plan": self.plan_view(), "question": self.question,
+                "real_steps": len(self.steps) - self.bad, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
+                "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None}
 
     def plan_view(self) -> list[dict]:
         """✅ done / 🔨 doing / ⏳ left for each module of the build prompt."""
@@ -247,14 +283,75 @@ class Run:
         now = self.plan.index(self.module_now) if self.module_now in self.plan else (0 if self.steps else -1)
         out = []
         for i, m in enumerate(self.plan):
-            if i < now or (i == now and self.state == "done"):
+            if i < now or (i == now and self.state == "done") or (self.plan_names and self.state == "done"):
                 st = "done"
             elif i == now and self.state == "running":
                 st = "doing"
             else:
                 st = "left"
-            out.append({"module": f"Module {m}", "state": st})
+            out.append({"module": self.plan_names.get(m) or f"Module {m}", "state": st})
         return out
+
+    def _snapshot(self) -> str:
+        """↔ Before: a copy of the project page as it was when this run started (shown beside the page now)."""
+        try:
+            files = [x for x in preview.list_root(self.root) if not x["path"].startswith("repos/")]
+            if not files or sum(x["bytes"] for x in files) > SNAP_MAX:
+                return ""
+            base = self.log.parent / "before"
+            dst = base / self.id
+            for x in files:
+                t = dst / x["path"]
+                t.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(self.root / x["path"], t)
+            for old in sorted((d for d in base.iterdir() if d.is_dir()), key=lambda d: d.stat().st_mtime)[:-SNAP_KEEP]:
+                shutil.rmtree(old, ignore_errors=True)
+            return str(dst)
+        except OSError:                                               # a picture is a help, never a blocker
+            return ""
+
+    def _wait(self) -> str:
+        """Block until Scott answers the on-screen card. Waiting for him is not "stuck"."""
+        try:
+            while not self._answered.wait(1.0):
+                self._check_stop()
+                self.last_progress = time.time()
+        finally:
+            self.question = None
+            self._answered.clear()
+        self.last_progress = time.time()
+        return str(self._answer or "")
+
+    def _selftest(self) -> dict | None:
+        """🤖 The robot opens the finished page, presses its main button and some keys. None = nothing to test."""
+        if not self.selftest or not self.changed:
+            return None
+        self.robot_tries += 1
+        try:
+            self.robot = self.selftest(self)
+        except Exception as e:                                        # noqa: BLE001 — can't run = yellow, never green
+            self.robot = {"ran": False, "ok": False, "level": "yellow",
+                          "why": [f"🤖 Robot play-test did not run: {str(e).splitlines()[0][:200] if str(e) else type(e).__name__}"]}
+        self.last_progress = time.time()
+        return self.robot
+
+    def _robot_words(self) -> str:
+        r = self.robot or {}
+        return " ".join(str(x) for x in (r.get("why") or []))[:300]
+
+    def more(self, n: int | None = None) -> None:
+        """▶ Continue after the step limit: more steps, same conversation."""
+        if not (self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None):
+            raise ValueError("This run can't be continued. Start a new one.")
+        self.step_cap += max(1, int(n or self.cfg.get("agent_more_steps", 12)))
+        note = "Scott pressed Continue: you have more steps. Finish the task, run your check, then say done."
+        if self.msgs and self.msgs[-1]["role"] == "user":
+            self.msgs[-1]["content"] += "\n" + note
+        else:
+            self.msgs.append({"role": "user", "content": note})
+        self.state, self.why, self.cap_kind = "running", "", ""
+        self.stop_flag.clear()
+        self.last_progress = time.time()
 
     def answer(self, text: str) -> None:
         """Scott answered the on-screen question."""
@@ -398,21 +495,53 @@ class Run:
         m = str(a.get("module") or "").strip().upper().replace("MODULE", "").strip().lstrip("M")
         if m and m in [x.upper() for x in self.plan]:
             self.module_now = next(x for x in self.plan if x.upper() == m)
-        if kind == "ask":                                    # M5: on-screen pop-up; waiting for Scott is not "stuck"
-            q = str(a.get("question") or "").strip()[:400]
-            if not q:
+        if kind == "ask":                                    # question cards: choices + the model's recommended pick
+            raw = a.get("questions") if isinstance(a.get("questions"), list) else \
+                [{"q": a.get("question"), "choices": a.get("choices"), "best": a.get("best"), "why": a.get("best_why")}]
+            items = []
+            for it in raw[:3]:
+                if not isinstance(it, dict):
+                    continue
+                q = str(it.get("q") or it.get("question") or "").strip()[:300]
+                ch = [str(c)[:80] for c in (it.get("choices") or []) if str(c).strip()][:4]
+                if not q:
+                    continue
+                try:
+                    best = int(it.get("best"))
+                except (TypeError, ValueError):
+                    best = -1                                        # no pick given → no ⭐ (never invent one)
+                items.append({"q": q, "choices": ch, "best": best if 0 <= best < len(ch) else -1,
+                              "why": str(it.get("why") or "").strip()[:160]})
+            if not items:
                 return {"error": "ask needs a question."}
-            ch = [str(c)[:80] for c in (a.get("choices") or []) if str(c).strip()][:4]
-            self._answered.clear()
-            self.question = {"text": q, "choices": ch}
-            try:
-                while not self._answered.wait(1.0):
-                    self._check_stop()
-                    self.last_progress = time.time()
-            finally:
-                self.question = None
-            self.last_progress = time.time()
-            return {"answer": self._answer}
+            self.asked = True
+            if self.is_lane:
+                return {"answer": "(nobody is here to answer — go with the choice you recommend)"}
+            self.question = {"kind": "ask", "text": items[0]["q"], "choices": items[0]["choices"], "items": items}
+            return {"answer": self._wait()}
+        if kind == "plan":                                   # plan gate: Scott sees done / doing / left and presses Go
+            steps = [str(x).strip()[:80] for x in (a.get("steps") or []) if str(x).strip()][:8]
+            if self.plan and not self.plan_names:
+                return {"note": "The build prompt already lists its modules — follow those."}
+            if len(steps) < 2:
+                return {"error": "plan needs 2-8 short plain steps."}
+            self.plan = [str(n + 1) for n in range(len(steps))]
+            self.plan_names = dict(zip(self.plan, steps))
+            self.module_now, self.plan_ok = "", False
+            go = "Go. Put \"module\":\"1\" (the number of the step you are on) in every action from now on."
+            if self.is_lane:
+                self.plan_ok = True
+                return {"answer": go}
+            self.question = {"kind": "plan", "text": "Here is the plan. Go?", "choices": ["▶ Go", "✏️ Change it"], "plan": steps}
+            ans = self._wait()
+            if re.sub(r"[^a-z]", "", ans.lower()).startswith("go"):
+                self.plan_ok = True
+                return {"answer": go}
+            self.plan, self.plan_names = [], {}
+            return {"answer": ans, "note": "Scott wants the plan changed — send a new plan that fits what he said."}
+        if kind in CHANGE_ACTIONS and self.ask_first and not (self.asked or self.plan_ok or self.gate_nudged):
+            self.gate_nudged = True                          # once only: a small exact change goes through on the retry
+            return {"error": GATE_NUDGE}
         if kind == "list":
             return {"files": [f["path"] for f in preview.list_root(self.root)]}
         if kind == "read":
@@ -487,7 +616,7 @@ class Run:
             return {"done": True}
         return {"error": f"Unknown action {kind!r}."}
 
-    def loop(self) -> None:
+    def _start_msgs(self) -> list[dict]:
         linked = sorted(repos.linked(self.cfg))
         mem = ""
         if (self.cfg.get("flags") or {}).get("memory"):          # 🧠 M2 — what the Lab knows about Scott
@@ -497,16 +626,40 @@ class Run:
                 mem, self.memory_used = memory.for_context(" ".join([self.project.get("name", "")] + linked), self.task)
             except Exception:                                     # noqa: BLE001 — memory is a help, never a blocker
                 mem = ""
-        msgs = [{"role": "system", "content": SYSTEM + (HERMES_GUIDE if self.connected else "")
+        return [{"role": "system", "content": SYSTEM + (ASK_FIRST if self.ask_first else "") + (HERMES_GUIDE if self.connected else "")
                  + (REPO_GUIDE.format(names=", ".join(linked)) if linked else "")
                  + (("\n\n" + mem + "\nUse it to match how Scott likes things; the task still wins.") if mem else "")},
                 {"role": "user", "content": f"Task: {self.task}\nFiles: "
                  + ", ".join(f["path"] for f in preview.list_root(self.root))}]
+
+    def _finish(self, words: str) -> bool:
+        """Checks passed → the robot plays the page → ✅ done. False = robot red and the model gets one more go."""
+        rb = self._selftest()
+        if rb and rb.get("level") == "red":
+            if self.robot_tries < 2 and len(self.steps) - self.bad < self.step_cap:
+                return False
+            self.state = "unproven"
+            self.why = ("🔴 The code checks passed, but the robot opened the page and it did not work: " + self._robot_words())[:600]
+            return True
+        self.state = "done"
+        self.why = words
+        if rb and rb.get("level") == "yellow":
+            self.why = (self.why + " · 🟡 " + self._robot_words())[:700]
+        return True
+
+    def loop(self) -> None:
+        if self.msgs is None:
+            self.msgs = self._start_msgs()
+        msgs = self.msgs
         try:
             while True:
                 self._check_stop()
-                if len(self.steps) >= self.step_cap:
-                    self.state, self.why = "capped", f"🔢 Step cap reached ({self.step_cap})."
+                if len(self.steps) - self.bad >= self.step_cap:
+                    # the Tetris run: every check had passed, the limit hit one step before it could say "done"
+                    if self.changed and self.proof_ok() and self._finish(
+                            "✅ Finished — its checks passed. (The step limit ended the run before it could say so.)"):
+                        return
+                    self.state, self.why, self.cap_kind = "capped", f"🔢 Step limit reached ({self.step_cap}).", "steps"
                     return
                 left = self.cap_usd - self.usd
                 if left <= 0:
@@ -522,10 +675,19 @@ class Run:
                 try:
                     a = parse_action(r.text)
                 except ValueError as e:
-                    res = {"error": f"Reply was not one JSON action ({e})."}
+                    cut = "no JSON object" not in str(e) and "no \"action\"" not in str(e)
+                    res = {"error": f"Reply was not one JSON action ({e}).", "tip": CUT_TIP if cut else JSON_TIP, "cut": cut}
+                    self.bad += 1
+                    self.bad_row += 1
                     self._record({"action": "bad_reply", "why": "", "result": res, "usd": r.usd})
                     msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res)})
+                    if self.bad_row >= BAD_ROW_MAX:
+                        self.state = "failed"
+                        self.why = (f"⚠️ This model sent {BAD_ROW_MAX} replies in a row the Lab can't read"
+                                    + (" (too long, cut off)" if cut else "") + ". Try another model.")
+                        return
                     continue
+                self.bad_row = 0
                 res = self.act(a)
                 shown = {k: (v if k not in ("find", "replace") else str(v)[:300]) for k, v in a.items() if k != "content"}
                 if "content" in a:
@@ -539,9 +701,13 @@ class Run:
                 if res.get("done"):
                     summary = str(a.get("summary") or "")[:500]
                     if self.proof_ok():
-                        self.state = "done"
-                        self.why = (summary or "✅ Done") if self.changed else ("ℹ️ No files changed. " + summary)[:600]
-                        return
+                        if self._finish((summary or "✅ Done") if self.changed else ("ℹ️ No files changed. " + summary)[:600]):
+                            return
+                        res = {"error": "Not accepted: the robot opened the page and it did not work — " + self._robot_words()
+                                        + " Fix it, run a check, then say done."}
+                        step["result"] = res
+                        msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res, default=str)})
+                        continue
                     self.refused_done += 1
                     if self.refused_done >= 2:                       # asked twice without a passing check: say so, never ✅
                         self.state = "unproven"
@@ -552,7 +718,9 @@ class Run:
                                     f"{self.changed}). Run a check that exits 0 (node --check, python3 -m py_compile, "
                                     "a grep, the test bot), fix what fails, then say done."}
                     step["result"] = res                             # the step card shows the refusal, not "done"
-                msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res, default=str)[:MAX_OUT + 500]})
+                left_steps = self.step_cap - (len(self.steps) - self.bad)
+                msgs.append({"role": "user", "content": "RESULT: " + json.dumps(res, default=str)[:MAX_OUT + 500]
+                             + (f"\nNOTE: {left_steps} steps left — run your check now, then say done." if left_steps == 2 else "")})
         except Stopped as e:
             self.state, self.why = "stopped", str(e)
         except SpendBlocked as e:
@@ -572,16 +740,27 @@ class Agents:
         self.runs: dict[str, Run] = {}
         self.lock = threading.Lock()
 
-    def start(self, lab, cfg, project, provider, model, task, step_cap: int | None = None) -> Run:
+    def start(self, lab, cfg, project, provider, model, task, step_cap: int | None = None, ask_first: bool = False,
+              selftest=None) -> Run:
         if not task.strip():
             raise ValueError("Tell the agent what to do.")
         with self.lock:
             if any(r.state == "running" and r.project["id"] == project["id"] for r in self.runs.values()):
                 raise ValueError("An agent is already working on this project. Stop it first.")
-            run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap)
+            run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap, ask_first=ask_first, selftest=selftest)
             self.runs[run.id] = run
         threading.Thread(target=run.loop, daemon=True, name=f"agent-{run.id}").start()
         return run
+
+    def more(self, rid: str, n: int | None = None) -> Run:
+        """▶ Continue a run that hit its step limit."""
+        r = self.get(rid)
+        with self.lock:
+            if any(x.state == "running" and x.project["id"] == r.project["id"] for x in self.runs.values()):
+                raise ValueError("An agent is already working on this project. Stop it first.")
+            r.more(n)
+        threading.Thread(target=r.loop, daemon=True, name=f"agent-{r.id}").start()
+        return r
 
     def answer(self, rid: str, text: str) -> Run:
         r = self.get(rid)

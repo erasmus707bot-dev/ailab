@@ -167,3 +167,102 @@ def judge(now: dict, new: dict, sel: str) -> dict:
     level = "red" if red else "yellow" if yellow else "green"
     return {"ran": True, "ok": level == "green", "level": level, "why": red + yellow, "good": good,
             "shots": [x for x in (now.get("shot"), new.get("shot")) if x]}
+
+
+# ---------- 🤖 play-test of a finished project page (2026-11-24, Tetris test run) ----------
+# The agent's own checks only prove the code parses. This opens the page like Scott would: load it, press the
+# start-type button if there is one, press some keys, and see whether the screen moved and no errors showed up.
+_START = """() => { const ok = b => { const r = b.getBoundingClientRect(), s = getComputedStyle(b);
+    return r.width && r.height && s.visibility !== 'hidden' && s.display !== 'none' && !b.disabled; };
+  const bs = [...document.querySelectorAll('button, [role=button], input[type=button], input[type=submit]')].filter(ok);
+  const el = bs.find(b => /\\b(start|play|begin|new game|go|try again|restart)\\b/i.test(b.innerText || b.value || ''));
+  if (!el) return null; el.setAttribute('data-lab-robot', '1'); return (el.innerText || el.value || '').trim().slice(0, 40); }"""
+# What is on screen, as text: every canvas picture + the visible words. Screenshot bytes differ for no reason; this doesn't.
+_SEEN = """() => [...document.querySelectorAll('canvas')].map(c => { try { return c.toDataURL(); } catch (e) { return 'x'; } }).join('|')
+  + '##' + (document.body ? document.body.innerText : '')"""
+PLAY_KEYS = ("ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space")
+
+
+def _play_real(url, shots, cfg):
+    from playwright.sync_api import sync_playwright  # noqa: PLC0415
+    exe = browser_path(cfg)
+    out: dict = {"url": url}
+    errs: list[str] = []
+    if shots:
+        shots.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(headless=True, **({"executable_path": exe} if exe else {}))
+        try:
+            page = b.new_context(viewport={"width": 1280, "height": 900}).new_page()
+            page.on("pageerror", lambda e: errs.append(str(e)[:200]))
+            page.on("console", lambda m: errs.append(m.text[:200]) if m.type == "error" else None)
+            try:
+                resp = page.goto(url, wait_until="load", timeout=TIMEOUT_MS)
+                out["status"] = resp.status if resp else None
+                page.wait_for_timeout(800)
+                first = page.screenshot(full_page=False)
+                if shots:
+                    (shots / "opened.png").write_bytes(first)
+                    out["shots"] = ["opened.png"]
+                seen = page.evaluate(_SEEN)
+                out["button"] = page.evaluate(_START)
+                if out["button"] is not None:
+                    try:
+                        page.locator("[data-lab-robot]").first.click(timeout=5000)
+                        out["clicked"] = True
+                    except Exception as e:                           # noqa: BLE001 — a failed click is a finding
+                        out["clicked"], out["click_error"] = False, str(e).splitlines()[0][:200]
+                    for k in PLAY_KEYS:
+                        page.keyboard.press(k)
+                        page.wait_for_timeout(120)
+                    page.wait_for_timeout(1500)
+                    last = page.screenshot(full_page=False)
+                    out["moved"] = page.evaluate(_SEEN) != seen
+                    if shots:
+                        (shots / "played.png").write_bytes(last)
+                        out["shots"].append("played.png")
+            except Exception as e:                                   # noqa: BLE001
+                out["load_error"] = str(e).splitlines()[0][:200]
+        finally:
+            b.close()
+    out["errors"] = errs
+    return out
+
+
+def judge_play(v: dict) -> dict:
+    red, yellow, good = [], [], []
+    if v.get("load_error"):
+        red.append(f"The robot could not open the page: {v['load_error']}")
+    elif (v.get("status") or 0) >= 400:
+        red.append(f"The page did not open (answer {v['status']}).")
+    else:
+        good.append("The page opens.")
+    errs = v.get("errors") or []
+    if errs:
+        red.append(f"Error on the page: {errs[0]}" + (f" (+{len(errs) - 1} more)" if len(errs) > 1 else ""))
+    elif not red:
+        good.append("No errors showed up.")
+    if v.get("button") is not None and not v.get("load_error"):
+        name = v.get("button") or "the main button"
+        if v.get("clicked") is False:
+            red.append(f"The robot could not press “{name}”: {v.get('click_error', '')}")
+        elif v.get("moved"):
+            good.append(f"The robot pressed “{name}” and some keys — the screen moved.")
+        else:
+            yellow.append(f"The robot pressed “{name}” and some keys, but nothing on screen changed. Look at it yourself.")
+    level = "red" if red else "yellow" if yellow else "green"
+    return {"ran": True, "ok": level == "green", "level": level, "why": red + yellow, "good": good, "shots": v.get("shots") or []}
+
+
+def play(url: str, shots: Path | None = None, cfg: dict | None = None, driver=None) -> dict:
+    """→ {"ran", "ok", "level": green|yellow|red, "why", "good", "shots"}. `driver(url, shots, cfg)` replaces the browser in tests."""
+    if driver is None:
+        ok, msg = available(cfg)
+        if not ok:
+            return {"ran": False, "ok": False, "level": "yellow", "why": [f"🤖 Robot play-test did not run: {msg}"], "good": [], "shots": []}
+        driver = _play_real
+    try:
+        return judge_play(driver(url, shots, cfg))
+    except Exception as e:                                           # noqa: BLE001
+        return {"ran": False, "ok": False, "level": "yellow", "good": [], "shots": [],
+                "why": [f"🤖 Robot play-test could not start the browser: {str(e).splitlines()[0][:200]}"]}
