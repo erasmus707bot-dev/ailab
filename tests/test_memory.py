@@ -115,5 +115,32 @@ class Learn(Base):
         self.assertEqual(M.learn("I want my medication reminders at 8"), [])        # sensitive → never auto-saved
         self.assertEqual(M.learn("I prefer big buttons with icons."), [])           # already known
 
+
+class Review(Base):
+    def test_round_trip_diff_apply_undo(self):
+        for t in ("likes menus", "uses light mode", "drives a truck"):
+            M.add_fact("prefs", t, "lab")
+        md = M.review_md()
+        self.assertIn("(prefs#2) [keep] uses light mode", md)
+        ans = (md.replace("(prefs#2) [keep] uses light mode", "(prefs#2) [change] uses dark mode")
+                 .replace("(prefs#3) [keep] drives a truck", "(prefs#3) [remove]")
+               + "- (prefs#new) [add] wants big buttons\n- (bogus line\n")
+        prev = M.preview_answers(ans)
+        self.assertEqual(sorted(c["kind"] for c in prev["changes"]), ["add", "change", "remove"])
+        self.assertEqual(len(prev["unread"]), 1)
+        self.assertEqual([l["text"] for l in M.read("prefs")["lines"]][1], "uses light mode")     # preview writes nothing
+        w = M.apply_answers(ans, [c["id"] for c in prev["changes"] if c["kind"] != "remove"])
+        self.assertEqual(w["applied"], 2)
+        lines = M.read("prefs")["lines"]
+        self.assertEqual([l["text"] for l in lines], ["likes menus", "uses dark mode", "drives a truck", "wants big buttons"])
+        self.assertEqual(lines[1]["source"], "scott")
+        for _ in range(w["writes"]):
+            M.undo_last()
+        self.assertEqual([l["text"] for l in M.read("prefs")["lines"]], ["likes menus", "uses light mode", "drives a truck"])
+
+    def test_questions_for_voice(self):
+        M.add_fact("prefs", "likes menus", "lab")
+        self.assertEqual(M.questions()[0]["id"], "prefs#1")
+
 if __name__ == "__main__":
     unittest.main()

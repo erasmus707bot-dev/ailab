@@ -339,3 +339,121 @@ def learn(text: str, where: str = "") -> list[str]:
         if r.get("saved"):
             saved.append(fact)
     return saved
+
+
+# ---- review round-trip (M3): ⬇ .md → any chatbot → ⬆ answers .md → before/after → Scott confirms -------------
+REVIEW_HEAD = """# Memory review — what the AI Lab knows about Scott ({date})
+
+**For the chatbot helping Scott:** go through this with him one subject at a time, one question at a time.
+For every line ask: still true? change it? remove it? Then ask if anything is missing.
+Give back the WHOLE file in the same format, changing only the tag in [ ] and the text:
+
+- `[keep]` — still true, leave as is
+- `[change] new wording` — replace the line with the new wording
+- `[remove]` — drop the line
+- under a subject, a new line `- ({{subject}}#new) [add] something new`
+
+Keep every `(subject#n)` label exactly as written — the Lab matches answers by it.
+Nothing changes until Scott sees a before/after and presses ✅.
+"""
+ANS_RX = re.compile(r"^\s*[-*]\s*\(([a-z0-9-]+)#(\d+|new)\)\s*\[(keep|change|remove|add)\]\s*(.*)$", re.I)
+
+
+def review_md(names: list[str] | None = None) -> str:
+    out = [REVIEW_HEAD.format(date=time.strftime("%Y-%m-%d"))]
+    for s in subjects():
+        if names and s["name"] not in names:
+            continue
+        sub = read(s["name"])
+        out.append(f"\n## {sub['name']}\n_{sub['description']}_\n")
+        for i, l in enumerate(sub["lines"], 1):
+            out.append(f"- ({sub['name']}#{i}) [keep] {l['text']}")
+    return "\n".join(out) + "\n"
+
+
+def parse_answers(text: str) -> dict:
+    """→ {subject: {"set": {n: new text}, "remove": {n}, "add": [text]}} + lines it could not read."""
+    plan: dict[str, dict] = {}
+    unread = []
+    for ln in (text or "").splitlines():
+        m = ANS_RX.match(ln)
+        if not m:
+            if re.match(r"^\s*[-*]\s*\(", ln):
+                unread.append(ln.strip()[:200])
+            continue
+        name, n, tag, body = m.group(1).lower(), m.group(2).lower(), m.group(3).lower(), m.group(4).strip()
+        p = plan.setdefault(name, {"set": {}, "remove": set(), "add": []})
+        if tag == "add" and body:
+            p["add"].append(body[:MAX_LINE])
+        elif n != "new" and tag == "remove":
+            p["remove"].add(int(n))
+        elif n != "new" and tag == "change" and body:
+            p["set"][int(n)] = body[:MAX_LINE]
+    return {"plan": plan, "unread": unread}
+
+
+def preview_answers(text: str) -> dict:
+    """Before/after per subject, nothing written. Each change has an id Scott can tick."""
+    parsed = parse_answers(text)
+    changes, missing = [], []
+    for name, p in parsed["plan"].items():
+        try:
+            cur = read(name)["lines"]
+        except MemError:
+            if p["add"]:
+                for j, t in enumerate(p["add"]):
+                    changes.append({"id": f"{name}+{j}", "subject": name, "kind": "add", "before": None, "after": t})
+            else:
+                missing.append(name)
+            continue
+        for n, new in sorted(p["set"].items()):
+            if 1 <= n <= len(cur) and cur[n - 1]["text"] != new:
+                changes.append({"id": f"{name}#{n}", "subject": name, "kind": "change", "before": cur[n - 1]["text"], "after": new})
+        for n in sorted(p["remove"]):
+            if 1 <= n <= len(cur):
+                changes.append({"id": f"{name}#{n}", "subject": name, "kind": "remove", "before": cur[n - 1]["text"], "after": None})
+        for j, t in enumerate(p["add"]):
+            if t.lower() not in {l["text"].lower() for l in cur}:
+                changes.append({"id": f"{name}+{j}", "subject": name, "kind": "add", "before": None, "after": t})
+    return {"changes": changes, "unread": parsed["unread"], "unknown_subjects": missing}
+
+
+def apply_answers(text: str, ids: list[str] | None = None) -> dict:
+    """Apply the ticked changes (ids=None → all). Changed/added lines become [scott] — he confirmed them.
+    One write per subject; returns how many writes so ↶ can undo the whole apply."""
+    prev = preview_answers(text)
+    pick = [c for c in prev["changes"] if ids is None or c["id"] in set(ids)]
+    by: dict[str, list[dict]] = {}
+    for c in pick:
+        by.setdefault(c["subject"], []).append(c)
+    writes = 0
+    for name, cs in by.items():
+        try:
+            sub = read(name)
+            lines, desc = [dict(l) for l in sub["lines"]], sub["description"]
+        except MemError:
+            lines, desc = [], name.replace("-", " ")
+        drop = set()
+        for c in cs:
+            if c["kind"] in ("change", "remove"):
+                n = int(c["id"].split("#")[1])
+                if c["kind"] == "remove":
+                    drop.add(n)
+                else:
+                    lines[n - 1] = {"source": "scott", "text": c["after"]}
+        lines = [l for i, l in enumerate(lines, 1) if i not in drop]
+        lines += [{"source": "scott", "text": c["after"]} for c in cs if c["kind"] == "add"]
+        write_subject(name, desc, lines, "review")
+        writes += 1
+    return {"applied": len(pick), "writes": writes}
+
+
+def questions(limit: int = 40) -> list[dict]:
+    """🎙️ Voice review: one plain question per line, in order (Iris reads them; answers come back as a review .md)."""
+    out = []
+    for s in subjects():
+        for i, l in enumerate(read(s["name"])["lines"], 1):
+            out.append({"id": f"{s['name']}#{i}", "ask": f"About {s['name'].replace('-', ' ')}: “{l['text']}” — still true?"})
+            if len(out) >= limit:
+                return out
+    return out

@@ -489,7 +489,49 @@ function memoryView() {
   const q = h("input", { type: "search", placeholder: "🔎 Search what it knows", "aria-label": "Search memory",
     style: "width:100%;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:inherit;padding:8px 10px;font:inherit" });
   q.oninput = () => load();
-  box.append(h("div", { class: "hint" }, imp, undo), msg, q, list);
+  /* ⬇ / ⬆ review round-trip (M3): download → work through it with any chatbot → upload its answers → before/after → ✅ */
+  const dl = h("button", { class: "btn", type: "button", onclick: async () => {
+    const r = await api("/api/memory/review", {});
+    if (!r.ok) { say("✗ " + (r.message || r.code)); return; }
+    const a = h("a", { href: URL.createObjectURL(new Blob([r.md], { type: "text/markdown" })), download: r.file });
+    document.body.append(a); a.click(); a.remove(); say(`⬇ ${r.file} — open it in any chatbot, answer, then ⬆ upload what it gives back.`);
+  } }, "⬇ Review .md");
+  const file = h("input", { type: "file", accept: ".md,.txt,text/markdown,text/plain", hidden: true });
+  const up = h("button", { class: "btn", type: "button", onclick: () => file.click() }, "⬆ Upload answers");
+  const diff = h("div", { id: "memdiff" });
+  file.onchange = async () => {
+    const f = file.files[0]; file.value = ""; if (!f) return;
+    const md = await f.text();
+    const r = await api("/api/memory/answers", { md });
+    diff.textContent = "";
+    if (!r.ok) { say("✗ " + (r.message || r.code)); return; }
+    if (!r.changes.length) { say("ℹ️ No changes found in that file" + (r.unread.length ? ` (${r.unread.length} lines could not be read)` : "") + "."); return; }
+    const KIND = { change: "✏️ change", remove: "🗑 remove", add: "➕ add" };
+    const ticks = r.changes.map(c => {
+      const cb = h("input", { type: "checkbox", checked: true, "aria-label": `${KIND[c.kind]} in ${c.subject}` });
+      diff.append(h("label", { class: "keyrow", style: "display:flex;gap:10px;align-items:flex-start" }, cb,
+        h("div", {}, h("b", {}, `${KIND[c.kind]} · ${c.subject}`),
+          c.before != null ? h("div", { class: "st" }, "Before: ", h("s", {}, c.before)) : null,
+          c.after != null ? h("div", {}, "After: ", c.after) : null)));
+      return [cb, c.id];
+    });
+    const ok = h("button", { class: "btn pri", type: "button", onclick: async () => {
+      const ids = ticks.filter(([cb]) => cb.checked).map(([, id]) => id);
+      if (!ids.length) { say("Nothing ticked."); return; }
+      const w = await api("/api/memory/apply", { md, ids });
+      if (!w.ok) { say("✗ " + (w.message || w.code)); return; }
+      diff.textContent = "";
+      const un = h("button", { class: "btn", type: "button", onclick: async () => {
+        const u = await api("/api/memory/undo", { count: w.writes }); say(u.ok ? "↶ That review was undone." : "✗ " + (u.message || u.code)); un.remove(); load();
+      } }, "↶ Undo this review");
+      say(`✅ ${w.applied} change${w.applied === 1 ? "" : "s"} saved.`); msg.append(" ", un); load();
+    } }, `✅ Save ${ticks.length} change${ticks.length === 1 ? "" : "s"}`);
+    const no = h("button", { class: "btn", type: "button", onclick: () => { diff.textContent = ""; say("✋ Nothing changed."); } }, "✋ Cancel");
+    diff.append(h("div", { class: "row" }, no, ok));
+    say(`Check the ${r.changes.length} change${r.changes.length === 1 ? "" : "s"} below — untick any you don't want.` +
+        (r.unread.length ? ` (${r.unread.length} lines could not be read — they are ignored.)` : ""));
+  };
+  box.append(h("div", { class: "hint" }, imp, dl, up, undo, file), msg, diff, q, list);
 
   function card(sub) {
     const body = h("div", {}, "⏳");

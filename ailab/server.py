@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -200,8 +201,21 @@ class App:
             lines = b.get("lines") if isinstance(b.get("lines"), list) else []
             return 200, {"ok": True, "subject": memory.write_subject(str(b.get("name") or ""), str(b.get("description") or ""),
                                                                     [l for l in lines if isinstance(l, dict)], "edit")}
-        if op == "undo":
-            return 200, {"ok": True, **memory.undo_last()}
+        if op == "undo":                                  # count > 1 = undo a whole review apply
+            n, last = max(1, min(int(b.get("count") or 1), 200)), {}
+            for _ in range(n):
+                last = memory.undo_last()
+            return 200, {"ok": True, **last, "count": n}
+        if op == "review":                                # ⬇ the review .md
+            names = b.get("names") if isinstance(b.get("names"), list) else None
+            return 200, {"ok": True, "md": memory.review_md(names), "file": f"memory-review-{time.strftime('%Y-%m-%d')}.md"}
+        if op == "answers":                               # ⬆ answers .md → before/after only, nothing written
+            return 200, {"ok": True, **memory.preview_answers(str(b.get("md") or "")[:500_000])}
+        if op == "apply":                                 # ✅ the ticked changes
+            ids = b.get("ids") if isinstance(b.get("ids"), list) else None
+            return 200, {"ok": True, **memory.apply_answers(str(b.get("md") or "")[:500_000], ids)}
+        if op == "questions":                             # 🎙️ for a voice review
+            return 200, {"ok": True, "questions": memory.questions()}
         return 404, {"ok": False, "code": "not_found"}
 
     def roster(self, q: dict) -> tuple[int, dict]:
