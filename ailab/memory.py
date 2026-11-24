@@ -21,6 +21,7 @@ import fcntl
 import json
 import re
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -129,24 +130,27 @@ def subjects() -> list[dict]:
     return out
 
 
-def _log(name: str, before: str | None, after: str | None, why: str) -> None:
+def _log(name: str, before: str | None, after: str | None, why: str) -> str:
+    wid = uuid.uuid4().hex[:12]                       # each write has an id, so ↶ can undo exactly one review (2026-11-24)
     with open(root() / "changes.jsonl", "a") as fh:
-        fh.write(json.dumps({"t": time.time(), "name": name, "why": why, "before": before, "after": after}) + "\n")
+        fh.write(json.dumps({"t": time.time(), "id": wid, "name": name, "why": why, "before": before, "after": after}) + "\n")
+    return wid
 
 
-def _write(name: str, text: str | None, why: str) -> None:
+def _write(name: str, text: str | None, why: str) -> str | None:
     p = _path(name)
     before = p.read_text(errors="replace") if p.exists() else None
     if before == text:
-        return
+        return None
     if text is None:
         p.rename(p.with_suffix(".md.removed"))       # deleting is off in Scott's folders; keep it recoverable
     else:
         p.write_text(text)
-    _log(slug(name), before, text, why)
+    return _log(slug(name), before, text, why)
 
 
-def write_subject(name: str, description: str, lines: list[dict], why: str = "edit") -> dict:
+def write_subject(name: str, description: str, lines: list[dict], why: str = "edit", ids: list | None = None) -> dict:
+    """ids: if given, the id of this write is appended (None = nothing changed)."""
     clean = []
     for l in lines:
         t = re.sub(r"\s+", " ", str(l.get("text") or "")).strip()[:MAX_LINE]
@@ -154,7 +158,9 @@ def write_subject(name: str, description: str, lines: list[dict], why: str = "ed
         if t:
             clean.append({"source": s, "text": t})
     with _lock():
-        _write(name, render(name, description, clean), why)
+        wid = _write(name, render(name, description, clean), why)
+    if ids is not None and wid:
+        ids.append(wid)
     return read(name)
 
 
@@ -192,6 +198,34 @@ def undo_last() -> dict:
             p.write_text(last["before"])
         f.write_text("".join(json.dumps(r) + "\n" for r in rows[:-1]))
     return {"undone": last["name"], "why": last["why"]}
+
+
+def undo_ids(ids: list[str]) -> dict:
+    """↶ exactly these writes (one review's apply) — not whatever was written last.
+    Refused, with nothing touched, if a subject changed again since (its file is no longer that write's result)."""
+    want = [str(i) for i in ids if str(i).strip()][:200]
+    if not want:
+        raise MemError("nothing", "Nothing to undo.")
+    f = root() / "changes.jsonl"
+    with _lock():
+        rows = [json.loads(x) for x in f.read_text().splitlines() if x.strip()] if f.exists() else []
+        hit = [r for r in rows if r.get("id") in set(want)]
+        if len(hit) != len(set(want)):
+            raise MemError("gone", "That change was already undone.")
+        for r in hit:
+            p = _path(r["name"])
+            now = p.read_text(errors="replace") if p.exists() else None
+            if now != r["after"]:
+                raise MemError("changed", f"“{r['name']}” changed since — undo that on the Memory page first. Nothing was undone.")
+        for r in reversed(hit):
+            p = _path(r["name"])
+            if r["before"] is None:
+                if p.exists():
+                    p.rename(p.with_suffix(".md.removed"))
+            else:
+                p.write_text(r["before"])
+        f.write_text("".join(json.dumps(r) + "\n" for r in rows if r.get("id") not in set(want)))
+    return {"undone": sorted({r["name"] for r in hit}), "count": len(hit)}
 
 
 def search(q: str, limit: int = 50) -> list[dict]:
@@ -428,7 +462,7 @@ def apply_answers(text: str, ids: list[str] | None = None) -> dict:
     by: dict[str, list[dict]] = {}
     for c in pick:
         by.setdefault(c["subject"], []).append(c)
-    writes = 0
+    writes, made = 0, []
     for name, cs in by.items():
         try:
             sub = read(name)
@@ -445,9 +479,9 @@ def apply_answers(text: str, ids: list[str] | None = None) -> dict:
                     lines[n - 1] = {"source": "scott", "text": c["after"]}
         lines = [l for i, l in enumerate(lines, 1) if i not in drop]
         lines += [{"source": "scott", "text": c["after"]} for c in cs if c["kind"] == "add"]
-        write_subject(name, desc, lines, "review")
+        write_subject(name, desc, lines, "review", made)
         writes += 1
-    return {"applied": len(pick), "writes": writes}
+    return {"applied": len(pick), "writes": writes, "undo": made}
 
 
 def questions(limit: int = 40) -> list[dict]:

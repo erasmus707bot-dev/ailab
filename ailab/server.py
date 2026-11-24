@@ -203,6 +203,8 @@ class App:
             lines = b.get("lines") if isinstance(b.get("lines"), list) else []
             return 200, {"ok": True, "subject": memory.write_subject(str(b.get("name") or ""), str(b.get("description") or ""),
                                                                     [l for l in lines if isinstance(l, dict)], "edit")}
+        if op == "undo" and isinstance(b.get("ids"), list):   # ↶ exactly one review's writes (2026-11-24)
+            return 200, {"ok": True, **memory.undo_ids(b["ids"])}
         if op == "undo":                                  # count > 1 = undo a whole review apply
             n, last = max(1, min(int(b.get("count") or 1), 200)), {}
             for _ in range(n):

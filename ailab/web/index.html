@@ -627,7 +627,7 @@ function memoryView() {
       if (!w.ok) { say("✗ " + (w.message || w.code)); return; }
       diff.textContent = "";
       const un = h("button", { class: "btn", type: "button", onclick: async () => {
-        const u = await api("/api/memory/undo", { count: w.writes }); say(u.ok ? "↶ That review was undone." : "✗ " + (u.message || u.code)); un.remove(); load();
+        const u = await api("/api/memory/undo", w.undo ? { ids: w.undo } : { count: w.writes }); say(u.ok ? "↶ That review was undone." : "✗ " + (u.message || u.code)); un.remove(); load();
       } }, "↶ Undo this review");
       say(`✅ ${w.applied} change${w.applied === 1 ? "" : "s"} saved.`); msg.append(" ", un); load();
     } }, `✅ Save ${ticks.length} change${ticks.length === 1 ? "" : "s"}`);

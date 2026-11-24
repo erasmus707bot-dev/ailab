@@ -138,6 +138,32 @@ class Review(Base):
             M.undo_last()
         self.assertEqual([l["text"] for l in M.read("prefs")["lines"]], ["likes menus", "uses light mode", "drives a truck"])
 
+    def test_undo_ids_only_that_review(self):
+        for t in ("likes menus", "uses light mode"):
+            M.add_fact("prefs", t, "lab")
+        w = M.apply_answers("- (prefs#2) [change] uses dark mode\n")
+        self.assertEqual(len(w["undo"]), 1)
+        M.add_fact("lab-learned", "prefers tables", "lab")                       # the Lab saves something in between
+        r = M.undo_ids(w["undo"])
+        self.assertEqual((r["undone"], r["count"]), (["prefs"], 1))
+        self.assertEqual([l["text"] for l in M.read("prefs")["lines"]], ["likes menus", "uses light mode"])
+        self.assertEqual([l["text"] for l in M.read("lab-learned")["lines"]], ["prefers tables"])   # untouched
+        with self.assertRaises(M.MemError) as e:
+            M.undo_ids(w["undo"])
+        self.assertEqual(e.exception.code, "gone")
+        M.undo_last()                                                            # the log still works for the rest
+        with self.assertRaises(M.MemError):
+            M.read("lab-learned")
+
+    def test_undo_ids_refused_if_changed_since(self):
+        M.add_fact("prefs", "likes menus", "lab")
+        w = M.apply_answers("- (prefs#1) [change] likes big menus\n")
+        M.add_fact("prefs", "drives a truck", "scott")                           # same subject changed again
+        with self.assertRaises(M.MemError) as e:
+            M.undo_ids(w["undo"])
+        self.assertEqual(e.exception.code, "changed")
+        self.assertEqual([l["text"] for l in M.read("prefs")["lines"]], ["likes big menus", "drives a truck"])   # nothing touched
+
     def test_questions_for_voice(self):
         M.add_fact("prefs", "likes menus", "lab")
         self.assertEqual(M.questions()[0]["id"], "prefs#1")
