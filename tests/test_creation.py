@@ -42,7 +42,7 @@ class TypesFile(Base):
     def test_brief_names_types_and_questions_only_when_asking(self):
         b = creation.brief(["website", "image"], ask_first=True)
         self.assertIn("🌐 Website + 🖼 Image", b)
-        self.assertIn("image_brief.md", b)
+        self.assertIn("image_make", b)
         self.assertIn("Questions worth asking", b)
         self.assertNotIn("Questions worth asking", creation.brief(["website"], ask_first=False))
         self.assertEqual(creation.brief([]), "")

@@ -19,7 +19,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import config, memory, preview, repos, secretscan, store, creation
+from . import config, memory, picture, preview, repos, secretscan, store, creation
 from .mcp_client import HermesRefused
 from .transport import HttpError
 from .privacy import PrivacyRefused
@@ -32,7 +32,9 @@ AGENT_TOOLS = ("jobs_list", "job_get", "job_wait", "addon_build", "print3d_submi
                "mario_level_spec", "mario_level_check", "mario_level_make",
                "linux_app_describe", "linux_app_change", "linux_app_get", "linux_app_build", "linux_app_package",
                # 2026-11-22 game work: pull Pidima's source into the project, change + test it here, send it back as a proposal
-               "pidima_status", "pidima_source", "pidima_propose")
+               "pidima_status", "pidima_source", "pidima_propose",
+               # 2026-11-24 🖼 real pictures through Hermes (OpenRouter Image API)
+               "image_make", "image_models")
 MAX_OUT = 4000
 RUN_TIMEOUT_S = 60
 RESTORE_WITHIN_S = 24 * 3600   # 2026-11-24 touch test: runs saved to disk come back after a Lab restart for a day
@@ -53,7 +55,9 @@ object per turn and nothing else. Actions:
 {"action":"hermes","tool":"addon_build","args":{"template":"hello"}}   (connected mode only)
 {"action":"ask","questions":[{"q":"Which look?","choices":["Classic","Neon","Wood"],"best":0,"why":"matches your other pages"}]}
       (1-3 questions, 2-4 short choices each. "best" = the number of the choice YOU recommend, "why" = a few plain words. Waits for Scott.)
-{"action":"plan","steps":["Page layout","Game rules","Controls","Test it"]}   (3-7 short plain steps. Scott sees the list and presses Go. After Go, add "module":"1","2",... = the step you are on.)
+{"action":"plan","steps":["Page layout","Game rules","Controls","Test it"]}   (3-7 short plain steps. Scott sees the list and presses Go. After Go, add "module":"1","2",... = the step you are on.
+      Name each step by what Scott will SEE when it is done — "Start screen with a Play button", "Score shows at the top" —
+      never file names, code words or "check the file". Testing is not a step: you always test.)
 {"action":"done","summary":"what changed and how you checked it"}
 Add "why" (one short line) to every action. Following a build prompt? Add "module":"M1" (the module you are on). Paths are relative to the project folder. Check your work with
 "run" before "done". "done" is refused until a check you ran AFTER your last change exited 0.
@@ -242,6 +246,11 @@ class Run:
         self.provider, self.model, self.task = provider, model, task.strip()[:4000]
         # 🧩 creation types Scott picked (chips above the task box, 2026-11-24) — steer the agent, robot test and ship
         self.ctypes = [t["id"] for t in creation.pick(ctypes)]
+        # 🖼 picture runs (2026-11-24): only the Image chip → ask style/shape → prompt → Hermes image_make → picture
+        self.picture = creation.picture_mode(self.ctypes)
+        self.pictures: list[dict] = []
+        self.stage: dict | None = None        # 📣 what is happening right now, in plain words (shown big on screen)
+        self.started = time.time()
         self.root = (root or preview.ensure_site(project["id"])).resolve()
         self.step_cap = int(step_cap or cfg.get("agent_step_cap", 12))
         self.cap_usd = float(cfg.get("agent_cap_usd", 0.50) if cap_usd is None else cap_usd)
@@ -309,7 +318,38 @@ class Run:
                 "real_steps": len(self.steps) - self.bad, "long_replies": self.long_used, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
                 "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None,
                 "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored,
-                **self.type_view()}
+                **self.type_view(), "picture": getattr(self, "picture", False), "pictures": getattr(self, "pictures", []),
+                "stage": self.stage_view(), "elapsed_s": int(time.time() - getattr(self, "started", time.time()))}
+
+    # 📣 M3 (2026-11-24, "I need to know what is going on"): one plain line for what the run is doing right now
+    STAGE_WORDS = {"list": ("📂", "Looking at the files"), "read": ("📖", "Reading {path}"), "write": ("✍️", "Writing {path}"),
+                   "edit": ("✏️", "Changing {path}"), "run": ("🧪", "Checking that it works"), "repo": ("🔎", "Looking in your code"),
+                   "hermes": ("🔌", "Using Hermes: {tool}"), "ask": ("❓", "Waiting for your choice"), "plan": ("🗺", "Waiting for you to OK the plan"),
+                   "bad_reply": ("↻", "Asking the model again"), "prompt": ("✍️", "Wrote the picture prompt"), "picture": ("🎨", "Made the picture")}
+
+    def stage_view(self) -> dict:
+        st = getattr(self, "stage", None)
+        if self.state != "running":
+            done = {"done": ("✅", "Done"), "unproven": ("⚠️", "Finished — not proven, look before you keep it"),
+                    "capped": ("⏸", "Stopped at the step or money limit"), "stopped": ("⏹", "Stopped"),
+                    "failed": ("❌", "Something went wrong"), "refused": ("🔒", "Not allowed for this project"),
+                    "interrupted": ("⏸", "Paused — the Lab restarted")}.get(self.state, ("•", self.state))
+            return {"icon": done[0], "text": done[1], "busy": False}
+        if self.question:
+            q = self.question
+            return {"icon": "🗺" if q.get("kind") == "plan" else "❓", "busy": False,
+                    "text": "Waiting for you to OK the plan" if q.get("kind") == "plan" else "Waiting for your choice"}
+        if st and time.time() - st.get("at", 0) < 600:
+            return {"icon": st["icon"], "text": st["text"], "busy": True}
+        last = self.steps[-1] if self.steps else None
+        if not last:
+            return {"icon": "🧠", "text": f"Thinking with {self.model.split('/')[-1]}", "busy": True}
+        ic, words = self.STAGE_WORDS.get(str(last.get("action")), ("🧠", "Working"))
+        try:
+            words = words.format(path=last.get("path") or "a file", tool=last.get("tool") or "a tool")
+        except (KeyError, IndexError):
+            pass
+        return {"icon": "🧠", "text": f"Thinking about the next step (last: {ic} {words})", "busy": True}
 
     def type_view(self) -> dict:
         """🧩 What was picked, and what to offer when it is done: 📦 ship targets, 🖼/🎬 Hermes hand-offs."""
@@ -740,6 +780,18 @@ class Run:
                             p.write_text(text)
                             wrote.append(n)
                     res = {**{k: v for k, v in res.items() if k != "files"}, "wrote": wrote}
+                out = res.get("result") if isinstance(res.get("result"), dict) else None
+                if tool in ("job_wait", "job_get") and out and out.get("b64"):   # 🖼 picture bytes → a file, never the model
+                    import base64 as _b64                                        # noqa: PLC0415
+                    ext = ".jpg" if "jpeg" in str(out.get("media_type") or "") else ".png"
+                    rel = f"pictures/{time.strftime('%Y%m%d-%H%M%S')}{ext}"
+                    f = self.root / rel
+                    f.parent.mkdir(parents=True, exist_ok=True)
+                    f.write_bytes(_b64.b64decode(out["b64"]))
+                    self.usd += float(out.get("usd") or 0)
+                    self.pictures.append({"path": rel, "prompt": out.get("prompt", ""), "model": out.get("model", ""),
+                                          "usd": round(float(out.get("usd") or 0), 4), "library": out.get("library") or ""})
+                    res = {**res, "result": {**{k: v for k, v in out.items() if k != "b64"}, "saved_as": rel}}
                 return res
             except HermesRefused as e:
                 return {"error": f"Hermes refused ({e.code}): {e.message}"}
@@ -854,6 +906,9 @@ class Run:
         msgs = self.msgs
         self.live = True
         try:
+            if getattr(self, "picture", False):             # 🖼 picture run: its own short path, same safety handling
+                picture.run(self)
+                return
             while True:
                 self._check_stop()
                 a, r = self._replay, None

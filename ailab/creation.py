@@ -59,11 +59,11 @@ TYPES: list[dict] = [
               "match the code around it, check each changed file. Changes to linked code go to Scott as a proposal — never applied by you.",
      "questions": []},
     {"id": "image", "icon": "🖼", "label": "Image", "use": "💬 general", "robot": "none", "ship": [], "art": True,
-     "handoff": {"path": "/models", "name": "Image Studio", "file": "image_brief.md"},
+     "handoff": {"path": "/models", "name": "Image Studio", "file": "image_brief.md", "label": "🖌 Edit it in Image Studio"},
      "words": ["image", "picture", "photo", "drawing", "art", "artwork", "painting", "logo", "icon", "poster", "wallpaper", "illustration"],
-     "guide": "A picture. The Lab cannot make pictures itself yet, so write image_brief.md: a one-line title, then 3 ready-to-paste "
-              "image prompts (subject, style, colours, light, framing, size), the first one being your pick, then what to avoid. "
-              "Scott takes it to Hermes Image Studio. If the task is a page that SHOWS pictures, use SVG or CSS shapes you draw.",
+     "guide": "A picture. On its own the 🖼 chip runs a picture run (Hermes image_make). Together with a page or app: "
+              "in connected mode make each picture with hermes image_make {\"prompt\",\"aspect_ratio\"} → job_wait {\"key\"} "
+              "(the Lab saves it); otherwise draw it with SVG or CSS shapes.",
      "questions": [["Style?", ["Painted / illustrated ⭐", "Photo-real", "Flat and simple"]],
                    ["Shape?", ["Square ⭐", "Wide (screen)", "Tall (phone)"]]]},
     {"id": "video", "icon": "🎬", "label": "Video", "use": "💬 general", "robot": "none", "ship": [], "art": True,
@@ -124,6 +124,15 @@ def guess(text: str) -> list[str]:
         if hits:
             scored.append((-hits, n, ty["id"]))
     return [i for _, _, i in sorted(scored)[:3]]
+
+
+PAGE_TYPES = ("website", "android", "windows", "linux", "game", "edit")
+
+
+def picture_mode(ids) -> bool:
+    """🖼 on, nothing page/app-like on → a picture run (no agent steps, no page test)."""
+    ids = [t["id"] for t in pick(ids)]
+    return "image" in ids and not any(t in ids for t in PAGE_TYPES)
 
 
 def robot_mode(ids) -> str:
