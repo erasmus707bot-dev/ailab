@@ -248,6 +248,25 @@
   /* 2026-11-24 Argus touch test: plan Go / Later / Send change were 42 px */
   #askdlg .btn, #askdlg input[type=text] { min-height: 44px; } .planlist li { overflow-wrap: anywhere; }
   .askrow { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; font-size: .95rem; }
+  /* 📣 live stage card (2026-11-24, "I need to know what is going on") — one big plain line, time + money so far */
+  .stagebox { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--panel2); }
+  .stagebox .si { font-size: 1.7rem; line-height: 1; }
+  .stagebox .st { font-size: 1.08rem; font-weight: 600; }
+  .stagebox .sm { font-size: .92rem; color: var(--dim); margin-top: 2px; }
+  .stagebox.busy { border-color: var(--accent); }
+  .stagebox.busy .si { animation: stagepulse 1.6s ease-in-out infinite; }
+  @keyframes stagepulse { 50% { transform: scale(1.12); opacity: .75; } }
+  @media (prefers-reduced-motion: reduce) { .stagebox.busy .si { animation: none; } }
+  /* 🖼 picture results */
+  .made { display: flex; flex-direction: column; gap: 10px; }
+  .pics { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+  .pics figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .pics img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); }
+  .pics figcaption { font-size: .92rem; color: var(--dim); }
+  .picchange { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .picchange input { flex: 1 1 14rem; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: inherit; padding: 8px 10px; }
+  .docview { white-space: pre-wrap; max-height: 60vh; overflow: auto; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); font-size: 1rem; }
   /* 🧩 creation type chips (2026-11-24): tap any number; ⭐ = the Lab's guess from your words */
   .typerow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .typerow .tlead { font-size: .9rem; color: var(--dim); margin-right: 2px; }
@@ -811,7 +830,43 @@ function startView() {
   const baWrap = h("div", { class: "ba", hidden: true }, h("figure", {}, h("figcaption", {}, "⬅️ Before"), baBefore), h("figure", {}, h("figcaption", {}, "➡️ Now"), baNow));
   const resHead = h("div", { class: "final", role: "status" }), resRobot = h("div", {}), resBtns = h("div", { class: "runbar" }), resNote = h("span", { class: "note" });
   const shipBox = h("div", { class: "shipbox", hidden: true, "aria-live": "polite" });
-  const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, baWrap, resRobot, resBtns, resNote);
+  const madeBox = h("div", { class: "made", hidden: true });        /* 🖼 pictures / 📝 the writing (2026-11-24) */
+  const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, madeBox, baWrap, resRobot, resBtns, resNote);
+  let madeSig = "";
+  function paintMade(run, chg, pics, running) {
+    const sigNow = `${run.id}:${pics.length}:${chg.length}:${run.state}`;
+    if (sigNow === madeSig) return; madeSig = sigNow;
+    madeBox.replaceChildren(); madeBox.hidden = true;
+    if (pics.length) {                                         /* newest first, big */
+      madeBox.hidden = false;
+      madeBox.append(h("div", { class: "pics" }, [...pics].reverse().map(pc => {
+        const url = `/preview/${p.id}/${pc.path}`;
+        return h("figure", {}, h("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" }, h("img", { src: url, alt: pc.prompt ? pc.prompt.slice(0, 140) : "Picture the Lab made", loading: "lazy" })),
+          h("figcaption", {}, `🎨 ${String(pc.model || "").split("/").pop()} · $${(+pc.usd || 0).toFixed(3)}${pc.seconds ? ` · ${pc.seconds} s` : ""}${pc.library ? " · 💾 in your Gallery" : ""}`),
+          pc.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, pc.prompt)) : null,
+          h("a", { class: "btn", href: url, download: pc.path.split("/").pop() }, "⬇ Download"));
+      })));
+      if (!running && ag && ag.startWith) {                      /* 🔁 Make another · ✏️ Change it */
+        const last = pics[pics.length - 1], base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].trim();
+        const keep = (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : "");
+        const ids = run.ctypes && run.ctypes.length ? run.ctypes : ["image"];
+        const change = h("input", { type: "text", placeholder: "Say what to change — e.g. make it sunset, add a camel", "aria-label": "What to change in the picture" });
+        const go = () => { if (change.value.trim()) ag.startWith(`${base}\nChange: ${change.value.trim()}${keep}`, ids, false); };
+        change.onkeydown = e => { if (e.key === "Enter") go(); };
+        madeBox.append(h("div", { class: "picchange" },
+          h("button", { class: "btn pri", type: "button", title: "Same words and choices, a fresh picture", onclick: () => ag.startWith(base + keep, ids, false) }, "🔁 Make another ⭐"),
+          change, h("button", { class: "btn", type: "button", onclick: go }, "✏️ Change it")));
+      }
+      return;
+    }
+    const doc = [...chg].reverse().find(s => /\.(md|txt)$/i.test(s.path || ""));
+    if (doc && run.robot_mode === "none") {                    /* 📝 text runs: show the writing itself */
+      madeBox.hidden = false;
+      const pre = h("div", { class: "docview" }, "⏳");
+      madeBox.append(h("b", {}, `📝 ${doc.path}`), pre);
+      fetch(`/preview/${p.id}/${doc.path}?v=${Date.now()}`).then(r => r.ok ? r.text() : Promise.reject()).then(t => { pre.textContent = t; }).catch(() => { pre.textContent = "Couldn't open it — see 🔎 Step by step."; });
+    }
+  }
   /* 2026-11-24 (Scott: "too difficult to navigate"): 📦 is ALWAYS on screen at the top of this pane — no run needed. */
   const shipBar = h("div", { class: "shipbar" },
     h("button", { class: "btn pri", type: "button", title: "Hermes builds Android / Linux / Windows apps from this project (🧪 test builds only you see)",
@@ -875,11 +930,14 @@ function startView() {
     sig = ""; onRun(run); if (pv) pv.refresh();
   }
   function paintResult(run) {
-    const chg = changedSteps(run), running = run.state === "running";
-    if (!chg.length && (running || !run.why)) { resultBox.hidden = true; return; }
+    const chg = changedSteps(run), running = run.state === "running", pics = run.pictures || [];
+    if (!chg.length && !pics.length && !running && !run.why) { resultBox.hidden = true; return; }
     resultBox.hidden = false;
-    resHead.textContent = running ? "🔨 Building — the Now picture updates as it goes." : `${STATE[run.state] || run.state} — ${run.why || ""}`;
-    const showBA = !!(S.flags.preview && run.before && chg.length);
+    /* 📣 M3: while it works, the big stage card; when done, the result line */
+    resHead.replaceChildren(running ? stageCard(run) : `${STATE[run.state] || run.state} — ${run.why || ""}`);
+    /* ⬅️/➡️ Before / Now only for pages and apps — text shows the writing, pictures show the picture (M3) */
+    const showBA = !!(S.flags.preview && run.before && chg.length && run.robot_mode !== "none" && !run.picture);
+    paintMade(run, chg, pics, running);
     baWrap.hidden = !showBA;
     if (showBA) {
       if (baRun !== run.id) { baRun = run.id; baSig = ""; baBefore.src = `/preview-before/${p.id}/${run.id}/`; }
@@ -953,8 +1011,9 @@ function startView() {
   }
   function onRun(run) {
     curRun = run;
+    if (run.state === "running" && !resultBox.hidden) { const sc = resHead.querySelector(".stagebox"); if (sc) sc.replaceWith(stageCard(run)); }
     const nsig = `${run.id}:${run.steps.length}:${run.state}`;
-    if (nsig === sig) return;
+    if (nsig === sig) { if (run.state === "running" && resultBox.hidden) paintResult(run); return; }
     const grew = sig.split(":")[0] !== run.id || +sig.split(":")[1] !== run.steps.length; sig = nsig;
     const last = [...run.steps].reverse().find(s => s.action === "run" && s.result);
     if (last) {
@@ -1028,6 +1087,16 @@ function autosave(text) {
 /* 2026-11-23: every model shows a best-use tag + $ tier (ailab/roster.py). ⭐ rows keep their hand-picked job. */
 const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "", lim = t.limits ? `${t.limits} ` : "";
   return r.picks && r.picks[m] ? `⭐ ${lim}${m} — ${r.picks[m]}${tier}` : `${lim}${m} — ${t.use || ""}${tier}`; };
+/* 📣 stage card: what the run is doing right now, in plain words, plus time and money so far */
+const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
+function stageCard(run) {
+  const st = run.stage || { icon: "•", text: STATE[run.state] || run.state, busy: run.state === "running" };
+  return h("div", { class: "stagebox" + (st.busy ? " busy" : ""), role: "status", "aria-live": "polite" },
+    h("span", { class: "si", "aria-hidden": "true" }, st.icon),
+    h("div", {}, h("div", { class: "st" }, st.text),
+      h("div", { class: "sm" }, `⏱ ${fmtTime(run.elapsed_s || 0)} · 💲 $${(run.usd || 0).toFixed(4)} so far` +
+        (run.picture ? " · 🖼 picture run" : ` · step ${run.real_steps != null ? run.real_steps : run.steps.length} of up to ${run.step_cap}`))));
+}
 /* 🧩 creation types (2026-11-24): the chips, the ⭐ guess (same rule as ailab/creation.py guess) and hand-off buttons */
 let CTYPES = null;
 const ctypesLoad = () => CTYPES ? Promise.resolve(CTYPES) : api("/api/creation_types").then(r => (CTYPES = r.ok ? r.types : []));
@@ -1040,7 +1109,8 @@ function handoffBtn(ho, star) {
   const base = (homeUrl() || "").replace(/\/+$/, "");          /* same Hermes address as the ⌂ Home button (hermes_url, else where the Lab was opened from) */
   if (!base) return h("span", { class: "note" }, `${ho.icon} The brief is in ${ho.file} — take it to Hermes ${ho.name} (open the Lab from Hermes once for a button here).`);
   return h("a", { class: star ? "btn pri" : "btn", href: base + ho.path, target: "_blank", rel: "noopener",
-    title: `The Lab can't make this itself yet — ${ho.file} in this project has the ready-to-use brief` }, `${ho.icon} Take the brief to ${ho.name}${star ? " ⭐" : ""}`);
+    title: ho.label ? `Opens Hermes ${ho.name} — the picture is in your Gallery (ai-lab)` : `The Lab can't make this itself yet — ${ho.file} in this project has the ready-to-use brief` },
+    (ho.label || `${ho.icon} Take the brief to ${ho.name}`) + (star ? " ⭐" : ""));
 }
 /* 🎨 only (2026-11-24): hide every model not tagged "fewer limits". Remembered. */
 function artToggle(sel, r) {
@@ -1409,12 +1479,13 @@ function agentView(wb) {
   function paint(run) {
     status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.real_steps != null ? run.real_steps : run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
+    steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
     const ml = memLine(run); if (ml) steps.append(h("div", { class: "step" }, ml));
     /* M5: plain progress list from the build prompt's modules */
     if ((run.plan || []).length) { const IC = { done: "✅", doing: "🔨", left: "⏳" };
       steps.append(h("div", { class: "step plan" }, run.plan.map(m => h("div", {}, `${IC[m.state]} ${m.module}`)))); }
     const lastStep = run.steps[run.steps.length - 1];
-    if (run.state === "running" && !run.question && lastStep && lastStep.why) steps.append(h("div", { class: "step" }, `🔨 Now: ${lastStep.why}`));
+    if (run.state === "running" && !run.question && !run.picture && lastStep && lastStep.why) steps.append(h("div", { class: "step" }, `🔨 Last step: ${lastStep.why}`));
     if (run.question) steps.prepend(h("button", { class: "btn pri", type: "button", onclick: () => { askShown = ""; askPop(run); } },
       run.question.kind === "plan" ? "🗺 The plan is ready — tap to look and press Go" : "❓ The AI has a quick choice for you — tap to answer"));
     askPop(run);
@@ -1477,7 +1548,16 @@ function agentView(wb) {
     stopBtn.disabled = true; const r = await api("/api/agent/stop", { id }); if (r.ok) paint(r.run);
   };
   poll();
-  if (wb) return { typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), hint), goals, repoRow, startBtn, stopBtn, askRow, held, status, final, steps, more };
+  /* 🖼 Make another / Change it start a new run from the result pane with these words and chips */
+  async function startWith(text, ids, ask) {
+    task.value = text; task.oninput();
+    if (ids) store.set(tkey, { ids, manual: true });
+    paintTypes();
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: text, ask_first: !!ask, ctypes: ids || typePicked() });
+    if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
+    store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
+  }
+  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), hint), goals, repoRow, startBtn, stopBtn, askRow, held, status, final, steps, more };
   return [projectRow(), h("section", { class: "agent" },
     typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, hint, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, askRow, held,
