@@ -262,6 +262,15 @@
     .typerow .tchip.more { display: inline-flex; }
     .typerow:not(.open) .tlead { display: none; }
     .tchip { padding: 6px 10px; }
+    /* Argus 2026-11-24: the model picker was 202 px (4 stacked rows) → 2 rows: provider + model, tag help + 🎨 */
+    .picker { flex-wrap: wrap; }
+    .picker > select:first-child { flex: 0 0 auto; max-width: 38%; }
+    .picker > select:nth-child(2) { flex: 1 1 0; min-width: 0; }
+    .picker .legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .picker .legend > * { flex: 1 1 9rem; min-width: 0; }
+    .picker .legend > details[open] { flex-basis: 100%; }
+    .picker .legend summary { min-height: 44px; display: flex; align-items: center; }
+    .picker .legend > label { white-space: normal; }
   }
   .drawer pre { white-space: pre-wrap; word-break: break-word; font-size: .82rem; max-height: 30vh; overflow: auto; margin: 6px 0 0; }
   .wbtools .btn.off { opacity: .6; }
@@ -971,7 +980,8 @@ function startView() {
     h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
     S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
     S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
-    ...(ag ? [ag.typeRow, ag.task, ag.picker, h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.askRow, ag.held), ag.status, ag.final, ag.repoRow,
+    ...(ag ? [ag.typeRow, ag.task, ...((r, pk) => matchMedia("(max-width: 640px)").matches ? [r, pk] : [pk, r])(  /* phones: ▶ Start before the model picker (Argus 2026-11-24) */
+          h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.askRow, ag.held), ag.picker), ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
     h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the three panes back to the standard size and order" }, "🧱 Reset pane layout")));
