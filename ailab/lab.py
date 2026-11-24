@@ -1,6 +1,8 @@
 """The one call path: privacy gate → cap check → key → provider → record spend."""
 from __future__ import annotations
 
+import time
+
 from . import config as _config
 from . import privacy, providers
 from .keys import KeyStore, LocalKeys
@@ -9,6 +11,8 @@ from .models import ModelCache
 from .providers.base import ChatResult
 from .spend import HermesSpend, LocalLedger, SpendBlocked
 from .transport import http_json
+
+LONG_WAIT_S = 360          # a long reply (over 4096 tokens) is a Hermes job; Hermes bounds one call at 300 s
 
 
 class Lab:
@@ -52,6 +56,8 @@ class Lab:
                                            "max_tokens": max_tokens, "category": self.cfg["category"],
                                            "task": task or project.get("name", ""),
                                            "sensitive": bool(project.get("sensitive"))})
+            if r.get("key") and "text" not in r:                    # 2026-11-24: long reply → Hermes job; collect it
+                r = self._collect(r["key"])
         except HermesRefused as e:
             if e.code == "over_cap":
                 raise SpendBlocked(e.message) from None
@@ -60,6 +66,24 @@ class Lab:
             raise
         return ChatResult(r.get("text", ""), p.name, r.get("model", model), int(r.get("tokens_in") or 0),
                           int(r.get("tokens_out") or 0), float(r.get("usd") or 0), bool(r.get("priced", True)), r)
+
+    def _collect(self, key: str) -> dict:
+        """Wait for a long llm_call job. Each job_wait answers within 45 s (the Hermes rule), so this loops."""
+        end = time.monotonic() + float(self.cfg.get("llm_long_wait_s", LONG_WAIT_S))
+        while time.monotonic() < end:
+            w = self.mcp.call("job_wait", {"key": key})
+            if not w.get("finished"):
+                continue
+            if w.get("state") == "done" and isinstance(w.get("result"), dict):
+                return w["result"]
+            err = w.get("error") or {}
+            raise HermesRefused(err.get("code") or str(w.get("state") or "failed"),
+                                err.get("message") or f"The long reply ended as {w.get('state')}.", err.get("fix", ""))
+        try:
+            self.mcp.call("job_cancel", {"key": key})
+        except HermesRefused:
+            pass
+        raise HermesRefused("timeout", f"No long reply after {LONG_WAIT_S} s.", "Try a faster model.")
 
     def chat(self, project: dict, provider: str, model: str, messages: list[dict], max_tokens: int = 1024,
              cap_usd: float | None = None, task: str = "") -> ChatResult:

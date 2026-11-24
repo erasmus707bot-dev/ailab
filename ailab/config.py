@@ -39,7 +39,8 @@ DEFAULTS: dict = {
     "live_ports": [8860, 8861],          # Now, New — unused in ~/hermes (grep 2026-11-23); UNVERIFIED on the live box
     "agent_step_cap": 20,                 # steps per agent run (12 until 2026-11-22; game-code work needs read → edit → test rounds)
     "live_step_cap": 60,                  # 🪞 Show & change runs (2026-11-24: 12 capped both Inkling-pilot lanes on a 1-spot edit)
-    "agent_max_tokens": 4096,             # per model reply (Hermes llm_call allows at most 4096)
+    "agent_max_tokens": 4096,             # per model reply — Hermes answers up to 4096 at once
+    "agent_long_max_tokens": 16384,       # 2026-11-24: one bigger reply after a cut-off (Hermes runs it as a job; 0 = off)
     "extra_models": {},                   # {"openrouter": ["vendor/model-id"]} — added to that provider's model list
     "agent_cap_usd": 0.50,                # $ per agent run (inside the daily cap)
     "port": 8850,                         # 8795 is Hermes SiteGen; 8850 unused in ~/hermes (2026-11-20)

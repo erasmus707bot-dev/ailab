@@ -20,6 +20,7 @@ from pathlib import Path
 
 from . import config, memory, preview, repos, secretscan, store
 from .mcp_client import HermesRefused
+from .transport import HttpError
 from .privacy import PrivacyRefused
 from .spend import SpendBlocked
 
@@ -64,8 +65,8 @@ FIRST "ask", THEN "plan", and only then write. Never ask what his memory below a
 change (one spot, nothing to choose) needs neither."""
 GATE_NUDGE = ("Scott wants to choose first. If this builds something new or leaves real choices open: \"ask\" (1-3 questions, "
               "choices, your recommended pick), then \"plan\". If it is a small exact change with nothing to choose, send this action again.")
-CUT_TIP = ("Your reply was cut off because it was too long. Send a shorter action: write the first ~150 lines ending with a "
-           "marker comment, then use \"edit\" to turn the marker into the next part.")
+CUT_TIP = ("Your reply was cut off because it was too long. Your next reply gets more room, but parts are still safer: "
+           "write the first ~150 lines ending with a marker comment, then use \"edit\" to turn the marker into the next part.")
 JSON_TIP = "Reply with ONE JSON object only — no words before or after it."
 BAD_ROW_MAX = 3            # this many unreadable replies in a row = the model can't do the job; stop, don't burn money
 SNAP_MAX = 20_000_000      # ↔ Before copy of the project page (bytes); bigger projects get no Before picture
@@ -257,6 +258,8 @@ class Run:
         self.plan_ok = bool(self.plan)        # a build prompt's modules are already the plan
         self.gate_nudged = False
         self.bad = self.bad_row = 0           # unreadable replies: never count against the step limit
+        self.long_next = False                # a reply was cut off → the next one may be long (Hermes job)
+        self.long_used = 0
         self.cap_kind = ""                    # "steps" → ▶ Continue is possible
         self.msgs: list[dict] | None = None   # kept so ▶ Continue picks up where the run stopped
         self.selftest = None if self.is_lane else selftest
@@ -273,7 +276,7 @@ class Run:
                 "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info(),
                 "memory_used": self.memory_used, "memory_saved": self.memory_saved,
                 "plan": self.plan_view(), "question": self.question,
-                "real_steps": len(self.steps) - self.bad, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
+                "real_steps": len(self.steps) - self.bad, "long_replies": self.long_used, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
                 "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None}
 
     def plan_view(self) -> list[dict]:
@@ -647,6 +650,21 @@ class Run:
             self.why = (self.why + " · 🟡 " + self._robot_words())[:700]
         return True
 
+    def _ask(self, msgs: list[dict], left: float):
+        """One model reply. After a cut-off: one try with room for a long reply; if that can't run, the normal size."""
+        base = int(self.cfg.get("agent_max_tokens", 4096))
+        big = int(self.cfg.get("agent_long_max_tokens", 16384) or 0)
+        task = f"lab-agent:{self.project['id']}"
+        if self.long_next and big > base:
+            self.long_next = False
+            try:
+                r = self.lab.chat(self.project, self.provider, self.model, msgs, big, cap_usd=left, task=task)
+                self.long_used += 1
+                return r
+            except (HermesRefused, HttpError, SpendBlocked):              # model can't do that size, or $ est too high
+                pass
+        return self.lab.chat(self.project, self.provider, self.model, msgs, base, cap_usd=left, task=task)
+
     def loop(self) -> None:
         if self.msgs is None:
             self.msgs = self._start_msgs()
@@ -665,8 +683,7 @@ class Run:
                 if left <= 0:
                     self.state, self.why = "capped", f"💲 Run cap reached (${self.cap_usd:.2f})."
                     return
-                r = self.lab.chat(self.project, self.provider, self.model, msgs, int(self.cfg.get("agent_max_tokens", 4096)), cap_usd=left,
-                                  task=f"lab-agent:{self.project['id']}")
+                r = self._ask(msgs, left)
                 self.usd += float(r.usd or 0)
                 self.tokens_in += int(r.tokens_in or 0)
                 self.tokens_out += int(r.tokens_out or 0)
@@ -676,6 +693,7 @@ class Run:
                     a = parse_action(r.text)
                 except ValueError as e:
                     cut = "no JSON object" not in str(e) and "no \"action\"" not in str(e)
+                    self.long_next = cut
                     res = {"error": f"Reply was not one JSON action ({e}).", "tip": CUT_TIP if cut else JSON_TIP, "cut": cut}
                     self.bad += 1
                     self.bad_row += 1
@@ -688,6 +706,7 @@ class Run:
                         return
                     continue
                 self.bad_row = 0
+                self.long_next = False
                 res = self.act(a)
                 shown = {k: (v if k not in ("find", "replace") else str(v)[:300]) for k, v in a.items() if k != "content"}
                 if "content" in a:
