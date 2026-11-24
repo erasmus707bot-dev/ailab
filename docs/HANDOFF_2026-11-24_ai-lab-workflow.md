@@ -35,3 +35,13 @@ Still open: **4. runs survive a Lab restart** (runs live in memory only).
 - A half-done write/run/tool step is not replayed; the model is told it may or may not have happened.
 - Proven: 8 unit tests incl. the exact case over HTTP (plan up → server replaced on same home → Go → done); headless phone 393 px: Resume 44 px, tap posts.
 - Not proven: on gandalf with a real model. Needs a Lab restart (desktop icon) first. Check: start a run with ❓ Ask me first, restart while the card is up, tap the answer.
+
+## Live restart proof — 2026-11-24 09:15 (gandalf, Scott's Chrome, openrouter deepseek/deepseek-v4.1-flash)
+- Scott restarted the Lab (new code: `/api/agent/resume` answers 400 not 404).
+- Run `2fb6372ac6` (scratch, "dark-mode toggle", ❓ Ask me first) → question card (2 questions, ⭐ picks) → **Scott restarted the Lab with the card up**
+  → run back: state running, `restored`, card intact, not stuck → page showed the card → ✅ Use all ⭐ → 🗺 plan (5 steps, none cut) → ▶ Go
+  → **✅ done, 21 steps (2 bad), $0.0055, robot 🟢**. Scratch now has the toggle (test project — keep or undo, no matter).
+- Argus (Pixel 5, real Chrome, http://10.0.2.2:8850): top bar **393 = 393**, header controls all 44 px; plan dialog 362×515, 0 controls under 44 px,
+  long steps wrap whole; a real tap on ▶ Go hit the button (sample run → "No such run", as expected). 0 console errors.
+- Not covered: a mid-step restart (▶ Resume) on gandalf — unit + headless only.
+Still open: question answers → Lab memory.
