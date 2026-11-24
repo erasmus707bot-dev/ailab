@@ -39,3 +39,8 @@ same ask: pointed at "Scan now" → "Rename this button to "Scan everything" and
 `f3094fc`: the robot never clicks the Now (real) page, only New (the test copy). After New's click, the look-only 403 is expected (shown as a note); any other new error → 🔴. 146 tests OK. **Loads at next Lab restart.**
 Live re-check owed: 🪞 on "Scan now" → no new Hermes scan starts; 🚦 still 🟢.
 Next: `~/hermes/prompts/BUILD_PROMPT_2026-11-24_ai-lab-memory-prompt-builder.md` — continue phrase in that file.
+
+## Step-cap retest — 2026-11-24 05:4x
+`7cd6b73`: Show & change runs use `live_step_cap` 60 (agent_start `kind:"live"`); normal agent cap unchanged. Lab restarted by Scott.
+Same ask, deepseek-v4.1-flash: 🟢, **$0.0034, 13/60 steps, state done** (said done itself; also renamed the label the scan script resets to). Thrown away; provider back to claude.
+Side job: Hermes gemini → gemini-3.8-flash / gemini-4-argon (2.0-flash shut down). model_preferences.json edited in place (backup .bak-2026-11-24-gemini) but NOT committed — that file already held other sessions' uncommitted changes (cloud_default openrouter etc.). providers.py template committed in ~/hermes. Gemini prices UNVERIFIED (conservative 3.5-flash rate). First real Gemini call not yet made.
