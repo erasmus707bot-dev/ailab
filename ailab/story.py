@@ -59,7 +59,9 @@ FACTS_SYS = ("List what CHANGED in this chapter that later chapters must respect
              "broken, worn, lost or gained, who is hurt or gone. JSON only: [\"one fact per line\"]. 3–10 short lines.")
 CHECK_SYS = ("You check a new chapter against the story bible's facts — his idea for the chapter and the plan made from it. "
              "List only real contradictions: something his idea or the plan says that a listed fact rules out. Things the facts "
-             "don't cover are not contradictions. Each flag names both sides in one plain line, like: \"Fact (ch 2): Ben took the "
+             "don't cover are not contradictions. Facts tell what happened before; a later chapter may move on — a new day, a new "
+             "place, the race over, people now friends — and that is NOT a contradiction. Flag only when his idea or the plan says "
+             "the past was different, or something a fact makes impossible now. Each flag names both sides in one plain line, like: \"Fact (ch 2): Ben took the "
              "flooded tunnel — but his idea says Ben never went near a tunnel.\" JSON only: [\"flag\", ...], or [] if none.")
 
 
@@ -316,6 +318,9 @@ def check_flags(text: str) -> list[str]:
         if not isinstance(x, str) or not x.strip():
             continue
         f = re.sub(r"\s+", " ", x).strip()[:240]
+        clash = re.search(r"\b(but|contradict\w*|however|yet|while|whereas|conflicts?)\b", f, re.I)
+        if re.match(r"his idea\b", f, re.I) or (re.match(r"fact\b", f, re.I) and not clash):
+            continue                                          # live 2026-11-25: a fact and his idea came back as two half-flags
         key = re.split(r"\s+[—–-]\s+but\b", f, maxsplit=1)[0].lower()
         if key in seen:
             continue

@@ -138,6 +138,11 @@ class Story(Base):
                                                 "Fact (ch 3): Ben came out of the tunnel — but his idea says he never went near a tunnel."])
         self.assertEqual(len(story.check_flags(json.dumps([f"Fact {i}: x — but y" for i in range(6)]))), 3)
         self.assertEqual(story.check_flags("no json"), [])
+        halves = json.dumps(["Fact (ch 1): Aria and Ben are racing to deliver the same mysterious package.",
+                             "His idea for this chapter: Next morning in a quiet diner, they share breakfast."])
+        self.assertEqual(story.check_flags(halves), [])                          # live: two half-flags, no clash named
+        self.assertEqual(story.check_flags(json.dumps(["Jun uses his broken left arm"])), ["Jun uses his broken left arm"])
+        self.assertIn("NOT a contradiction", story.CHECK_SYS)
 
     def test_the_eyes_words_have_no_names(self):
         """Live 2026-11-25: 👁 "missing: Aria rides her bike through the rain" — a picture can't show a name."""
