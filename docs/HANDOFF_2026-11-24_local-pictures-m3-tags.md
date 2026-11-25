@@ -40,15 +40,14 @@ Anime missed the prompt (closed umbrella, no rain, park bench). Scott 20:46 "1" 
 - Tests: ailab picture/route/tags 61/61 · hermes `test_mcp_images_local` 12/12, `test_mcp_images_refs` + `test_mcp_images` 16/16.
 - Not yet live: needs `systemctl --user restart hermes-mcp` (image_make runs there, port 8790) + `systemctl --user restart ailab`.
 
+## Live check after restarts (2026-11-25 04:21, Claude in Scott's Chrome) — PASS
+- 🏷 prompt from the Lab: scene tags + Scott's words only, no quality tags.
+- On the card (read from the PNG's embedded ComfyUI prompt): positive starts `masterpiece, best quality, good quality,` once; negative starts with the checked Illustrious set + the Lab's no-text/not-photo words. No doubling.
+- Picture: girl, open red umbrella, rain, bus shelter, bus stop sign cut off at the right edge (short letters on it). 44 s, $0.0002 (writer).
+- A saved "Boudoir" Look chip was set in the Lab from another session; Claude removed it before running (the Look line in the task box was used).
+
 ## Still open
 - Writer doesn't say the umbrella's state ("open umbrella") though asked.
 - Argus touch check of ⚙️ "🖼 Pictures: which side first". Keep-model-loaded parked. Nothing pushed.
 
-## Gandalf
-```
-systemctl --user restart hermes-mcp
-systemctl --user restart ailab
-```
-Then Claude re-runs the Anime picture in the Lab and checks the 🏷 step shows no quality tags (Hermes adds them on the card).
-
-Continue: `continue local image service — live check after hermes-mcp + ailab restart, from the 2026-11-24 M3 tags handoff`
+Continue: `continue local image service — next step pick, from the 2026-11-24 M3 tags handoff`
