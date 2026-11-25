@@ -46,3 +46,12 @@ result line ends "Spend: $0.000 — all on this computer". Then ▶ Next chapter
 - Night tail: none — R3 needs the M3/M4 live results first, and build prompt #2 is only in the Project (not under `prompts/`).
 
 Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 build prompt #2` (next = R3 🎬 Rebuild).
+
+## Live 2026-11-25 09:36–09:40 (Kokoro installed, services restarted)
+- ✅ Project `test`, ⚡ Short · 🆓 · 🎙, **no cast** (global cast is empty — R1's live run never happened). “Race to the Light”:
+  bible → 6 shots → 6 stills on local FLUX.2 Klein (~30 s each) → 👁 avg 90% → pan-and-zoom → narration → **16 s film,
+  720×1280, voice audible (mean −24.6 dB)**. **Spend $0.000.** ~4 min end to end. 6 facts went into the bible.
+- Seen: without a cast both keepers came out alike (same coat and cap) — the cast references are what fix that.
+- Fixed after the run: 👁 graded the bracketed looks ("Ethan (ambitious new keeper)") → now grades only what a picture can show,
+  and each shot's 👁 line shows in 📜 Steps. Commit below.
+- Still owed: R1 cast live run, then a Story with that cast (faces held per shot) · ▶ Next chapter with 📚 Long (🔗 check) · Argus.

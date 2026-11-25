@@ -144,6 +144,7 @@ class Story(Base):
         self.assertEqual(len(makes[1]["reference_images"]), 2, "shot 2 has Jun and Mara → both anchors")
         self.assertIn("Mara.png", makes[0]["reference_images"][0])
         self.assertIn("Mara (tall adult)", makes[0]["prompt"])
+        self.assertTrue(all("(" not in q for q in m.points), "👁 points carry no bracketed looks")
         self.assertTrue(ch["film"] and (r.root / ch["film"]).is_file() and ch["voice"])
         self.assertTrue(r.videos and r.videos[-1]["path"] == ch["film"])
         self.assertEqual(len(story.bible(r.root)["facts"]), 2, "what changed went into the bible")

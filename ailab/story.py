@@ -210,7 +210,7 @@ def clean_shots(raw, names: list[str], form: str) -> list[dict]:
     return out
 
 
-def shot_prompt(shot: dict, b: dict, cast: dict[str, dict]) -> str:
+def shot_prompt(shot: dict, b: dict, cast: dict[str, dict], looks: bool = True) -> str:
     """One still's words: who (with their look, so the picture model can tell them apart) · action · where · framing."""
     who = []
     for w in shot["who"]:
@@ -218,7 +218,7 @@ def shot_prompt(shot: dict, b: dict, cast: dict[str, dict]) -> str:
         p = next((p for p in b.get("people", []) if p["name"].lower() == w.lower()), None)
         look = (c or {}).get("brief", "") or (p or {}).get("who", "")
         look = look.split(": ", 1)[-1]
-        who.append(f"{w} ({look})" if look else w)
+        who.append(f"{w} ({look})" if look and looks else w)
     where = shot["where"]
     if where and not where.lower().startswith(("in ", "at ", "on ", "by ", "inside ", "under ")):
         where = "in " + where
@@ -466,7 +466,9 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                 s.pop("error", None)
                 if not eyes.on(run):
                     break
-                e = eyes.check(run, (root / pic["path"]).read_bytes(), words, look, label=f"shot {s['k'] + 1}")
+                e = eyes.check(run, (root / pic["path"]).read_bytes(), shot_prompt(s, bib, cast, looks=False), look,
+                               label=f"shot {s['k'] + 1}")          # 👁 grades what a picture can show, not the bracketed looks
+                eyes.record(run, f"shot {s['k'] + 1}", e)
                 s["eyes"] = {x: e.get(x) for x in ("score", "missing", "error") if e.get(x) is not None}
                 if e.get("low") and e.get("fix_task") and tries < retries and not float(pic.get("usd") or 0):
                     tries += 1
