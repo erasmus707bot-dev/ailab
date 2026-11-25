@@ -250,19 +250,33 @@ def shot_prompt(shot: dict, b: dict, cast: dict[str, dict], looks: bool = True) 
     return ", ".join(x for x in bits if x)
 
 
+COUNTS = {"a", "an", "the", "one", "two", "three", "four", "five", "six", "some", "his", "her", "their", "its"}
+
+
+def _stem(word: str) -> str:
+    w = re.sub(r"[^a-z-]", "", word.lower())
+    return w[:-2] if w.endswith(("ches", "shes", "xes", "sses", "zes")) else w[:-1] if w.endswith("s") and len(w) > 3 else w
+
+
 def props_in(shot: dict, b: dict) -> list[str]:
-    """🧳 The bible's props this shot shows, in the bible's own words: the ones the planner listed, plus any whose main word
-    (last word, plural or not) is in the action or place — "rides off on her motorbike" → "two red motorbikes"."""
-    props = b.get("props") or []
-    if not props:
-        return []
-    low = {p.lower(): p for p in props}
-    out = [low[x.lower()] for x in shot.get("props") or [] if x.lower() in low]
+    """🧳 The bible's props this shot shows. Live 2026-11-25: the planner wrote "red motorbike" for the bible's "two red
+    motorbikes" and the shot "swerving through the crowd" lost its bike — so a prop is matched by its main word, in the
+    planner's list or in the action/place. The planner's own words win when they keep every look word of the bible's
+    ("red motorbike" for a one-rider shot); otherwise the bible's words go in. Planner extras not in the bible are dropped."""
+    out = []
+    listed = [str(x) for x in shot.get("props") or []]
     text = f"{shot.get('action', '')} {shot.get('where', '')}".lower()
-    for p in props:
-        noun = re.sub(r"[^a-z-]", "", p.lower().split()[-1]) if p.split() else ""
-        stem = noun[:-2] if noun.endswith(("ches", "shes", "xes", "sses", "zes")) else noun[:-1] if noun.endswith("s") and len(noun) > 3 else noun
-        if p not in out and stem and re.search(rf"\b{re.escape(stem)}(?:e?s)?\b", text):
+    for p in b.get("props") or []:
+        words = p.lower().split()
+        if not words:
+            continue
+        stem = _stem(words[-1])
+        hit = rf"\b{re.escape(stem)}(?:e?s)?\b"
+        looks_ = [w for w in words[:-1] if w not in COUNTS]
+        mine = next((x for x in listed if re.search(hit, x.lower())), None)
+        if mine is not None:
+            out.append(mine if all(re.search(rf"\b{re.escape(w)}\b", mine.lower()) for w in looks_) else p)
+        elif stem and re.search(hit, text):
             out.append(p)
     return out[:4]
 

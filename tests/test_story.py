@@ -247,7 +247,12 @@ class Story(Base):
         listed = {"who": [], "action": "they wait", "where": "", "camera": "", "props": ["A small brown package", "a kite"]}
         none = {"who": [], "action": "Aria laughs", "where": "", "camera": "", "props": []}
         self.assertEqual(story.props_in(by_word, b), ["two red motorbikes"])
-        self.assertEqual(story.props_in(listed, b), ["a small brown package"])     # not in the bible → dropped
+        self.assertEqual(story.props_in(listed, b), ["A small brown package"])     # a kite isn't in the bible → dropped
+        # live 2026-11-25: planner wrote "red motorbike", action had no bike word → the bike must still ride in
+        crowd = {"who": [], "action": "swerving through the crowd", "where": "", "camera": "", "props": ["red motorbike", "helmet"]}
+        self.assertEqual(story.props_in(crowd, b), ["red motorbike"])
+        bare = {"who": [], "action": "swerving", "where": "", "camera": "", "props": ["motorbike"]}
+        self.assertEqual(story.props_in(bare, b), ["two red motorbikes"])          # look word lost → the bible's words
         self.assertEqual(story.props_in(none, b), [])
         self.assertIn("with two red motorbikes", story.shot_prompt(by_word, b, {}))
         self.assertIn("with two red motorbikes", story.shot_prompt(by_word, b, {}, looks=False))   # 👁 checks it too
