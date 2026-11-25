@@ -1,5 +1,7 @@
 # HANDOFF 2026-11-25 — 📓 Craft Book (the Lab learns the work, not only Scott)
 
+Commits: ailab `afde7a6` · hermes `f1b55deb` (session init § Craft tail). Not pushed.
+
 Scott 2026-11-25: "teach my system as you build with it so that it gets better … anything done these past few days or in
 the future must be built into the ai lab system." Gate: he picked **1** — measured notes go live by themselves (with undo);
 notes written by hand get one batch review. Lab tests **671 OK** (was 648; +22 craft, 1 flag list updated).
