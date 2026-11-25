@@ -26,6 +26,8 @@ ROUTES = {
     "drawn": ["local/sdxl-base-1.0"],
     "plain": ["local/flux2-klein-4b"],
 }
+STUDY_ROUTES = {"photo": ["local/juggernaut-xl-v9", "local/flux2-klein-4b"], "drawn": ["local/juggernaut-xl-v9", "local/sdxl-base-1.0"]}
+# run 2: SDXL base kept drawing whole figures for thighs/legs; Juggernaut draws écorché detail when asked for anatomy.
 WORDS = {"photo": "photo", "anime": "anime / manga", "drawn": "drawn style", "plain": "picture"}
 ANIME = ("anime", "manga")
 FIRSTS = ("local", "venice")
@@ -120,6 +122,9 @@ def plan(run, look: list[str], style: str, venice_model: str, forced: bool) -> d
     k = kind(look, style)
     if forced:
         return {"kind": k, "first": "forced", "models": [venice_model]}
+    if looks.study(look):                                    # 🦴 2026-11-25: Study runs stay on the local card, never Venice
+        want = STUDY_ROUTES["drawn" if k in ("drawn", "anime") else "photo"]
+        return {"kind": k, "first": "study", "models": [m for m in want if m in ready(run)]}
     want = ROUTES[k]
     if k == "drawn" and run.cfg.get("local_drawn") is False:
         want = []

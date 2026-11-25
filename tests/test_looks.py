@@ -15,7 +15,7 @@ class Catalog(Base):
     def test_catalog_shape_and_unique_names(self):
         cat = looks.catalog()
         ids = [t["id"] for t in cat["tabs"]]
-        self.assertEqual(ids, ["medium", "style", "theme", "mood", "light", "colour", "camera", "era", "finish"])
+        self.assertEqual(ids, ["medium", "study", "figure", "style", "theme", "mood", "light", "colour", "camera", "era", "finish"])
         names = [it["n"].lower() for t in cat["tabs"] for it in t["items"]]
         self.assertEqual(len(names), len(set(names)), "chip names must be unique across tabs")
         self.assertGreaterEqual(len(names), 140)
@@ -132,7 +132,7 @@ class LookRun(Base):
         self.assertIn("Look: Watercolor", b.calls[0])                    # the writer sees the Look as a choice
         self.assertEqual(r.pictures[0]["look"], ["Watercolor", "Serene", "Golden hour"])
         self.assertEqual(looks.saved()["last"], ["Watercolor", "Serene", "Golden hour"])
-        self.assertEqual([s["action"] for s in r.steps], ["prompt", "look", "picture"])
+        self.assertEqual([s["action"] for s in r.steps], ["prompt", "look", "picture", "eyes"])   # 👁 M1
         self.assertEqual(args["negative_prompt"], "text, words, letters, writing, caption, subtitles, labels, table, chart, document, "
                          "watermark, signature, logo, username, frame, border, " + looks.NOT_PHOTO)
 
@@ -169,7 +169,7 @@ class LookRun(Base):
         mcp = PicMCP()
         r, _ = self.make(mcp, "a cabin\nStyle: Photo-real")
         r.loop()
-        self.assertEqual([s["action"] for s in r.steps], ["prompt", "picture"])
+        self.assertEqual([s["action"] for s in r.steps], ["prompt", "picture", "eyes"])   # 👁 M1: the look after the picture
         self.assertEqual(r.pictures[0]["look"], [])
 
 
@@ -201,7 +201,7 @@ class Page(Base):
 
 def _page():
     assert "lookFill(row," in HTML and "function lookPicker(pid)" in HTML and 'id: "aglook"' in HTML
-    assert "look.show(on.includes(\"image\"))" in HTML                       # only while 🖼 Image is picked
+    assert "look.show(on.includes(\"image\") || on.includes(\"video\"))" in HTML   # while 🖼 Image or 🎬 Video is picked (2026-11-25)
     assert "task: look.text(task.value)" in HTML                              # ▶ Start adds the Look line
     assert "const lk = lookFromText(text); if (lk.length) look.set(lk)" in HTML   # Make another / Change it bring it back
     assert HTML.count('.split("\\nLook:")[0]') == 2
@@ -209,3 +209,44 @@ def _page():
     assert 'dialog", { class: "lookdlg"' in HTML and "/api/looks/save" in HTML and "/api/looks/delete" in HTML
     for limit in ("max === 1 && same.length", "picks at most", "may fight each other"):
         assert limit in HTML, limit
+
+
+# 🦴 anatomy study (2026-11-25)
+def test_study_tab_adult_guard():
+    from ailab import looks
+    cat = looks.catalog()
+    st = next(t for t in cat["tabs"] if t["id"] == "study")
+    assert st["max"] == 1 and len(st["items"]) == 10
+    assert all("adult" in i["p"] for i in st["items"])
+    neg = looks.negative(["Photo", "Feet study"], "text")
+    assert "child" in neg and "extra toes" in neg
+    assert "child" not in looks.negative(["Photo"], "text")
+    assert "photograph" in looks.negative(["Anatomy atlas", "Arms study"], "text")
+    head, _ = looks.parts(["Photo", "Face study"])
+    assert any("head-and-shoulders" in w for w in head)
+    kept, notes = looks.normalize(["Face study", "Feet study"])
+    assert kept == ["Face study"] and notes
+
+
+def test_study_m2_negatives_and_route():
+    from types import SimpleNamespace
+    from ailab import looks, picture_route
+    n = looks.negative(["Photo", "Female figure", "Hips study"], "t")
+    assert "ecorche" in n and "mannequin" in n and "full skeleton" not in n
+    d = looks.negative(["Anatomy atlas", "Arms study"], "t")
+    assert "full skeleton" in d and "skull" in d and "mannequin" not in d
+    assert "skull" not in looks.negative(["Anatomy atlas", "Face study"], "t").split("ecorche")[0].split("sketch sheet, ")[-1]
+    picture_route._ROWS.update(at=9e18, rows=[{"id": "local/juggernaut-xl-v9"}, {"id": "local/sdxl-base-1.0"}], src=id(None))
+    run = SimpleNamespace(cfg={}, lab=SimpleNamespace(mcp=None))
+    assert picture_route.plan(run, ["Photo", "Feet study"], "", "venice/lustify-v8", False)["models"] == ["local/juggernaut-xl-v9"]
+    assert picture_route.plan(run, ["Anatomy atlas", "Feet study"], "", "venice/lustify-v8", False)["models"] == ["local/juggernaut-xl-v9", "local/sdxl-base-1.0"]
+    picture_route._ROWS.update(rows=[])
+    assert picture_route.plan(run, ["Photo", "Feet study"], "", "venice/lustify-v8", False)["models"] == []
+    picture_route.forget()
+
+
+def test_study_photo_only_words():
+    from ailab import looks
+    ph = " ".join(looks.parts(["Photo", "Hips study"])[0])
+    at = " ".join(looks.parts(["Anatomy atlas", "Hips study"])[0])
+    assert "briefs" in ph and "briefs" not in at

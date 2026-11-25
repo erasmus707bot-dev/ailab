@@ -127,6 +127,8 @@ def parts(names: list[str], cat: dict | None = None) -> tuple[list[str], list[st
     for n in names:
         tab, it = idx.get(n.lower(), (None, None))
         words = ((it.get("p") or it["n"]) if it else n).strip()
+        if it and it.get("ph") and photo(names):          # 🦴 photo-only words (2026-11-25 run 4: briefs leaked into atlas plates)
+            words = f"{words}, {it['ph']}"
         if tab in head:
             head[tab].append(words)
         elif tab in tail:
@@ -165,12 +167,36 @@ NOT_PHOTO = "photograph, photo, photorealistic, realistic photo, 3d render"
 # 2026-11-24 M4 live: Lustify v8 (photo-trained) drew "watercolor" as a photo and "comic book" as a cinematic still.
 
 
-def negative(names: list[str], base: str, cat: dict | None = None) -> str:
-    """The no-text negative, plus NOT_PHOTO when the Look picks a non-photo medium or a drawn style."""
+STUDY_NEG = ("child, teen, minor, young-looking, youthful face, school uniform, "
+             "extra fingers, extra toes, missing fingers, extra limbs, deformed anatomy, cropped body part, blurry, "
+             "asymmetric face, distorted face, warped features, mixed-sex anatomy, sexual pose, explicit, "
+             "lingerie, lace, thong, sheer fabric, glamour, boudoir, pin-up")
+STUDY_PHOTO_NEG = "flayed, ecorche, exposed muscle, skeleton, skull, mannequin, statue, plastic"
+STUDY_DRAWN_NEG = "full body, full skeleton, multiple views, sketch sheet"
+# 2026-11-25 run 1: Juggernaut drew skinned/écorché bodies and a mannequin for photos; SDXL base drew whole skeletons
+# and skull sheets for single parts; run 2-3: Female figure drifted to lingerie on Juggernaut — negatives alone didn't stop it, so lower-body presets ask for plain briefs; Lustify (Venice) sexualised hips/thighs/stomach — Study never goes to Venice.
+# 2026-11-25 anatomy study (Scott): every 🦴 Study pick carries an adult-only guard and the usual anatomy failures.
+
+
+def study(names: list[str], cat: dict | None = None) -> bool:
     idx = _index(cat or catalog())
+    return any(idx.get(n.lower(), ("",))[0] == "study" for n in names)
+
+
+def negative(names: list[str], base: str, cat: dict | None = None) -> str:
+    """The no-text negative, plus NOT_PHOTO when the Look picks a non-photo medium or a drawn style,
+    plus STUDY_NEG when a 🦴 Study pick is in the Look."""
+    cat = cat or catalog()
+    idx = _index(cat)
     drawn = any(idx.get(n.lower(), ("",))[0] in ("medium", "style") and n.lower() not in ("photo", "realism", "3d render")
                 for n in names)
-    return f"{base}, {NOT_PHOTO}" if drawn and not photo(names) else base
+    out = f"{base}, {NOT_PHOTO}" if drawn and not photo(names) else base
+    if not study(names, cat):
+        return out
+    extra = STUDY_PHOTO_NEG if photo(names) or not drawn else STUDY_DRAWN_NEG
+    if drawn and not photo(names) and not any(n.lower() == "face study" for n in names):
+        extra += ", skull"
+    return f"{out}, {STUDY_NEG}, {extra}"
 
 
 def photo(names: list[str]) -> bool:

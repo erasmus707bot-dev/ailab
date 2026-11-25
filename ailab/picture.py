@@ -236,6 +236,11 @@ def run(run) -> None:
                   else f"{prompt.rstrip('.')}. {style}.").strip()
     vmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
     plan = picture_route.plan(run, look, style, vmodel, forced)
+    if not plan["models"]:                                   # 🦴 Study with the local card off — never falls to Venice
+        run._record({"action": "route", "why": "🦴 Study pictures are made on gandalf only — the local picture card is off",
+                     "result": {"plan": plan}, "usd": 0.0})
+        run.state, run.why = "failed", "🦴 Study pictures are made on gandalf only, and the local picture service is off. Start it and try again."
+        return
     speed = picture_route.speed(run)                         # ⚡ fast / 🎨 full for local SDXL (2026-11-25)
     if plan["models"][0].startswith("local/"):
         run._record({"action": "route", "why": f"🏠 {picture_route.WORDS[plan['kind']]} → {plan['models'][0].split('/')[-1]} on gandalf ($0)"
