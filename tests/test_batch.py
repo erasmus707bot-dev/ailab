@@ -26,19 +26,23 @@ class Dial(Base):
         self.assertEqual(len(batch.wild_look(100, 2)), 3)                # + mood
         self.assertEqual(len({batch.variation(80, k) + str(batch.wild_look(80, k)) for k in range(12)}), 12)
 
-    def test_wild_style_rides_in_a_look_line_with_catalog_names(self):
+    def test_wild_style_first_then_his_words_exactly_and_a_look_line(self):
         from ailab import looks
-        t, v, names = batch.picture_task(WORDS, 90, 2)
-        self.assertTrue(t.startswith(WORDS + "\nVariation: "))
+        t, shown, names = batch.picture_task(WORDS + "\nShape: Wide (screen)", 90, 2)
+        first = t.split("\n")[0]
+        self.assertTrue(first.endswith(": " + WORDS))                    # his words follow exactly as typed
+        self.assertTrue(first.startswith(batch.WILD_LEAD[names[0]] + ", "))   # the drawn style leads
+        self.assertIn("Shape: Wide (screen)", t)
         self.assertEqual(looks.from_task(t), names)
-        kept, notes = looks.normalize(names)
-        self.assertEqual(kept, names)                                   # every name is in the catalog
+        self.assertEqual(looks.normalize(names)[0], names)              # every name is in the catalog
+        self.assertEqual(set(batch.WILD_LEAD), set(batch.WILD_LOOK))
         self.assertNotIn("set in", batch.variation(70, 2))              # below 80: a setting, no scene on top
         self.assertEqual(batch.variation(85, 2).count(","), 1)          # 80+: the scene REPLACES the setting
-        t2, v2, n2 = batch.picture_task(WORDS + "\nLook: Watercolor", 90, 2)   # his own Look wins
+        t2, s2, n2 = batch.picture_task(WORDS + "\nLook: Watercolor", 90, 2)   # his own Look wins
         self.assertEqual(n2, [])
         self.assertEqual(looks.from_task(t2), ["Watercolor"])
-        self.assertIn(", as ", v2)
+        self.assertTrue(t2.split("\n")[0].endswith(": " + WORDS))
+        self.assertEqual(batch.picture_task(WORDS, 40, 2)[0], WORDS + "\nVariation: " + batch.variation(40, 2))
 
     def test_docs_keep_the_topic(self):
         v = batch.variation(90, 1, "doc")
@@ -86,7 +90,7 @@ class PictureBatch(Base):
         self.assertEqual(len(v["items"]), 3)
         self.assertEqual(mcp.calls.count("image_make"), 3)
         prompts = [a["prompt"] for t, a in zip(mcp.calls, mcp.args) if t == "image_make"]
-        self.assertTrue(all(p.startswith(WORDS) for p in prompts))     # his words untouched, first
+        self.assertTrue(all(WORDS in p for p in prompts))              # his words untouched (Wild style goes in front)
         self.assertEqual(len(set(prompts)), 3)
         self.assertEqual(r.task, WORDS)                                 # the run's task is his words again
         self.assertIn("3 of 3 pictures", r.why)

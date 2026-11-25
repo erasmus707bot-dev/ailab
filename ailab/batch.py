@@ -108,18 +108,32 @@ def wild_look(dial: int, k: int) -> list[str]:
     return names
 
 
+# How each Wild style is said at the very front of the prompt (live A/B 2026-11-24, Lustify v8: style words AFTER his
+# words → 0 of 4 drawn; style words FIRST → pixel art, storybook, watercolor drawn, charcoal half-way).
+WILD_LEAD = {"Charcoal": "Charcoal drawing", "Oil painting": "Oil painting", "Anime": "Anime illustration",
+             "Pixel art": "Pixel art", "3D render": "3D render", "Watercolor": "Watercolor painting",
+             "Comic book": "Comic book illustration", "Art Nouveau": "Art Nouveau illustration",
+             "Ukiyo-e": "Ukiyo-e woodblock print", "Cyberpunk": "Cyberpunk digital art", "Storybook": "Storybook illustration",
+             "Pop art": "Pop art print"}
+
+
 def picture_task(base: str, dial: int, k: int) -> tuple[str, str, list[str]]:
-    """(task for this one, variation words, Look names added). Scott's own Look line, if he set one, is kept as is
-    and Wild's drawn style goes in the words instead."""
+    """(task for this one, what to show on the tile, Look names added).
+    Wild: the style + pose/scene go in FRONT of his words ("Pixel art, seen from above, set in …: <his words>") — his
+    words follow exactly as typed — and the Look line still adds light/mood and pushes photo away. If he set his own
+    Look, it wins: only pose/scene go in front."""
     v = variation(dial, k, "picture")
     names = wild_look(dial, k)
-    if names and looks.from_task(base):
-        v = f"{v[: v.rfind(' — ')]}, as {names[0].lower()} — keep the same main subject" if " — " in v else v
-        names = []
-    t = with_variation(base, v)
-    if names:
-        t = t + "\n" + looks.line(names)
-    return t, v, names
+    if not names:
+        return with_variation(base, v), v, []
+    change = v[: v.rfind(" — ")] if " — " in v else v
+    own = looks.from_task(base)
+    lead = f"{change}: " if own else f"{WILD_LEAD.get(names[0], names[0])}, {change}: "
+    first, _, rest = base.partition("\n")
+    t = lead + first + ("\n" + rest if rest else "")
+    if own:
+        return t, lead.rstrip(": "), []
+    return t + "\n" + looks.line(names), lead.rstrip(": "), names
 
 
 def with_variation(task: str, v: str) -> str:
