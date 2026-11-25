@@ -617,7 +617,28 @@ function settingsView() {
         inp, h("div", { class: "acts" }, save, test, rm), msg));
     });
   });
-  return [box, videoPathsBox()];
+  return [box, pictureRouteBox(), videoPathsBox()];
+}
+/* 🏠 Picture route (local pictures M3, 2026-11-24, Scott 1): local-first (gandalf's card, $0) or Venice-first.
+   Saved in <lab home>/picture_route.json; a picture_first line in the config file overrides it (shown here). */
+function pictureRouteBox() {
+  const box = h("section", { class: "keys", "aria-label": "Picture route" }, h("h3", {}, "🖼 Pictures: which side first"),
+    h("p", { class: "note" }, "🏠 Local = the 5 models on gandalf's graphics card ($0, nothing leaves the house). 🌐 Venice = online, uses the Venice key in Hermes. If the first side can't make the picture, the other side tries once."));
+  const msg = h("p", { class: "note", role: "status" }, "⏳");
+  let paint = () => {};
+  const mk = (v, label) => h("button", { class: "btn", type: "button", "data-v": v, "aria-pressed": "false", onclick: async () => {
+    msg.textContent = "Saving…"; paint(await api("/api/picture_first", { first: v }));
+  } }, label);
+  const bl = mk("local", "🏠 Local first"), bv = mk("venice", "🌐 Venice first");
+  paint = (r) => {
+    if (!r.ok) { msg.textContent = "⚠️ " + (r.message || r.code || "Couldn't load the picture route"); return; }
+    [bl, bv].forEach(b => { const on = b.dataset.v === r.first; b.className = on ? "btn pri" : "btn"; b.setAttribute("aria-pressed", String(on)); });
+    msg.textContent = r.cfg ? `The Lab's config file says “${r.cfg}” — that wins over this switch.`
+      : r.first === "local" ? "Now: 🏠 local first, 🌐 Venice if the card can't." : "Now: 🌐 Venice first, 🏠 local if Venice can't.";
+  };
+  box.append(h("div", { class: "acts" }, bl, " ", bv), msg);
+  api("/api/picture_first").then(paint);
+  return box;
 }
 /* 🛤 Video paths (2026-11-24, Scott: "plan for other paths … so as future methods are found they can be added as a
    switch/toggle"): every way the Lab can make a video, each switched on/off, one ⭐ default. New paths show up here

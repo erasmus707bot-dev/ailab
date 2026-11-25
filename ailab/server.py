@@ -949,6 +949,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.memory_get, q)
             if u.path == "/api/video_paths":               # 🛤 ⚙️ video paths: switch on/off + ⭐ default (2026-11-24)
                 return self._run(lambda: (200, {"ok": True, "paths": videomod.all_paths(), "kinds": videomod.KINDS}))
+            if u.path == "/api/picture_first":             # 🏠/🌐 picture route (local pictures M3, 2026-11-24)
+                from . import picture_route                # noqa: PLC0415
+                return self._run(lambda: (200, {"ok": True, "first": picture_route.first(),
+                                                "cfg": str(app.cfg.get("picture_first") or "")}))
             if u.path == "/api/creation_types":            # 🧩 chips above the task box (2026-11-24)
                 return self._run(lambda: (200, {"ok": True, "types": creation.public()}))
             if u.path == "/api/looks":                     # 🎨 picture Looks catalog + saved + last (2026-11-24)
@@ -1016,6 +1020,12 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(getattr(app, LIVE_POST[p]), b)
             if p == "/api/video_paths":                    # 🛤 ⚙️ {"id","on"} or {"star": id}
                 return self._run(lambda: (200, videomod.set_path(b)))
+            if p == "/api/picture_first":                  # 🏠/🌐 {"first": "local"|"venice"}
+                from . import picture_route                # noqa: PLC0415
+                r = picture_route.set_first(str(b.get("first") or ""))
+                if r["ok"]:
+                    r["cfg"] = str(app.cfg.get("picture_first") or "")
+                return self._run(lambda: (200 if r["ok"] else 400, r))
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)
             if p == "/api/where/open":
