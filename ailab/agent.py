@@ -1034,6 +1034,10 @@ class Run:
                 self._record({"action": "route", "why": f"🎨 Art idea with no chip picked → made as {kind} with the uncensored "
                               "writer + art models (not the coding agent)", "result": {"ctypes": self.ctypes}, "usd": 0.0})
             if getattr(self, "batch", None):                # 🎛 batch: N pictures / docs, its own short path
+                if self.batch["kind"] == "story":           # 📖 M3 Story chapter (2026-11-25)
+                    from . import story as storymod
+                    storymod.run(self)
+                    return
                 if self.batch["kind"] == "cast":            # 🎲 R1 Design a cast (2026-11-25)
                     from . import cast as castmod
                     castmod.run(self)

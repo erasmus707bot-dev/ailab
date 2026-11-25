@@ -399,6 +399,19 @@ class App:
         except RuntimeError as e:
             return 200, {"ok": False, "icon": "🔌", "message": str(e)}
 
+    def story_get(self, q: dict) -> tuple[int, dict]:
+        """📖 M3: the project's story bible, its chapters (shots, stills, film) and the start-card choices."""
+        from . import story
+        return 200, {"ok": True, **story.view(preview.ensure_site(self._pid(q.get("project"))).resolve())}
+
+    def story_bible(self, b: dict) -> tuple[int, dict]:
+        """📖 M3: save his edits to the story bible (title, tone, people, places, rules, facts)."""
+        from . import story
+        if not isinstance(b.get("bible"), dict):
+            return 400, {"ok": False, "code": "bad_args", "icon": "📚", "message": "Send the bible to save."}
+        root = preview.ensure_site(self._pid(b.get("project"))).resolve()
+        return 200, {"ok": True, "bible": story.save_bible(root, b["bible"])}
+
     def cast_get(self, q: dict) -> tuple[int, dict]:
         """🎭 Every saved character + named casts (global), and the cast this project chose."""
         from . import cast
@@ -557,6 +570,9 @@ class App:
             return None
         req = dict(req)
         kind = B.kind_for(ctypes)
+        nb = B.norm(req, ctypes)
+        if nb["kind"] == "story":                                  # 📖 M3: a still per shot (words-only = a few writer replies)
+            kind, req["n"] = "story", nb["n"]
         est = B.estimate(kind, max(1, min(B.MAX_N, int(req.get("n") or 1))), self.cfg, self.spend()["today_usd"] or 0.0)
         if not est["fits"]:
             return 200, {"ok": False, "code": "cap", "icon": "💲", "estimate": est,
@@ -1218,6 +1234,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._send(200, b_, ct_) if b_ else self._send(404, b"Not a cast picture.", "text/plain; charset=utf-8")
             if u.path == "/api/cast":                      # 🎭 R1 global cast + this project's chosen cast
                 return self._run(app.cast_get, q)
+            if u.path == "/api/story":                     # 📖 M3 story bible + chapters of this project
+                return self._run(app.story_get, q)
             if u.path == "/api/styles":                    # 🎨 R2 official styles + the project's choice + a proposal
                 return self._run(app.styles_get, q)
             if u.path == "/api/preview/files":
@@ -1348,6 +1366,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_shots, b)
             if p in ("/api/refs/pin", "/api/refs/unpin"):
                 return self._run(getattr(app, "refs_" + p.rsplit("/", 1)[1]), b)
+            if p == "/api/story/bible":                    # 📖 M3 edit the story bible
+                return self._run(app.story_bible, b)
             if p in ("/api/cast/choose", "/api/cast/import"):
                 return self._run(getattr(app, "cast_" + p.rsplit("/", 1)[1]), b)
             if p in ("/api/styles/make", "/api/styles/choose", "/api/styles/answer"):

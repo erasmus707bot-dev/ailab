@@ -165,6 +165,13 @@ def norm(b, ctypes) -> dict | None:
         except (TypeError, ValueError):
             return None
         return {"kind": "cast", "n": cn, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
+    if isinstance(b.get("story"), dict):                       # 📖 M3 Story: one chapter, its own run (story.run)
+        from . import story
+        st = story.norm(b["story"])
+        if not st or kind not in ("picture", "doc"):
+            return None
+        sn = story.shots_for(st["form"]) or 1
+        return {"kind": "story", "story": st, "n": sn, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
     sheet = str(b.get("sheet") or "")                          # 🎭 M2 character sheet: the source picture (project path)
     if sheet:
         if kind != "picture":
@@ -183,6 +190,8 @@ CAST_PICTURES = 8          # per person: anchor + 5 sheet views + room for one r
 
 
 def price(kind: str, cfg: dict) -> float:
+    if kind == "story":                                        # a still per shot + the writer's few replies
+        return float(cfg.get("batch_picture_usd", PICTURE_USD)) * 1.5
     if kind == "cast":
         return float(cfg.get("batch_picture_usd", PICTURE_USD)) * CAST_PICTURES
     return float(cfg.get("batch_picture_usd", PICTURE_USD) if kind == "picture" else cfg.get("batch_doc_usd", DOC_USD))
@@ -204,11 +213,14 @@ def view(run) -> dict | None:
     return {**{k: b[k] for k in ("kind", "n", "dial", "start", "failed", "now")}, "level": level(b["dial"]),
             "level_words": LEVEL_WORDS[level(b["dial"])], "items": b["items"], "earlier": b.get("earlier", []),
             "next_start": b["start"] + b["n"], "kept": kept(run.root),
-            **({"briefs": b.get("briefs", []), "apart": b.get("apart", []), "saved": b.get("saved", [])} if b["kind"] == "cast" else {})}
+            **({"briefs": b.get("briefs", []), "apart": b.get("apart", []), "saved": b.get("saved", [])} if b["kind"] == "cast" else {}),
+            **({"story": b.get("story"), "chapter": b.get("chapter"), "shots": b.get("shots", [])} if b["kind"] == "story" else {})}
 
 
 def stage_prefix(run) -> str:
     b = getattr(run, "batch", None)
+    if b and b.get("kind") == "story":
+        return f"📖 shot {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" and b.get("shots") else ""
     if b and b.get("kind") == "cast":
         return f"🎭 person {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" else ""
     return f"🎛 {min(b['now'] + 1, b['n'])} of {b['n']} · " if b and run.state == "running" else ""

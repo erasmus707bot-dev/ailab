@@ -1065,6 +1065,57 @@ function castPicker(p, hooks, opts) {
   paint();
   return box;
 }
+/* 📖 M3 Story (Scott 2026-11-25): pick a cast (♻️ reuse / 🆕 make), say the idea, pick ⚡ Short / 📚 Long / ✍️ Words,
+   ▶ Make the story → one chapter per run: 📚 bible → 🗒 shots → 🖼 stills (cast as references, 👁 checked) → 🎞 clips →
+   🎙 voice → one film. 📚 Story bible = what every later chapter must respect; edit it here. */
+function storyBox(p, hooks) {
+  const box = h("div", { class: "storybox", id: "storybox" }), note = h("span", { class: "note", role: "status" });
+  const idea = h("textarea", { rows: 3, placeholder: "Your story idea, in your words — e.g. two rivals race to light the lighthouse in a storm", "aria-label": "Story idea" });
+  const sel = (label, obj, pick) => h("select", { "aria-label": label }, ...Object.entries(obj).map(([k, v]) => h("option", { value: k, selected: k === pick }, v + (k === pick ? " ⭐" : ""))));
+  const bibleFold = h("details", { class: "libtoss", id: "storybible" }, h("summary", {}, "📚 Story bible"));
+  const chapList = h("div", { class: "storych" });
+  let form, clips, narr, fresh;
+  async function paint() {
+    const x = await api(`/api/story?project=${encodeURIComponent(p.id)}`);
+    if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message || "Story isn't reachable."}`; return; }
+    form = sel("Story length", x.forms, "short"); clips = sel("How the shots move", x.clips, "free");
+    form.addEventListener("change", () => { clips.disabled = form.value === "words"; });
+    narr = h("input", { type: "checkbox", checked: true }); fresh = h("input", { type: "checkbox", checked: !x.bible.title });
+    const go = h("button", { class: "btn pri", type: "button", onclick: () => {
+      if (!idea.value.trim() && !x.bible.title) { note.textContent = "✍️ Say the idea first."; idea.focus(); return; }
+      hooks.story(idea.value.trim() || x.bible.title, { form: form.value, clips: clips.value, narrate: narr.checked, new: fresh.checked });
+      note.textContent = "📖 Making the story — watch 🤖 Make and the Stage."; } }, x.bible.title && !fresh.checked ? `▶ Next chapter (${x.next})` : "▶ Make the story");
+    fresh.addEventListener("change", () => { go.textContent = fresh.checked || !x.bible.title ? "▶ Make the story" : `▶ Next chapter (${x.next})`; });
+    const b = x.bible, lines = a => (a || []).join("\n");
+    const f = { title: h("input", { value: b.title || "", "aria-label": "Title" }), tone: h("input", { value: b.tone || "", "aria-label": "Tone" }),
+      people: h("textarea", { rows: 3, "aria-label": "People — one per line: Name — who they are" }, lines((b.people || []).map(q => `${q.name} — ${q.who}`))),
+      places: h("textarea", { rows: 2, "aria-label": "Places, one per line" }, lines(b.places)), rules: h("textarea", { rows: 2, "aria-label": "Rules, one per line" }, lines(b.rules)),
+      facts: h("textarea", { rows: 4, "aria-label": "Facts so far, one per line" }, lines((b.facts || []).map(q => `${q.ch}: ${q.fact}`))) };
+    const split = t => t.value.split("\n").map(s => s.trim()).filter(Boolean);
+    const save = h("button", { class: "btn", type: "button", onclick: async () => {
+      const r = await api("/api/story/bible", { project: p.id, bible: { title: f.title.value, tone: f.tone.value,
+        people: split(f.people).map(s => { const [n, ...w] = s.split(/\s+[—-]\s+/); return { name: n, who: w.join(" — ") }; }),
+        places: split(f.places), rules: split(f.rules), facts: split(f.facts).map(s => { const m = s.match(/^(\d+):\s*(.+)$/); return m ? { ch: +m[1], fact: m[2] } : { ch: 0, fact: s }; }) } });
+      note.textContent = r.ok ? "💾 Story bible saved — the next chapter follows it." : `${r.icon || "⚠️"} ${r.message}`; } }, "💾 Save the bible");
+    const lab = (t, el) => h("label", { class: "chk", style: "display:block;margin:6px 0" }, t, h("br"), el);
+    bibleFold.replaceChildren(h("summary", {}, `📚 Story bible${b.title ? ` — “${b.title}” · 🔗 ${(b.facts || []).length} facts` : " — written by the first chapter"}`),
+      lab("Title", f.title), lab("Tone", f.tone), lab("👥 People (Name — who)", f.people), lab("📍 Places", f.places), lab("📏 Rules", f.rules), lab("🔗 Facts so far (chapter: fact)", f.facts), save);
+    chapList.replaceChildren(...(x.chapters || []).slice().reverse().slice(0, 8).map(c => h("div", { class: "trow" },
+      h("span", {}, `📖 Ch ${c.n} · ${(c.shots || []).length} shots`),
+      c.film ? h("a", { class: "btn", href: `/preview/${p.id}/${encodeURI(c.film)}`, target: "_blank" }, "🎞 Film") : null,
+      c.prose ? h("a", { class: "btn", href: `/preview/${p.id}/${encodeURI(c.prose)}`, target: "_blank" }, "📝 Read") : null,
+      h("span", { class: "note" }, (c.outline || "").slice(0, 90)))));
+    box.replaceChildren(
+      h("div", { class: "note" }, "1 · 🎭 Who is in it"), castPicker(p, hooks, { id: "storycastpick", forWhat: "a story" }),
+      h("div", { class: "note" }, "2 · ✍️ The idea"), idea,
+      h("div", { class: "trow", style: "flex-wrap:wrap" }, form, clips),
+      h("div", { class: "trow", style: "flex-wrap:wrap" }, h("label", { class: "chk" }, narr, " 🎙 Narrator voice"), h("label", { class: "chk" }, fresh, " 🆕 New story")),
+      h("div", { class: "runbar" }, go), note, bibleFold, chapList);
+  }
+  box.refresh = paint;
+  paint();
+  return box;
+}
 function libraryBox(p, hooks) {
   const KINDS = [["", "All"], ["pic", "🖼 Pictures"], ["vid", "🎬 Videos"], ["doc", "📝 Writing"], ["page", "🌐 Pages"]];
   let files = [], kind = store.get("libkind." + p.id, ""), all = false, cur = "", keptN = {}, tossed = [], cmp = false, picks = [];
@@ -1570,6 +1621,8 @@ function startView() {
     h("div", { class: "runbar" },
       S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
       S.flags.live ? h("button", { class: "btn", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null),
+    ag ? h("details", { class: "optfold", id: "wbstory", ontoggle: e => { if (e.target.open && !e.target.querySelector(".storybox")) e.target.append(storyBox(p, libHooks)); } },
+      h("summary", {}, "📖 Story — short video, long chapters, or words")) : null,
     ag ? h("details", { class: "optfold" }, h("summary", {}, "🎯 More ways to start"), ag.repoRow, ag.goals) : null);
   /* 🧹 remodel M2 (Scott 2026-11-25, pick 1): the loop — ✅ Keep & start new (gets a number in 📚 Library) ·
      🗑 Throw away (hidden, ↩ back for 30 days) · 🆕 Just clear (decide later). All three leave a clean slate in the same project. */
@@ -1593,9 +1646,11 @@ function startView() {
   if (ag) { ag.newBtn.textContent = "🆕 Just clear";
     ag.newBtn.title = "Decide later. What was made stays in the project (📚 Library). Clears the screen for the next build, picture or doc.";
     ag.newBtn.addEventListener("click", () => { stageExtra.replaceChildren(); syncStage(); }); }
-  const lib = libraryBox(p, { change: (task, ids) => { if (ag) ag.startWith(task, ids, false); },
+  const libHooks = { change: (task, ids) => { if (ag) ag.startWith(task, ids, false); },
     sheet: path => { if (ag) ag.startWith("Character sheet of the person in this picture", ["image"], false, { n: 5, sheet: path }); },
-    castDesign: (n, forWhat) => { if (ag) ag.startWith(`Design a cast of ${n} people` + (forWhat ? ` for: ${forWhat}` : ""), ["image"], false, { cast: { n } }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject });
+    castDesign: (n, forWhat) => { if (ag) ag.startWith(`Design a cast of ${n} people` + (forWhat ? ` for: ${forWhat}` : ""), ["image"], false, { cast: { n } }); },
+    story: (idea, opts) => { if (ag) ag.startWith(idea, ["image"], false, { story: opts }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject };
+  const lib = libraryBox(p, libHooks);
   let libKey = null;
   function syncStage() {
     const empty = resultBox.hidden && !stageExtra.childElementCount, busy = !!(curRun && curRun.state === "running");

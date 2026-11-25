@@ -72,6 +72,8 @@ def for_run(run) -> list[str]:
     """Absolute paths of the references this run sends: a character sheet's own source, else the project's cast strip."""
     root = Path(run.root)
     b = getattr(run, "batch", None) or {}
+    if isinstance(b.get("refs_abs"), list):                     # 📖 M3 story shot: the cast anchors of who is in it
+        return [str(x) for x in b["refs_abs"] if Path(str(x)).is_file()][:MAX_REFS]
     rels = [b["sheet"]] if b.get("sheet") and _ok(root, b["sheet"]) else get(root)
     return [str((root / r).resolve()) for r in rels]
 
