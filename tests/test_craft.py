@@ -122,6 +122,15 @@ class Use(Base):
 
 
 class Learn(Base):
+    def test_holdout_is_decided_once_per_run(self):
+        craft.add({"kind": "picture", "do": "Always on note for pictures."}, "scott", "live")
+        r = run("x", holdout=2)
+        first = craft.for_run(r, "picture", "a fox")
+        again = craft.for_run(r, "picture", "a fox")            # resumed run writes again
+        self.assertEqual(bool(first), bool(again))
+        r2 = run("y", holdout=2)
+        self.assertNotEqual(bool(craft.for_run(r2, "picture", "a fox")), bool(first))
+
     def test_counts_and_with_without_scores(self):
         n = craft.add({"kind": "picture", "do": "Always on note for pictures."}, "scott", "live")["note"]
         r = run("a")

@@ -277,10 +277,14 @@ def for_run(run, kind: str, words: str, model: str = "") -> str:
             return ""
         with _lock():
             d = _load()
-            d["n"] = int(d.get("n") or 0) + 1
-            held = bool(s["holdout"]) and d["n"] % s["holdout"] == 0
-            rows = [] if held else pick(kind, words, model, s["max"], d["notes"])
             rid = str(getattr(run, "id", "") or "")
+            prev = d["runs"].get(rid) if rid else None
+            if prev and "held" in prev:                              # with-or-without is decided once per run (resume, 2nd writer)
+                held = bool(prev["held"])
+            else:
+                d["n"] = int(d.get("n") or 0) + 1
+                held = bool(s["holdout"]) and d["n"] % s["holdout"] == 0
+            rows = [] if held else pick(kind, words, model, s["max"], d["notes"])
             if rid:
                 cur = d["runs"].get(rid) or {"ids": [], "kind": kind, "t": time.time()}
                 cur["ids"] = list(dict.fromkeys(cur["ids"] + [n["id"] for n in rows]))
