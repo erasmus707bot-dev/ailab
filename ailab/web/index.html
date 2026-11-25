@@ -138,6 +138,9 @@
   .pane a.ib { color: inherit; display: inline-grid; place-items: center; text-decoration: none; }
   .frame { flex: 1; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; min-height: 0; }
   .note { font-size: .82rem; color: var(--dim); min-height: 1.2em; }
+  /* 2026-11-24 Hermes app library: "Not ready" = muted brick red, always with the word */
+  .notready { display: inline-block; padding: 1px 9px; border-radius: 999px; background: #3a2420; color: #e0a497; border: 1px solid #6b3c33; }
+  [data-theme="light"] .notready { background: #f3e3df; color: #9a4b3d; border-color: #d9b3aa; }
   #pvsave { margin-left: auto; }
   .warnbox { background: var(--calm); border-radius: 10px; padding: 8px 10px; font-size: .9rem; }
   @media (max-width: 760px) {
@@ -229,6 +232,15 @@
   .chg input { padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); max-width: 9rem; }
   .chg .hd b, .chg .hd .note, .chg .note, .chg summary, .chg input, .chg .runbar .btn, #guardline { font-size: 23px; line-height: 1.4; }
   .chg input, .chg .runbar .btn, .chg summary { min-height: 48px; } .chg summary { display: flex; align-items: center; cursor: pointer; } .chg input { max-width: 11rem; }
+  /* 2026-11-25 ✋ rows in plain words + 📸 Before | After pictures (Scott doesn't read code) */
+  .chg .plain { margin: 6px 0; font-size: 23px; line-height: 1.4; } .chg .plain div { margin: 2px 0; }
+  .chg .plain .warn { color: var(--bad); } .chg .path { font-size: 17px; color: var(--dim); overflow-wrap: anywhere; }
+  .chg .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+  .chg .shots figure { margin: 0; } .chg .shots figcaption { font-size: 20px; font-weight: 600; }
+  .chg .shots img { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  .chg .shotnote { font-size: 20px; color: var(--dim); }
+button[data-m] { min-height: 48px; font-size: 20px; }
+input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .drawer { margin-top: 0; border-top: 1px solid var(--line); padding-top: 6px; }
   /* 2026-11-24 workflow build: picture first (Before beside Now), robot verdict, question cards, plan list */
   .result { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
@@ -275,6 +287,12 @@
   .mtile img { width: 100%; height: auto; border-radius: 8px; }
   .mtile .btn { min-height: 44px; display: inline-flex; align-items: center; }
   /* 🎛 Batch create (2026-11-24) */
+  .eyes { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 8px 0; font-size: max(1rem, 23px); line-height: 1.4; text-align: left; }
+  .eyes .btn { min-height: 48px; display: inline-flex; align-items: center; }
+  .eyes summary { min-height: 48px; padding: 10px 0; box-sizing: border-box; cursor: pointer; }   /* stays a list item, so the ▶ marker shows */
+  .eyes details { flex-basis: 100%; }
+  .eyechip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); font-weight: 700; white-space: nowrap; }
+  .eyechip.low { border-color: var(--warn); border-width: 2px; }
   .batchrow { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); }
   .batchrow select, .batchgrid select { min-height: 44px; font-size: 1rem; border-radius: 8px; }
   .batchrow .bdial { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 280px; min-width: 0; }
@@ -383,6 +401,61 @@
   @media (max-width: 980px) { .livesplit[data-show="both"] { grid-template-columns: 1fr; } }
   #navnote { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: min(92vw, 520px); padding: 12px 16px; border-radius: 12px; background: var(--panel); color: var(--ink, inherit); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s; }
   #navnote.on { opacity: 1; }
+  /* 🧹 2026-11-24 remodel M1 — 🤖 Make | 👀 Stage; starters on the empty Stage; 📚 Library; folds for the rest */
+  .typerow:not(.open) .tchip:not(.on):not(.more) { display: none; }
+  .typerow .tchip.more { display: inline-flex; }
+  .typerow:not(.open) .tlead { display: none; }
+  #agstop:disabled { display: none; }
+  .optfold > summary, .detfold > summary, .madefold > summary, .libfold > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
+  .optfold > summary::before, .detfold > summary::before, .madefold > summary::before, .libfold > summary::before { content: "▸"; color: var(--dim); }
+  .optfold[open] > summary::before, .detfold[open] > summary::before, .madefold[open] > summary::before, .libfold[open] > summary::before { content: "▾"; }
+  .optfold .optnow { font-weight: 400; color: var(--dim); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .optfold[open], .detfold[open], .libfold[open] { display: flex; flex-direction: column; gap: 8px; }
+  .starters { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px dashed var(--line); border-radius: 12px; }
+  .starters h3 { margin: 0; font-size: 1rem; }
+  .finishbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: 0; z-index: 2; background: var(--panel); padding: 10px 0; border-top: 1px solid var(--line); }
+  .finishbar .btn { min-height: 48px; font-size: 1.05rem; }
+  .stagex { display: flex; flex-direction: column; gap: 10px; }
+  .improve { display: flex; flex-direction: column; gap: 8px; }
+  .impcard { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); }
+  .impmine { color: var(--dim); font-size: .92rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 8em; overflow: auto; }
+  .wbagent .impcard textarea { min-height: 140px; }
+  .libstrip { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .libtile { position: relative; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); overflow: hidden; padding: 0; cursor: pointer; display: grid; place-items: center; color: inherit; font-size: 1.1rem; min-width: 0; }
+  .libtile img, .libtile video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .libtile .lk { position: absolute; left: 4px; top: 4px; font-size: .85rem; background: var(--panel); border-radius: 6px; padding: 0 4px; }
+  .libtile .ln { font-size: .72rem; padding: 22px 6px 4px; overflow-wrap: anywhere; text-align: left; align-self: start; }
+  .libtile.on { outline: 3px solid var(--accent); }
+  .libbig { display: flex; flex-direction: column; gap: 8px; }
+  .libbig img, .libbig video { max-width: 100%; max-height: 75vh; border-radius: 12px; background: #000; align-self: center; }
+  .libbig pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; margin: 0; }
+  .starters[hidden], .finishbar[hidden], .impcard[hidden], .libbig[hidden], .finishbar [hidden] { display: none; }
+  .libtile .lkept { position: absolute; right: 4px; top: 4px; font-size: .8rem; font-weight: 650; background: var(--accent); color: var(--accent-ink); border-radius: 6px; padding: 0 5px; }
+  .libtoss { display: flex; flex-direction: column; gap: 6px; }
+  .libcmp { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .libcmp figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .libcmp img, .libcmp video { max-height: 70vh; width: 100%; object-fit: contain; }
+  .libtile.pick { outline: 3px dashed var(--accent); }
+  .libchange { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+  @media (max-width: 640px) { .libcmp { grid-template-columns: minmax(0, 1fr); } }
+  .libtoss .trow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+  .libtoss .trow span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  /* 🧹 2026-11-25 simplify: 🚪 clean start + 📚 all-projects Library */
+  .welcome { max-width: 640px; margin: 4vh auto 0; display: flex; flex-direction: column; gap: 14px; }
+  .welcome h2 { margin: 0; }
+  .wbig { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--panel2); color: inherit; font: inherit; font-size: 1.1rem; text-align: left; cursor: pointer; }
+  .wbig.pri { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 650; }
+  .wbig .wi { font-size: 1.8rem; }
+  .wbig .ws { display: block; font-size: .88rem; opacity: .8; font-weight: 400; }
+  .wplist { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .wplist .wbig { min-height: 56px; font-size: 1rem; }
+  .liball { display: flex; flex-direction: column; gap: 10px; }
+  .liball .libstrip { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .libtile .lp { position: absolute; right: 4px; bottom: 4px; max-width: calc(100% - 8px); font-size: .7rem; background: var(--panel); border-radius: 6px; padding: 0 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .libfilt > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
+  .cenline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 </style>
 </head>
 <body>
@@ -393,10 +466,11 @@
   <label class="sr" for="projsel">Project</label>
   <select class="projsel" id="projsel" title="Project"></select>
   <button class="ib" id="projnew" title="New project" aria-label="New project">➕</button>
+  <button class="ib" id="libtop" title="📚 Library — everything you've made, in every project" aria-label="Library — everything you've made">📚</button>
   <button class="ib" id="projwhere" title="📍 Where are this project's files?" aria-label="Where are this project's files">📍</button>
   <button class="chip" id="waiting" title="Changes waiting for your OK" hidden></button>
   <span class="chips">
-    <span class="chip" id="mode" title="Mode"></span>
+    <span class="chip" id="mode" title="Mode" hidden></span>
     <span class="chip spend" id="spend" title="Spent today / daily cap"><span>💲</span><span id="spendtxt">–</span><span class="bar"><i id="spendbar"></i></span></span>
     <button class="ib" id="full" title="Full screen" aria-label="Full screen">⛶</button>
     <button class="ib" id="settings" title="Settings — keys" aria-label="Settings">⚙️</button>
@@ -467,6 +541,9 @@ function setTheme(t) {
   $("#theme").textContent = t === "dark" ? "☀️" : "🌙";
 }
 $("#settings").onclick = () => go("settings");
+$("#libtop").onclick = () => go("library");
+$("#spend").onclick = () => { const c = S && S.mode === "connected", sp = (S && S.spend) || {};
+  navNote(`${c ? "🔌 Connected to Hermes — one budget" : "🏝 Standalone — own keys"} · 💲 ${sp.today_usd != null ? "$" + sp.today_usd.toFixed(2) + " of $" + (sp.cap_usd || 0).toFixed(2) + " today" : "spend unknown"}`); };
 $("#theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 $("#theme").textContent = document.documentElement.dataset.theme === "dark" ? "☀️" : "🌙";
 $("#full").onclick = () => {
@@ -475,7 +552,11 @@ $("#full").onclick = () => {
 };
 /* Back / Home (2026-11-22 fix): inside the Lab they walk the trail; at the start page they return to Hermes.
    Where Hermes is: config hermes_url, else the ?from= the Hermes card passes, else the page that linked here. */
-const okUrl = u => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) && x.origin !== location.origin ? x.href : ""; } catch (e) { return ""; } };
+/* 2026-11-24 online Lab: opened through Tailscale (…ts.net), a 127.0.0.1 Hermes address can't work — use the same
+   ts.net name on Hermes's port (8780) instead. */
+const onTailnet = /\.ts\.net$/i.test(location.hostname);
+const reachable = u => { try { const x = new URL(u); if (onTailnet && /^(127\.0\.0\.1|localhost)$/i.test(x.hostname)) return `https://${location.hostname}:${x.port || 8780}${x.pathname}${x.search}${x.hash}`; return u; } catch (e) { return u; } };
+const okUrl = u => { try { const x = new URL(reachable(u)); return /^https?:$/.test(x.protocol) && x.origin !== location.origin ? x.href : ""; } catch (e) { return ""; } };
 (function rememberFrom() {
   const q = new URLSearchParams(location.search), f = okUrl(q.get("from") || "") || okUrl(document.referrer || "");
   if (f) store.set("from", f);
@@ -489,7 +570,7 @@ function navNote(t) {
 }
 function leave(u) { if (u) location.href = u; else navNote("This is the Lab's first page. Open the Lab from its Hermes card once and ← ⌂ will go back there."); }
 function goBack() { if (trail.length) { view = trail.pop(); render(); } else leave(backUrl()); }
-function goHome() { if (view !== "start") { trail = []; view = "start"; render(); } else leave(homeUrl()); }
+function goHome() { if (view !== "start" && view !== "welcome") { trail = []; view = "start"; render(); } else leave(homeUrl()); }
 $("#back").onclick = goBack;
 $("#home").onclick = goHome;
 /* the phone's / browser's own Back button walks the same trail */
@@ -506,6 +587,7 @@ function paintBar() {
   $("#mode").innerHTML = "";
   $("#mode").append(connected ? "🔌" : "🏝", h("span", { class: "lbl" }, connected ? "Hermes" : "Standalone"));
   $("#mode").title = connected ? "Connected to Hermes — one budget, Hermes holds the keys" : "Standalone — own keys, own $ cap";
+  $("#spend").title = `${connected ? "🔌 Hermes" : "🏝 Standalone"} · spent today / daily cap — tap for details`;
   const sp = S.spend || {};
   if (sp.today_usd == null) { $("#spendtxt").textContent = "?"; $("#spendbar").style.width = "0"; return; }
   $("#spendtxt").replaceChildren(`$${sp.today_usd.toFixed(2)}`, h("span", { class: "cap" }, ` / $${sp.cap_usd.toFixed(2)}`));
@@ -579,7 +661,7 @@ function settingsView() {
     const note = $("#keysnote");
     if (k.mode === "connected") {
       note.textContent = "🔌 Connected: Hermes holds every hosted key in its Vault and makes the calls. Add or rotate keys in Hermes.";
-      const hu = (homeUrl() || "http://127.0.0.1:8780/").replace(/\/$/, "");      // Hermes dashboard default port is 8780
+      const hu = (homeUrl() || reachable("http://127.0.0.1:8780/")).replace(/\/$/, "");      // Hermes dashboard default port is 8780
       box.append(h("p", {}, h("a", { class: "btn pri", href: hu + "/#aikeys", target: "_blank", rel: "noopener" }, "Open Hermes → Settings → API keys"),
         " ", h("span", { class: "note" }, "Paste the key there, Save, then switch the provider on. Come back and reload this page.")));
       if (k.note) box.append(h("p", { class: "note" }, k.note));
@@ -664,13 +746,18 @@ function videoPathsBox() {
   const paint = (r) => {
     if (!r.ok) { list.replaceChildren(h("p", {}, "⚠️ " + (r.message || r.code || "Couldn't load the video paths"))); return; }
     list.replaceChildren(...r.paths.map(pa => {
-      const on = h("input", { type: "checkbox", checked: pa.on, "aria-label": `Use ${pa.label}` });
+      /* 🔒 2026-11-24 (Scott: "keep 14B model off by default. takes an unlock button to use"): a locked path can't be
+         switched on or made default until Unlock is pressed; Lock again switches it back off. */
+      const shut = pa.locked && !pa.unlocked;
+      const on = h("input", { type: "checkbox", checked: pa.on, disabled: shut, "aria-label": `Use ${pa.label}` });
       on.onchange = async () => paint(await api("/api/video_paths", { id: pa.id, on: on.checked }));
-      const star = h("button", { class: "btn" + (pa.star ? " pri" : ""), type: "button", disabled: pa.star, "aria-pressed": pa.star ? "true" : "false",
+      const star = h("button", { class: "btn" + (pa.star ? " pri" : ""), type: "button", disabled: pa.star || shut, "aria-pressed": pa.star ? "true" : "false",
         onclick: async () => paint(await api("/api/video_paths", { star: pa.id })) }, pa.star ? "⭐ Default" : "Make default");
-      return h("div", { class: "keyrow" }, h("label", { class: "chk" }, on, " ", h("b", {}, pa.label)),
-        h("div", { class: "st" }, pa.what + (pa.model ? ` · model ${pa.model}` : "") + (pa.why ? ` — ${pa.why}` : "")),
-        h("div", { class: "acts" }, star));
+      const lock = !pa.locked ? null : h("button", { class: "btn" + (shut ? " pri" : ""), type: "button", "aria-pressed": shut ? "false" : "true",
+        onclick: async () => paint(await api("/api/video_paths", { id: pa.id, unlock: shut })) }, shut ? "🔓 Unlock" : "🔒 Lock again");
+      return h("div", { class: "keyrow" }, h("label", { class: "chk" }, on, " ", h("b", {}, (shut ? "🔒 " : "") + pa.label)),
+        h("div", { class: "st" }, (shut ? "Locked — off until you press Unlock. " : "") + pa.what + (pa.model ? ` · model ${pa.model}` : "") + (pa.why ? ` — ${pa.why}` : "")),
+        h("div", { class: "acts" }, ...[lock, star].filter(Boolean)));
     }));
   };
   api("/api/video_paths").then(paint);
@@ -901,10 +988,10 @@ function growBox(ta, label) {
 
 /* 🧱 Pane layout (2026-11-23): order + widths live on this device (store "wblayout"); the code pane is the flexible one.
    Gutters are real buttons: drag with pointer capture, or focus and use ← → (16px a step). ◀ ▶ swap a pane with its neighbour. */
-const PANES = ["files", "code", "agent"], PANE_MIN = { files: 150, code: 280, agent: 300 };
-function wbLayout() { const l = store.get("wblayout", null); return l && Array.isArray(l.order) && l.order.length === 3 && PANES.every(x => l.order.includes(x)) ? { order: l.order, widths: l.widths || {} } : { order: [...PANES], widths: {} }; }
-function wbSave(l) { store.set("wblayout", l); }
-function wbResetLayout() { store.set("wblayout", null); render(); }
+const PANES = ["agent", "code"], PANE_MIN = { files: 150, code: 280, agent: 300 };
+function wbLayout() { const l = store.get("wblayout2", null); return l && Array.isArray(l.order) && l.order.length === PANES.length && PANES.every(x => l.order.includes(x)) ? { order: l.order, widths: l.widths || {} } : { order: [...PANES], widths: {} }; }
+function wbSave(l) { store.set("wblayout2", l); }
+function wbResetLayout() { store.set("wblayout2", null); render(); }
 function layoutPanes(sec, panes) {
   const l = wbLayout();
   sec.classList.add("custom");               // 2026-11-23: gutters are grid cells too — always lay out all 5 columns (first launch wrapped)
@@ -913,7 +1000,7 @@ function layoutPanes(sec, panes) {
   l.order.forEach((id, i) => {
     if (i) { sec.append(gutter(l.order[i - 1], id)); cols.push("12px"); }
     sec.append(panes[id]);
-    cols.push(id === "code" ? "minmax(0, 1fr)" : l.widths[id] ? `${l.widths[id]}px` : (id === "files" ? "minmax(170px, 230px)" : "minmax(320px, 1fr)"));
+    cols.push(id === "code" ? "minmax(0, 1fr)" : l.widths[id] ? `${l.widths[id]}px` : "minmax(320px, 0.5fr)");
   });
   sec.style.gridTemplateColumns = cols.join(" ");
   function gutter(a, b) {
@@ -921,7 +1008,7 @@ function layoutPanes(sec, panes) {
     const g = h("button", { class: "gutter", type: "button", role: "separator", "aria-orientation": "vertical",
       "aria-label": `Resize ${target} pane. Drag, or use the left and right arrow keys.` });
     const cur = () => l.widths[target] || panes[target].getBoundingClientRect().width;
-    const clamp = (w) => Math.round(Math.max(PANE_MIN[target], Math.min(w, sec.clientWidth - 24 - PANE_MIN.code - 150)));
+    const clamp = (w) => Math.round(Math.max(PANE_MIN[target], Math.min(w, sec.clientWidth - 12 - PANE_MIN.code)));
     const apply = (w) => { l.widths[target] = clamp(w); wbSave(l); layoutPanes(sec, panes); };
     let x0 = 0, w0 = 0, live = null;
     g.addEventListener("pointerdown", e => { if (e.button !== 0) return; x0 = e.clientX; w0 = cur(); live = w0; g.setPointerCapture(e.pointerId); e.preventDefault(); });
@@ -934,7 +1021,7 @@ function layoutPanes(sec, panes) {
   }
 }
 function paneBar(id, title, sec, panes) {
-  const mv = (d) => { const L = wbLayout(), o = [...L.order], j = o.indexOf(id), k = j + d; if (k < 0 || k > 2) return; [o[j], o[k]] = [o[k], o[j]];
+  const mv = (d) => { const L = wbLayout(), o = [...L.order], j = o.indexOf(id), k = j + d; if (k < 0 || k > PANES.length - 1) return; [o[j], o[k]] = [o[k], o[j]];
     wbSave({ order: o, widths: L.widths }); layoutPanes(sec, panes); const b = sec.querySelector(`[data-pane="${id}"] .panebar .ib`); if (b) b.focus(); };
   return h("div", { class: "panebar" }, h("h2", {}, title),
     h("button", { class: "ib", type: "button", "aria-label": `Move ${id} pane left`, title: "Move left", onclick: () => mv(-1) }, "◀"),
@@ -942,11 +1029,218 @@ function paneBar(id, title, sec, panes) {
 }
 
 /* 🛠 The workbench — front page. Left: files. Middle: code, changes waiting, preview, run output. Right: the task box + agent steps. */
+/* 📚 Library (2026-11-24, Scott: "easy access to a library of content built so far in the individual project folders").
+   Every picture, video, piece of writing and page in this project's folder, newest first. Tap one → it opens big right here. */
+const LIB_KIND = f => /\.(png|jpe?g|webp|gif)$/i.test(f) ? "pic" : /\.(mp4|webm|mov)$/i.test(f) ? "vid" : /\.(md|txt|pdf|docx)$/i.test(f) ? "doc" : /\.html?$/i.test(f) ? "page" : "";
+const LIB_ICON = { pic: "🖼", vid: "🎬", doc: "📝", page: "🌐" };
+/* 🎭 R1 (Scott 2026-11-25): the global cast — one library every project pulls from. castPicker is also the start screen
+   of 📖 Story and 🎬 Rebuild: "♻️ Reuse a cast" (pick list) · "🆕 Make a new one" (🎲 the Lab designs N distinct people). */
+function castPicker(p, hooks, opts) {
+  opts = opts || {};
+  const box = h("div", { class: "castpick", id: opts.id || "castpick" }), note = h("span", { class: "note", role: "status" });
+  async function paint() {
+    const x = await api(`/api/cast?project=${encodeURIComponent(p.id)}`);
+    if (!x.ok) { box.replaceChildren(h("span", { class: "note" }, `${x.icon || "⚠️"} ${x.message || "The global cast isn't reachable."}`)); return x; }
+    const chars = x.characters || [], casts = x.casts || [], ch = x.chosen || {}, byId = Object.fromEntries(chars.map(c => [c.id, c]));
+    const thumb = c => h("span", { class: "chip", title: c.brief || c.name }, c.anchor_path ? h("img", { src: `/api/cast/pic?path=${encodeURIComponent(c.anchor_path)}`, alt: "", style: "height:44px;border-radius:6px;vertical-align:middle" }) : null, ` ${c.name}`);
+    const rows = [];
+    if (ch.ids && ch.ids.length) rows.push(h("div", { class: "trow" }, h("span", {}, `This project uses: 🎭 ${ch.cast}`), ...ch.ids.map(i => byId[i]).filter(Boolean).map(thumb)));
+    const picks = casts.map(c => ({ name: c.name, ids: c.ids }));
+    const sel = h("select", { "aria-label": "Saved casts" }, ...(picks.length ? picks.map((c, i) => h("option", { value: String(i) }, `🎭 ${c.name} (${c.ids.length})`)) : [h("option", { value: "" }, "— no saved casts yet —")]));
+    const reuse = h("button", { class: "btn pri", type: "button", disabled: !picks.length, onclick: async () => {
+      const c = picks[+sel.value]; if (!c) return; const r = await api("/api/cast/choose", { project: p.id, name: c.name, ids: c.ids });
+      note.textContent = r.ok ? `♻️ Using ${c.name} in this project.` : `${r.icon || "⚠️"} ${r.message}`; if (r.ok) { paint(); if (opts.onPick) opts.onPick(r); } } }, "♻️ Reuse a cast");
+    const n = h("select", { "aria-label": "How many people" }, ...[2, 3, 4].map(k => h("option", { value: String(k), selected: k === 2 }, `${k} people`)));
+    const make = h("button", { class: "btn", type: "button", disabled: !(hooks && hooks.castDesign), title: "The Lab designs them — different hair, build and outfit colours on purpose — then 👁 checks it can tell them apart and makes a character sheet each",
+      onclick: () => { hooks.castDesign(+n.value, opts.forWhat || ""); note.textContent = "🎲 Designing a new cast — watch 🤖 Make."; } }, "🆕 Make a new one");
+    rows.push(h("div", { class: "trow" }, sel, reuse), h("div", { class: "trow" }, n, make));
+    if (chars.length) rows.push(h("div", { class: "trow", style: "flex-wrap:wrap" }, h("span", {}, `All characters (${chars.length}):`), ...chars.slice(0, 24).map(thumb)));
+    if (opts.importBtn) rows.push(h("div", { class: "trow" }, h("button", { class: "btn", type: "button", title: "Copies this project's 📌 reference pictures into the global cast — the originals stay here",
+      onclick: async () => { const r = await api("/api/cast/import", { project: p.id }); note.textContent = r.ok ? `⬆ Copied ${r.copied.length} into the global cast — check each one's age.` : `${r.icon || "⚠️"} ${r.message}`; if (r.ok) paint(); } }, "⬆ Copy my 📌 references into the global cast")));
+    box.replaceChildren(...rows, note);
+    return x;
+  }
+  box.refresh = paint;
+  paint();
+  return box;
+}
+function libraryBox(p, hooks) {
+  const KINDS = [["", "All"], ["pic", "🖼 Pictures"], ["vid", "🎬 Videos"], ["doc", "📝 Writing"], ["page", "🌐 Pages"]];
+  let files = [], kind = store.get("libkind." + p.id, ""), all = false, cur = "", keptN = {}, tossed = [], cmp = false, picks = [];
+  /* 🧹 remodel M3 (Scott 2026-11-25, pick 1): ✏️ Change this — any Library item becomes the start of the next run;
+     ⚖️ Compare — tap two, see them side by side. */
+  const media = (f, k, u, name) => k === "pic" ? h("img", { src: u, alt: name }) : k === "vid" ? h("video", { src: u, controls: true, playsinline: true, preload: "metadata" })
+    : k === "page" ? h("iframe", { src: u, sandbox: "allow-scripts allow-forms allow-modals", referrerpolicy: "no-referrer", title: name, style: "width:100%;height:60vh;border:1px solid var(--line);border-radius:12px" })
+    : h("pre", {}, "⏳");
+  function changeBox2(f, k) {
+    if (!hooks || !hooks.change) return null;
+    const ta = h("textarea", { rows: 2, "aria-label": "What to change", placeholder: "What should change? e.g. make it sunset · add a camel · bigger title" });
+    const note = h("span", { class: "note", role: "status" });
+    const go = h("button", { class: "btn pri", type: "button" }, "▶ Make this change ⭐");
+    go.onclick = async () => {
+      const t = ta.value.trim(); if (!t) { note.textContent = "✏️ Type what to change first."; ta.focus(); return; }
+      go.disabled = true; note.textContent = "⏳ Finding the words it was made from…";
+      const src = await api(`/api/shelf/source?project=${encodeURIComponent(p.id)}&path=${encodeURIComponent(f.path)}`);
+      go.disabled = false;
+      const base = src.ok && src.task ? String(src.task).split("\nChange:")[0].trim() : "";
+      let task, ids = null;
+      if (k === "pic" || k === "vid") {
+        if (!base) { note.textContent = "❓ The Lab no longer has the words this was made from. Describe the whole thing you want in 🤖 Make instead."; return; }
+        task = `${base}\nChange: ${t}`; ids = [k === "pic" ? "image" : "video"];
+      } else { task = `Change ${f.path}: ${t}\nRead that file first, change only what this asks, keep everything else the same, check it, then done.`; ids = ["edit"]; }   /* 🔧 Edit existing — never a stale 🖼 chip */
+      note.textContent = "▶ Starting…"; shut(); paint(); hooks.change(task, ids);
+    };
+    ta.onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); go.click(); } };
+    return h("div", { class: "libchange" }, h("b", {}, "✏️ Change this"), ta, h("div", { class: "runbar" }, go, note));
+  }
+  function showCmp() {
+    const two = picks.map(pth => files.find(f => f.path === pth)).filter(Boolean);
+    big.hidden = false;
+    big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, two.length < 2 ? `⚖️ Tap ${2 - two.length} more to compare` : "⚖️ Side by side"),
+      h("button", { class: "btn", type: "button", onclick: () => { cmp = false; picks = []; shut(); paint(); } }, "✖ Done comparing")),
+      h("div", { class: "libcmp" }, two.map(f => { const k = LIB_KIND(f.path), u = url(f), name = f.path.split("/").pop(), body = media(f, k, u, name);
+        if (k === "doc") { if (/\.(md|txt)$/i.test(name)) fetch(u).then(r => r.text()).then(t => { body.textContent = t.slice(0, 20000); }).catch(() => { body.textContent = "Couldn't open it here."; }); else body.textContent = `📄 ${name}`; }
+        return h("figure", {}, body, h("figcaption", { class: "note" }, `${keptN[f.path] ? `#${keptN[f.path]} · ` : ""}${name}`),
+          h("div", { class: "runbar" }, h("a", { class: "btn", href: u, download: name }, "⬇ Download"),
+            h("button", { class: "btn", type: "button", onclick: () => { cmp = false; picks = []; open(f); } }, "👀 Open this one"))); })));
+  }
+  function tap(f) {
+    if (!cmp) return open(f);
+    picks = picks.includes(f.path) ? picks.filter(x => x !== f.path) : picks.concat(f.path).slice(-2);
+    showCmp(); paint();
+  }
+  const tossBox = h("details", { class: "libtoss", hidden: true });
+  /* 🎭 M2 (Scott 2026-11-25): 📌 up to 4 reference pictures per project keep the face; 🎭 one picture → a character sheet. */
+  let refs = [];
+  const castStrip = h("div", { class: "trow", id: "libcast", hidden: true });
+  function paintCast() {
+    castStrip.hidden = !refs.length;
+    castStrip.replaceChildren(h("span", {}, `🎭 Cast (${refs.length}/4) — every picture here keeps these faces:`),
+      ...refs.map(r => h("span", { class: "chip" }, h("img", { src: url({ path: r }), alt: "", style: "height:40px;border-radius:6px;vertical-align:middle" }),
+        h("button", { class: "btn", type: "button", "aria-label": `Take ${r.split("/").pop()} off the cast`, onclick: async () => { const x = await api("/api/refs/unpin", { project: p.id, path: r }); if (x.ok) { refs = x.refs; paintCast(); } } }, "✕"))));
+  }
+  async function loadCast() { const x = await api(`/api/refs?project=${encodeURIComponent(p.id)}`); refs = x.ok ? (x.refs || []) : []; paintCast(); }
+  function refBar(f) {
+    const note = h("span", { class: "note", role: "status" }), on = refs.includes(f.path);
+    const pin = h("button", { class: "btn" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), title: "Every new picture in this project keeps this face (up to 4)",
+      onclick: async () => { const x = await api(on ? "/api/refs/unpin" : "/api/refs/pin", { project: p.id, path: f.path });
+        if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message || "Couldn't do that."}`; return; } refs = x.refs; paintCast(); open(f); } }, on ? "📌 Reference ✓" : "📌 Use as reference");
+    const sheet = hooks && hooks.sheet ? h("button", { class: "btn", type: "button", title: "Front, side, three-quarter, back and face expressions of this person — 👁 checks each is the same face",
+      onclick: () => { hooks.sheet(f.path); note.textContent = "🎭 Character sheet started — 5 views, watch 🤖 Make."; } }, "🎭 Character sheet") : null;
+    return h("div", { class: "runbar" }, pin, sheet, note);
+  }
+  /* 🎨 R2 (Scott 2026-11-25): official styles — 🔒 lock a kept result's Look + model + this project's lessons; choose one here. */
+  const styleBox = h("details", { class: "libtoss", id: "libstyles", hidden: true });
+  async function paintStyles(kept) {
+    const st = await api(`/api/styles?project=${encodeURIComponent(p.id)}`);
+    if (!st.ok) { styleBox.hidden = true; return; }
+    const note = h("span", { class: "note", role: "status" }), styles = st.styles || [], pr = st.proposal;
+    const withLook = (kept || []).filter(x => (x.look || []).length || x.model).slice(-6).reverse();
+    styleBox.hidden = !styles.length && !withLook.length && !pr;
+    const lookTxt = x => [(x.look || []).join(" · "), x.model ? x.model.split("/").pop() : ""].filter(Boolean).join(" — ");
+    const nameBox = ph => h("input", { type: "text", maxlength: 40, placeholder: ph, "aria-label": "Style name" });
+    const said = r => { note.textContent = r.ok ? "" : `${r.icon || "⚠️"} ${r.message || "Couldn't save that."}`; if (r.ok) paintStyles(kept); };
+    const rows = [];
+    if (pr) { const nm = nameBox("Name it");
+      const ans = async a => said(await api("/api/styles/answer", { project: p.id, sig: pr.sig, answer: a, name: nm.value }));
+      rows.push(h("div", { class: "trow", id: "styleprop" }, h("span", {}, `🎨 This looks like a style — ${pr.count} kept results share ${lookTxt(pr)}. Make it official?`), nm,
+        h("button", { class: "btn pri", type: "button", onclick: () => ans("yes") }, "🔒 Yes"),
+        h("button", { class: "btn", type: "button", onclick: () => ans("later") }, "Not now"),
+        h("button", { class: "btn", type: "button", onclick: () => ans("never") }, "Never for this look"))); }
+    const sel = h("select", { "aria-label": "Official style for this project", onchange: async e => said(await api("/api/styles/choose", { project: p.id, name: e.target.value })) },
+      h("option", { value: "" }, "— no official style —"), ...styles.map(s => h("option", { value: s.name, selected: s.name === st.chosen }, `🔒 ${s.name}`)));
+    rows.push(h("div", { class: "trow" }, h("span", {}, "Style for this project:"), sel));
+    withLook.forEach(x => { const nm = nameBox("Style name");
+      rows.push(h("div", { class: "trow" }, h("span", {}, `#${x.n} · ${lookTxt(x)}`), nm,
+        h("button", { class: "btn", type: "button", onclick: async () => said(await api("/api/styles/make", { project: p.id, n: x.n, name: nm.value })) }, "🔒 Make this an official style"))); });
+    styleBox.replaceChildren(h("summary", {}, `🎨 Official styles${st.chosen ? ` — using 🔒 ${st.chosen}` : ""}${pr ? " · 💡 1 suggestion" : ""}`), ...rows, note);
+    if (pr) styleBox.open = true;
+  }
+  /* 🧹 remodel M4: 📚 jump chip for the Stage bar (live check: the Library sat ~1300 px below a tall result) + 🏁 Project done */
+  const jump = h("button", { class: "chip", type: "button", id: "wblibjump", title: "Jump to this project's 📚 Library", onclick: () => { el.open = true; el.scrollIntoView({ block: "start", behavior: "smooth" }); } }, "📚");
+  let doneAt = 0, keptCount = 0;
+  function wrap() {
+    const note = h("span", { class: "note", role: "status" });
+    const mark = async on => { const r = await api("/api/shelf/done", { project: p.id, done: on }); if (r.ok) { doneAt = r.done_at || 0; paint(); wrap(); } else note.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't save that."}`; };
+    cur = ""; cmp = false; picks = []; big.hidden = false;
+    big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, `🏁 ${p.name || p.id} — ${keptCount} kept · ${files.length} in the Library`),
+        h("button", { class: "btn", type: "button", onclick: () => { shut(); paint(); } }, "✖ Close")),
+      h("p", { class: "note" }, doneAt ? "🏁 Marked done. Everything stays here — you can keep building any time." : "Happy with it? Mark it done, then take it where it goes next."),
+      h("div", { class: "runbar" },
+        doneAt ? h("button", { class: "btn", type: "button", onclick: () => mark(false) }, "↩ Not done yet") : h("button", { class: "btn pri", type: "button", onclick: () => mark(true) }, "🏁 Mark it done ⭐"),
+        hooks && hooks.where ? h("button", { class: "btn", type: "button", title: "Where this project's files are, with a button to open the folder", onclick: hooks.where }, "📍 Where the files are") : null,
+        hooks && hooks.ship ? h("button", { class: "btn", type: "button", title: "Hermes builds Android / Linux / Windows apps from this project", onclick: hooks.ship }, "📦 Make it an app") : null,
+        hooks && hooks.fresh ? h("button", { class: "btn", type: "button", onclick: hooks.fresh }, "➕ Start a new project") : null), note);
+    big.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  const strip = h("div", { class: "libstrip" }), chips = h("div", { class: "runbar" }), big = h("div", { class: "libbig", hidden: true });
+  const sum = h("summary", {}, "📚 Library"), none = h("p", { class: "note" }, "Nothing made here yet. What you make in this project shows up here.");
+  const globalCast = h("details", { class: "libtoss", id: "libglobalcast" }, h("summary", {}, "🎭 Global cast — reuse a cast or make a new one"));
+  globalCast.addEventListener("toggle", () => { if (globalCast.open && !globalCast.querySelector(".castpick")) globalCast.append(castPicker(p, hooks, { id: "libcastpick", importBtn: true })); }, { once: false });
+  const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, globalCast);
+  const url = f => `/preview/${p.id}/${encodeURI(f.path)}`;
+  const shut = () => { cur = ""; big.hidden = true; big.replaceChildren(); };
+  function open(f) {
+    cur = f.path; const k = LIB_KIND(f.path), u = url(f), name = f.path.split("/").pop();
+    const body = k === "pic" ? h("img", { src: u, alt: name }) : k === "vid" ? h("video", { src: u, controls: true, playsinline: true, preload: "metadata" })
+      : k === "page" ? h("iframe", { src: u, sandbox: "allow-scripts allow-forms allow-modals", referrerpolicy: "no-referrer", title: name, style: "width:100%;height:60vh;border:1px solid var(--line);border-radius:12px" })
+      : h("pre", {}, "⏳");
+    if (k === "doc") { if (/\.(md|txt)$/i.test(name)) fetch(u).then(r => r.text()).then(t => { body.textContent = t.slice(0, 60000); }).catch(() => { body.textContent = "Couldn't open it here — use ⬇ Download."; });
+      else body.textContent = `📄 ${name} — ⬇ Download opens it.`; }
+    big.hidden = false;
+    big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, `${LIB_ICON[k]} ${name}`), h("a", { class: "btn", href: u, download: name }, "⬇ Download"),
+      h("a", { class: "btn", href: u, target: "_blank", rel: "noopener" }, "⤢ Full size"),
+      h("button", { class: "btn", type: "button", onclick: () => { shut(); paint(); } }, "✖ Close")),
+      h("div", { class: "note wherepath", title: "Where this file is in the project folder" }, `📍 ${f.path}`), body, k === "pic" ? refBar(f) : null, changeBox2(f, k));
+    paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  function paint() {
+    const isKind = (f, k) => k === "kept" ? !!keptN[f.path] : LIB_KIND(f.path) === k;
+    const shown = files.filter(f => !kind || isKind(f, kind)), cutAt = all ? shown : shown.slice(0, 12);
+    sum.textContent = `${doneAt ? "🏁 " : ""}📚 Library (${files.length})`; jump.textContent = `📚 ${files.length}`;
+    none.hidden = files.length > 0;
+    chips.replaceChildren(...(files.length ? KINDS.concat([["kept", "✅ Kept"]]).filter(([k]) => !k || files.some(f => isKind(f, k))) : []).map(([k, n]) =>
+      h("button", { class: "tchip" + (k === kind ? " on" : ""), type: "button", "aria-pressed": String(k === kind), onclick: () => { kind = k; store.set("libkind." + p.id, k); all = false; paint(); } }, n)),
+      ...(files.length > 1 ? [h("button", { class: "tchip" + (cmp ? " on" : ""), type: "button", id: "libcmpbtn", "aria-pressed": String(cmp), title: "Tap two things to see them side by side",
+        onclick: () => { cmp = !cmp; picks = []; shut(); if (cmp) showCmp(); paint(); } }, "⚖️ Compare")] : []),
+      ...(files.length ? [h("button", { class: "tchip" + (doneAt ? " on" : ""), type: "button", id: "libdonebtn", title: "Wrap up this project: mark it done and take it where it goes next", onclick: wrap }, doneAt ? "🏁 Done" : "🏁 Project done")] : []));
+    strip.replaceChildren(...cutAt.map(f => { const k = LIB_KIND(f.path), name = f.path.split("/").pop();
+      return h("button", { class: "libtile" + (f.path === cur ? " on" : "") + (picks.includes(f.path) ? " pick" : ""), type: "button", title: f.path, "aria-label": `Open ${name}`, onclick: () => tap(f) },
+        k === "pic" ? h("img", { src: url(f), alt: "", loading: "lazy", decoding: "async" }) : k === "vid" ? h("video", { src: url(f) + "#t=0.5", preload: "metadata", playsinline: true }) : h("span", { class: "ln" }, name),
+        h("span", { class: "lk", "aria-hidden": "true" }, LIB_ICON[k]), keptN[f.path] ? h("span", { class: "lkept", title: "Kept" }, `#${keptN[f.path]}`) : null); }),
+      ...(shown.length > cutAt.length ? [h("button", { class: "libtile", type: "button", title: "Show everything", onclick: () => { all = true; paint(); } }, `+${shown.length - cutAt.length}`)] : []));
+  }
+  async function refresh() {
+    if (!S.flags.preview) { el.hidden = true; return; }
+    const r = await api(`/api/preview/files?project=${encodeURIComponent(p.id)}`);
+    if (!r.ok) return;
+    const sh = await api(`/api/shelf?project=${encodeURIComponent(p.id)}`);
+    keptN = {}; tossed = sh.ok ? (sh.tossed || []) : []; doneAt = sh.ok ? (sh.done_at || 0) : 0; keptCount = sh.ok ? (sh.kept || []).length : 0;
+    if (sh.ok) (sh.kept || []).forEach(x => (x.files || []).forEach(f => { keptN[f] = x.n; }));
+    tossBox.hidden = !tossed.length;
+    paintStyles(sh.ok ? sh.kept : []); loadCast();
+    tossBox.replaceChildren(h("summary", {}, `🗑 Thrown away (${tossed.length}) — ↩ comes back for 30 days`), ...tossed.slice().reverse().map(x => { const note = h("span", { class: "note" });
+      return h("div", { class: "trow" }, h("span", {}, `${(x.task || "").slice(0, 80) || "(no words)"} · ${(x.files || []).length} file${(x.files || []).length === 1 ? "" : "s"} · ${x.days_left} days left`),
+        h("button", { class: "btn", type: "button", onclick: async () => { const b = await api("/api/shelf/restore", { project: p.id, run: x.run });
+          if (!b.ok) { note.textContent = `${b.icon || "⚠️"} ${b.message || "Couldn't bring it back."}`; return; } refresh(); } }, "↩ Bring back"), note); }));
+    files = (r.files || []).filter(f => LIB_KIND(f.path) && !/^repos\//.test(f.path))
+      .sort((a, b) => (b.mtime || 0) - (a.mtime || 0) || (a.path < b.path ? 1 : -1));
+    if (kind && !files.some(f => kind === "kept" ? !!keptN[f.path] : LIB_KIND(f.path) === kind)) kind = "";
+    if (cur && !files.some(f => f.path === cur)) shut();
+    picks = picks.filter(x => files.some(f => f.path === x));
+    paint();
+    const go2 = store.get("libgo", null);                 /* 📚 Library → ✏️ Change this / ↗ Go: open that file here */
+    if (go2 && go2.project === p.id) { store.set("libgo", null); const f = files.find(x => x.path === go2.path);
+      if (f) { el.open = true; open(f); setTimeout(() => el.scrollIntoView({ block: "start", behavior: "smooth" }), 50); } }
+  }
+  return { el, refresh, jump };
+}
+
 function startView() {
   const p = curProject();
-  let tab = store.get("wbtab", "agent"), mode = "code", curRun = null, sig = "", lastOut = 0, held = [];
+  let tab = store.get("wbtab", "agent") === "code" ? "code" : "agent", mode = "code", curRun = null, sig = "", lastOut = 0, held = [];
   const sec = h("section", { class: "wb", id: "wb", "data-tab": tab });
-  const tabBtns = [["files", "📂 Files"], ["code", "✋ Waiting"], ["agent", "🤖 Ask AI"]].map(([t, n]) =>
+  const tabBtns = [["agent", "🤖 Make"], ["code", "👀 Stage"]].map(([t, n]) =>
     h("button", { class: "tab", "data-t": t, "aria-pressed": String(t === tab), onclick: () => setTab(t) }, n));
   function setTab(t) { tab = t; store.set("wbtab", t); sec.dataset.tab = t; tabBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t))); }
   const fileName = h("span", { class: "wbfile", id: "wbfile" }, "—");
@@ -955,7 +1249,7 @@ function startView() {
   const outSum = h("summary", {}, "▶ Run output"), outPre = h("pre", {}, "Nothing has run yet.");
   const drawer = h("details", { class: "drawer", id: "wbout" }, outSum, outPre);
 
-  const pv = previewView({ onPick: () => { setTab("code"); if (filesEd && !filesEd.open) filesEd.open = true; }, onOpen: path => { fileName.textContent = path; } });
+  const pv = previewView({ onPick: () => { setTab("code"); if (detFold) detFold.open = true; if (filesEd && !filesEd.open) filesEd.open = true; }, onOpen: path => { fileName.textContent = path; } });
   const ag = agentView({ onRun, showChanges: () => { setTab("code"); changes.scrollIntoView({ block: "nearest" }); },
     onClear: () => { curRun = null; sig = ""; resultBox.hidden = true; } });     /* 🆕 New: the result pane empties too */
 
@@ -983,10 +1277,10 @@ function startView() {
         madeBox.hidden = false;
         madeBox.append(h("figure", { class: "vidbig" }, h("video", { src: url, controls: true, playsinline: true, preload: "metadata", style: "width:100%;max-height:75vh;border-radius:12px;background:#000" }),
           h("figcaption", {}, `🎬 ${String(v.model || "").split("/").pop()} · $${(+v.usd || 0).toFixed(2)}${v.duration ? ` · ${v.duration}` : ""}${v.media_item ? " · 💾 in Media Studio" : ""}`),
+          eyesBox(v.eyes, !running && ag && ag.startWith ? t => ag.startWith(t, run.ctypes && run.ctypes.length ? run.ctypes : ["video"], false) : null),
           v.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, v.prompt)) : null,
           h("a", { class: "btn", href: url, download: v.path.split("/").pop() }, "⬇ Download")));
       });
-      if (!running) { const mc = madeCard(p.id, run); if (mc) { madeBox.hidden = false; madeBox.append(mc); } }
       return;
     }
     if (pics.length) {                                         /* newest first, big */
@@ -995,6 +1289,7 @@ function startView() {
         const url = `/preview/${p.id}/${pc.path}`;
         return h("figure", {}, h("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" }, h("img", { src: url, alt: pc.prompt ? pc.prompt.slice(0, 140) : "Picture the Lab made", loading: "lazy" })),
           h("figcaption", {}, `🎨 ${String(pc.model || "").split("/").pop()} · $${(+pc.usd || 0).toFixed(3)}${pc.seconds ? ` · ${pc.seconds} s` : ""}${pc.library ? " · 💾 in your Gallery" : ""}`),
+          eyesBox(pc.eyes, !running && ag && ag.startWith ? t => ag.startWith(t, run.ctypes && run.ctypes.length ? run.ctypes : ["image"], false) : null),
           pc.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, pc.prompt)) : null,
           h("a", { class: "btn", href: url, download: pc.path.split("/").pop() }, "⬇ Download"));
       })));
@@ -1006,12 +1301,10 @@ function startView() {
         const go = () => { if (change.value.trim()) ag.startWith(`${base}\nChange: ${change.value.trim()}${keep}`, ids, false); };
         change.onkeydown = e => { if (e.key === "Enter") go(); };
         madeBox.append(h("div", { class: "picchange" },
-          h("button", { class: "btn pri", type: "button", title: "Same words and choices, a fresh picture", onclick: () => ag.startWith(base + keep, ids, false) }, "🔁 Make another ⭐"),
-          change, h("button", { class: "btn", type: "button", onclick: go }, "✏️ Change it")));
+          h("button", { class: "btn pri", type: "button", title: "Same words and choices, a fresh picture", onclick: () => ag.startWith(base + keep, ids, false) }, "🔁 Make another ⭐")));
       }
       return;
     }
-    if (!running) { const mc = madeCard(p.id, run); if (mc) { madeBox.hidden = false; madeBox.append(mc); } }   /* 📦 every file made, one tile each */
   }
   /* 2026-11-24 (Scott: "too difficult to navigate"): 📦 is ALWAYS on screen at the top of this pane — no run needed. */
   const shipBar = h("div", { class: "shipbar" },
@@ -1026,11 +1319,19 @@ function startView() {
     const o = await api(`/api/ship/options?project=${encodeURIComponent(p.id)}`);
     if (!o.ok) { shipBox.replaceChildren(h("p", {}, `${o.icon || "⚠️"} ${o.message || "Can't ship this project."}`)); return; }
     if (!o.options.length) { shipBox.replaceChildren(h("p", {}, "❓ Nothing to ship yet — it needs an index.html, or a folder with project.godot.")); return; }
-    const name = h("input", { type: "text", value: o.options[0].name || p.name || "", "aria-label": "App name", maxlength: 60 });
+    const name = h("input", { type: "text", value: o.options[0].name || p.name || "", "aria-label": "App name", maxlength: 60,
+      placeholder: "A real name, e.g. Starfall Tetris", title: "A real, unique name — Hermes refuses 'test' or a name another app already has" });
+    /* 2026-11-24 Hermes app library: where the app lives once Scott approves it (it always starts in 🧪 Testing) */
+    const HOME = [["", "🏠 Let Hermes decide"], ["Hermes", "🏛 Hermes"], ["Tools", "🧰 Tools"], ["Media & fun", "🎮 Media & fun"], ["Gifts", "🎁 Gifts (for someone else)"]];
+    const home = h("select", { "aria-label": "Where it goes in the app library" }, HOME.map(([v, l]) => h("option", { value: v }, l)));
+    const homeFor = (opt) => { home.value = opt && opt.kind === "godot" ? "Media & fun" : ""; };
+    homeFor(o.options[0]);
+    let homed = false;
+    home.addEventListener("change", () => { homed = true; });
     const sel = h("select", { "aria-label": "What to ship" }, o.options.map((x, i) => h("option", { value: String(i) }, x.label)));
     let named = false;                                  // the app's own title, until Scott types a name himself
     name.addEventListener("input", () => { named = true; });
-    sel.addEventListener("change", () => { if (!named) name.value = o.options[+sel.value].name || p.name || ""; });
+    sel.addEventListener("change", () => { if (!named) name.value = o.options[+sel.value].name || p.name || ""; if (!homed) homeFor(o.options[+sel.value]); });
     const boxes = Object.keys(PLAT_L).map(k => h("label", { class: "chk" }, h("input", { type: "checkbox", checked: !want || want.includes(k), value: k }), " " + PLAT_L[k]));
     const ori = h("select", { "aria-label": "Screen" }, [["any", "Any way up"], ["landscape", "Sideways"], ["portrait", "Upright"]].map(([v, l]) => h("option", { value: v }, l)));
     const out = h("div", {});
@@ -1039,28 +1340,30 @@ function startView() {
       const opt = o.options[+sel.value], plats = boxes.map(b => b.firstChild).filter(c => c.checked).map(c => c.value);
       if (!plats.length) { out.textContent = "Tick at least one."; return; }
       go.disabled = true; out.replaceChildren(h("p", { class: "note" }, "⏳ Sending to Hermes…"));
-      const s = await api("/api/ship/start", { project: p.id, name: name.value, folder: opt.folder, platforms: plats, orientation: ori.value });
+      const s = await api("/api/ship/start", { project: p.id, name: name.value, folder: opt.folder, platforms: plats, orientation: ori.value, home_group: home.value });
       if (!s.ok) { go.disabled = false; out.replaceChildren(h("p", {}, `${s.icon || "⚠️"} ${s.message || "Hermes refused."}`)); return; }
       for (let i = 0; i < 160; i++) {                       // ≤ ~70 min of 25 s waits (first Android build is slow)
         const w = await api("/api/ship/wait", { key: s.key });
         if (!w.ok) { out.replaceChildren(h("p", {}, `${w.icon || "⚠️"} ${w.message || "Lost the job."}`)); break; }
         out.replaceChildren(h("p", { class: "note" }, "🔨 " + ((w.notes || []).slice(-1)[0] || "building…")));
-        if (w.finished) { shipPaint(out, s.app, w); break; }
+        if (w.finished) { shipPaint(out, s.app, w, s.home_group); break; }
       }
       go.disabled = false;
     };
     shipBox.replaceChildren(h("b", {}, "📦 Make it an app"),
       h("p", { class: "note" }, "Hermes builds it on gandalf and puts it on the 🧪 test shelf — find it in Iris 📦 Apps, Hermes Downloads and Drive. Only you can ⬆ Release or share it."),
-      h("div", { class: "runbar" }, name, sel, ori), h("div", { class: "runbar" }, ...boxes), h("div", { class: "runbar" }, go), out);
+      h("div", { class: "runbar" }, name, sel, ori), h("div", { class: "runbar" }, home), h("div", { class: "runbar" }, ...boxes), h("div", { class: "runbar" }, go), out);
   }
-  function shipPaint(out, app, w) {
+  function shipPaint(out, app, w, homeGroup) {
     const r = w.result || {}, rows = [];
     if (r.godot && r.godot.check) rows.push(h("li", {}, `${r.godot.check.ok ? "✅" : "❌"} Godot check — ${r.godot.check.why || ""}`));
     for (const [k, v] of Object.entries(r.platforms || {}))
       rows.push(h("li", {}, `${v.ok ? "✅" : v.ok === null ? "⏸" : "❌"} ${PLAT_L[k] || k} — ${v.ok ? "on the 🧪 test shelf" : (v.why || v.result || "failed")}`));
-    const base = (S.hermes_url || "").replace(/\/+$/, "");
+    const base = (okUrl(S.hermes_url || "") || homeUrl() || "").replace(/\/+$/, "");
     out.replaceChildren(h("p", {}, w.state === "done" ? `✅ ${r.name || app} v${r.version || ""} built.` : `⚠️ ${r.why || w.error || "Not built."}`),
       h("ul", {}, ...rows),
+      w.state === "done" ? h("p", { class: "note" }, "🧪 In Testing · ", h("b", { class: "notready" }, "Not ready"),
+        ` until you ⬆ Release it in Hermes · goes to ${homeGroup && homeGroup !== "Hermes decides" ? homeGroup : "the group Hermes picks (it asks if unsure)"}.`) : "",
       r.platforms && r.platforms.android && r.platforms.android.ok ? h("p", { class: "note" }, "📱 Phone check: Iris → More → 📦 Apps → 🧪 Test → ⬇ install, open it, play a minute.") : "",
       base ? h("p", {}, h("a", { href: `${base}/downloads#app-${encodeURIComponent(app)}`, target: "_blank", rel: "noopener" }, "Open in Hermes Downloads ↗")) : "");
   }
@@ -1077,8 +1380,8 @@ function startView() {
   }
   function paintResult(run) {
     const chg = changedSteps(run), running = run.state === "running", pics = run.pictures || [];
-    if (!chg.length && !pics.length && !running && !run.why) { resultBox.hidden = true; return; }
-    resultBox.hidden = false;
+    if (!chg.length && !pics.length && !running && !run.why) { resultBox.hidden = true; syncStage(); return; }
+    resultBox.hidden = false; syncStage();
     /* 📣 M3: while it works, the big stage card; when done, the result line */
     resHead.replaceChildren(running ? stageCard(run) : `${STATE[run.state] || run.state} — ${run.why || ""}`);
     /* ⬅️/➡️ Before / Now only for pages and apps — text shows the writing, pictures show the picture (M3) */
@@ -1117,12 +1420,50 @@ function startView() {
     return h("div", { class: "chg" }, h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, icon), h("b", {}, title), h("span", { class: "note" }, sub)),
       h("details", { open }, h("summary", {}, "what changed"), diffPre(diff)), h("div", { class: "runbar" }, ...controls));
   }
+  /* 2026-11-25: a ✋ waiting row Scott can judge without reading code — plain words, Before | After pictures, code folded */
+  const shotCache = new Map();
+  function shotsBox(x) {
+    const box = h("div", {});
+    if (x.look !== "look") { box.append(h("div", { class: "shotnote" }, "⚙️ Nothing to picture — this changes how it works, not how it looks.")); return box; }
+    const key = x.id + ":" + x.sha;
+    if (!shotCache.has(key)) shotCache.set(key, api("/api/review/shots", { id: x.id }));
+    box.append(h("div", { class: "shotnote" }, "📸 Taking Before | After pictures… (about a minute)"));
+    shotCache.get(key).then(m => {
+      const kids = [];
+      if (m && m.ok && m.ran) {
+        const fig = (side, label) => h("figure", {}, h("figcaption", {}, label),
+          h("a", { href: `/api/review/shot?id=${encodeURIComponent(x.id)}&side=${side}&v=${m.sha}`, target: "_blank", rel: "noopener" },
+            h("img", { src: `/api/review/shot?id=${encodeURIComponent(x.id)}&side=${side}&v=${m.sha}`, alt: `${label} picture`, loading: "lazy" })));
+        kids.push(h("div", { class: "shots" }, fig("before", "Before"), fig("after", "After ✨")));
+      }
+      const why = m && m.ok ? m.why : (m && m.message) || "📸 No pictures.";
+      if (why) kids.push(h("div", { class: "shotnote" }, why));
+      else if (m && m.ran) kids.push(h("div", { class: "shotnote" }, "Tap a picture to see it big. The gold outline is the changed spot."));
+      box.replaceChildren(...kids);
+    }).catch(() => { shotCache.delete(key); box.replaceChildren(h("div", { class: "shotnote" }, "📸 Pictures failed — reopen ✋ to try again.")); });
+    return box;
+  }
+  function heldCard(x, cf, ...controls) {
+    const p = x.plain || {};
+    const who = x.guarded === "ailab" ? "🛡 the Lab itself" : x.guarded === "hermes" ? "🛡 Hermes" : "✋ a real file";
+    const lines = [];
+    if (p.what) lines.push(h("div", {}, "👀 ", h("b", {}, "What changes: "), p.what));
+    else lines.push(h("div", {}, "👀 ", h("b", {}, "What changes: "), (x.note || "").replace(/^[a-z-]+: ?/, "") || "(the AI didn't say — see the pictures or the code)"));
+    if (p.where) lines.push(h("div", {}, "📍 ", h("b", {}, "Where: "), p.where));
+    lines.push(h("div", {}, "⚖️ ", h("b", {}, "Kind: "), p.risk || (x.look === "look" ? "look only" : "how it works")));
+    lines.push(h("div", {}, "🛡 ", who + (x.guarded ? " — tested first, a copy is saved, it undoes itself if it breaks" : "")));
+    if (x.moved) lines.push(h("div", { class: "warn" }, "🔀 The real file changed after this was proposed — Apply will refuse. Reject it and ask the Lab again."));
+    return h("div", { class: "chg" },
+      h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, x.guarded ? "🛡" : "✋"), h("b", {}, p.what ? (p.where || "Change") : x.target.split("/").pop())),
+      h("div", { class: "plain" }, ...lines), shotsBox(x),
+      h("details", {}, h("summary", {}, "🔧 Show the code"), h("div", { class: "path" }, `${x.new ? "new file" : "change"} · ${x.target} · from ${x.project}`), diffPre(x.diff || x.preview)),
+      h("div", { class: "runbar" }, cf, ...controls));
+  }
   function paintChanges() {
     const kept = store.get(keptKey, []), rows = [], codeRows = [];
     held.forEach(x => {
       const cf = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply" }), note = h("span", { class: "note" });
-      const gd = x.guarded ? ` · 🛡 ${x.guarded === "ailab" ? "the Lab itself" : "Hermes"} — tested first, a copy is saved, it undoes itself if it breaks` : "";
-      rows.push(chgCard(x.guarded ? "🛡" : "✋", x.target, `${x.new ? "new file" : "change"} to real code · from ${x.project}${x.note ? " · " + x.note : ""} · not written yet${gd}`, x.diff || x.preview, true, cf,
+      rows.push(heldCard(x, cf,
         h("button", { class: "btn pri", onclick: async () => {
           if (x.guarded) note.textContent = "🧪 testing it in a safe copy first — can take a few minutes…";
           const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
@@ -1177,7 +1518,10 @@ function startView() {
     const r = await api(`/api/review?project=${encodeURIComponent(p.id)}`);
     held = r.ok ? (r.held || []) : []; paintChanges(); loadGuard();
   }
-  function onRun(run) {
+  function onRun(run, extras) {
+    /* 🧹 M1: 📦 files made, ✏️ Change it, the batch grid and ▶ Go on live on the Stage now (they were in the left pane) */
+    if (extras && (run.state === "running" || `${run.id}:${run.steps.length}:${run.state}` !== sig)) stageExtra.replaceChildren(...extras);
+    if (run.state === "running" && sig.split(":")[0] !== run.id) setTab("code");     /* phones: a new run flips to 👀 Stage */
     curRun = run;
     if (run.state === "running" && !resultBox.hidden) { const sc = resHead.querySelector(".stagebox"); if (sc) sc.replaceWith(stageCard(run)); }
     const nsig = `${run.id}:${run.steps.length}:${run.state}`;
@@ -1203,16 +1547,65 @@ function startView() {
   const tools = h("div", { class: "runbar wbtools" }, TOOLS.map(([id, flag, name]) =>
     h("button", { class: "btn" + (!flag || S.flags[flag] ? "" : " off"), onclick: () => go(id), "data-path": id }, name)));
   const panes = {};
-  const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Ask the AI", sec, panes),
-    h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
-    S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
-    S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
-    ...(ag ? [ag.typeRow, ag.task, ag.batchRow, ...((r, pk) => matchMedia("(max-width: 640px)").matches ? [r, pk] : [pk, r])(  /* phones: ▶ Start before the model picker (Argus 2026-11-24) */
-          h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.newBtn, ag.askRow, ag.held), ag.picker), ag.liveRow, ag.status, ag.final, ag.repoRow,
-        h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
+  /* 🧹 2026-11-24 remodel M1 (Scott: "too much going on with the workspace … simplified and streamlined").
+     🤖 Make = the box, 🪄 Improve, one chip row, ▶ Start; the model and ❓ Ask me first fold into ⚙️ Options.
+     👀 Stage = the one thing just made, then ✏️ Change it and 🆕 Start new; ✨ starters show while it is empty;
+     📚 Library = everything in this project's folder; files, the editor and run output fold into 🔎 Details. */
+  const optNow = h("span", { class: "optnow" });
+  const optSync = () => { const m = ag && ag.picker.querySelector('select[aria-label="Model"]'), o = m && m.selectedOptions[0];
+    optNow.textContent = o && o.value && o.textContent !== "⏳" ? "· " + o.textContent : ""; };
+  const options = ag ? h("details", { class: "optfold", id: "agoptions", open: !!store.get("wbopt", false), ontoggle: e => store.set("wbopt", e.target.open) },
+    h("summary", {}, h("span", { style: "white-space:nowrap" }, "⚙️ Options"), optNow), ag.batchRow, ag.picker, ag.askRow) : null;
+  const impBtn = ag && ag.improve.querySelector("#agimpbtn");
+  if (impBtn) { impBtn.classList.add("ib"); impBtn.textContent = "🪄"; impBtn.setAttribute("aria-label", "Improve my prompt"); }
+  if (ag) { ag.picker.addEventListener("change", optSync); new MutationObserver(optSync).observe(ag.picker, { childList: true, subtree: true }); }
+  const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Make", sec, panes),
+    ...(ag ? [ag.task, ag.typeRow, h("div", { class: "runbar" }, ag.startBtn, impBtn, ag.stopBtn, ag.held), ag.improve, ag.censor, ag.status, ag.liveRow, ag.final,
+      h("details", { class: "optfold", id: "agstepsfold", open: !!store.get("wbsteps", false), ontoggle: e => store.set("wbsteps", e.target.open) }, h("summary", {}, "📜 Steps"), ag.steps), options]
       : [offCard("agent", "🤖", "Agent")]),
-    h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the three panes back to the standard size and order" }, "🧱 Reset pane layout")));
-  let codePane, filesPane = null, filesEd = null;
+    h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the two panes back to the standard size and order" }, "🧱 Reset pane layout")));
+  const stageExtra = h("div", { class: "stagex", id: "wbstagex" });
+  const starters = h("div", { class: "starters", id: "wbstarters" }, h("h3", {}, "✨ Start from one of these — or just type in 🤖 Make"),
+    h("div", { class: "runbar" },
+      S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
+      S.flags.live ? h("button", { class: "btn", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null),
+    ag ? h("details", { class: "optfold" }, h("summary", {}, "🎯 More ways to start"), ag.repoRow, ag.goals) : null);
+  /* 🧹 remodel M2 (Scott 2026-11-25, pick 1): the loop — ✅ Keep & start new (gets a number in 📚 Library) ·
+     🗑 Throw away (hidden, ↩ back for 30 days) · 🆕 Just clear (decide later). All three leave a clean slate in the same project. */
+  const finNote = h("span", { class: "note", role: "status" });
+  const keepBtn = h("button", { class: "btn pri", type: "button", id: "wbkeep", title: "Marks this as kept — it gets a number in 📚 Library — and clears the screen for the next one" }, "✅ Keep & start new ⭐");
+  const tossBtn = h("button", { class: "btn", type: "button", id: "wbtoss", title: "Hides what this run made and puts changed files back. You can bring it back from 📚 Library for 30 days." }, "🗑 Throw away");
+  const clearStage = msg => { if (!ag) return; ag.newBtn.click(); ag.status.textContent = msg; };
+  keepBtn.onclick = async () => {
+    if (!curRun) return;
+    keepBtn.disabled = true; const r = await api("/api/shelf/keep", { project: p.id, run: curRun.id }); keepBtn.disabled = false;
+    if (!r.ok) { finNote.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't keep it."}`; return; }
+    clearStage(`✅ Kept as #${r.item.n} in ${p.name || p.id} — say what to make next.`); lib.refresh();
+  };
+  tossBtn.onclick = async () => {
+    if (!curRun) return;
+    tossBtn.disabled = true; const r = await api("/api/shelf/toss", { project: p.id, run: curRun.id }); tossBtn.disabled = false;
+    if (!r.ok) { finNote.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't throw it away."}`; return; }
+    clearStage("🗑 Thrown away — ↩ bring it back from 📚 Library within 30 days."); lib.refresh(); if (pv) pv.refresh();
+  };
+  const finishBar = h("div", { class: "finishbar", id: "wbfinish", hidden: true }, keepBtn, tossBtn, ag ? ag.newBtn : null, finNote);
+  if (ag) { ag.newBtn.textContent = "🆕 Just clear";
+    ag.newBtn.title = "Decide later. What was made stays in the project (📚 Library). Clears the screen for the next build, picture or doc.";
+    ag.newBtn.addEventListener("click", () => { stageExtra.replaceChildren(); syncStage(); }); }
+  const lib = libraryBox(p, { change: (task, ids) => { if (ag) ag.startWith(task, ids, false); },
+    sheet: path => { if (ag) ag.startWith("Character sheet of the person in this picture", ["image"], false, { n: 5, sheet: path }); },
+    castDesign: (n, forWhat) => { if (ag) ag.startWith(`Design a cast of ${n} people` + (forWhat ? ` for: ${forWhat}` : ""), ["image"], false, { cast: { n } }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject });
+  let libKey = null;
+  function syncStage() {
+    const empty = resultBox.hidden && !stageExtra.childElementCount, busy = !!(curRun && curRun.state === "running");
+    starters.hidden = !empty; shipBar.hidden = empty; finishBar.hidden = empty || (busy && !curRun.art);
+    keepBtn.hidden = tossBtn.hidden = busy || !curRun || !(curRun.made || []).length; finNote.textContent = "";
+    const k = curRun ? `${curRun.id}:${curRun.state}:${(curRun.made || []).length}:${(curRun.pictures || []).length}:${(curRun.videos || []).length}` : "";
+    if (k !== libKey) { libKey = k; lib.refresh(); }             /* 📚 a finished run shows up in the Library straight away */
+  }
+  let codePane, filesEd = null, detFold = null;
+  const detTop = () => h("summary", {}, "🔎 Details", h("span", { class: "note" }, "— files, code, run output"));
+  const detAttrs = { class: "detfold", id: "wbdetails", open: !!store.get("wbdetails", false), ontoggle: e => store.set("wbdetails", e.target.open) };
   if (pv) {
     const prevWrap = h("div", { style: "display:none;flex:1;flex-direction:column;gap:8px;min-height:0" }, pv.tools, pv.frame);
     const edWrap = growBox(pv.ed, "file editor");
@@ -1227,17 +1620,17 @@ function startView() {
       h("p", { class: "panesub" }, "The current project's own files (left list). Edit by hand and 💾 Save, or 👁 Preview to see the page run."),
       h("div", { class: "bar2" }, "Editing: ", fileName, h("span", { class: "note" }, ` in ${p.name || p.id}`), h("span", { class: "seg", role: "group", "aria-label": "Edit or preview" }, segBtns), pv.saveBtn),
       pv.note, pv.restore, edWrap, prevWrap);
-    codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, paneBar("code", "✋ Waiting for you", sec, panes),
-      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), shipBar, resultBox, waitNone, changes, filesEd, drawer);
-    filesPane = h("div", { class: "pane wbfiles", "data-pane": "files" }, paneBar("files", "📂 Files", sec, panes),
-      h("p", { class: "panesub" }, "This project's files. Tap one to open it in the editor."), pv.tabs);
+    detFold = h("details", detAttrs, detTop(), h("div", { class: "wbfiles" }, pv.tabs), filesEd, drawer);
   } else {
-    codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, paneBar("code", "✋ Waiting for you", sec, panes),
-      h("p", { class: "panesub" }, "Changes the AI wants to make show up here first."), shipBar, resultBox, waitNone, changes, offCard("preview", "👁", "Files & code"), drawer);
-    filesPane = h("div", { class: "pane wbfiles", "data-pane": "files" }, paneBar("files", "📂 Files", sec, panes), h("p", { class: "note" }, "⏸ Not switched on yet."));
+    detFold = h("details", detAttrs, detTop(), offCard("preview", "👁", "Files & code"), drawer);
   }
-  Object.assign(panes, { files: filesPane, code: codePane, agent: agentPane });
-  layoutPanes(sec, panes);
+  const stageBar = paneBar("code", "👀 Stage", sec, panes);
+  stageBar.querySelector("h2").after(lib.jump);
+  codePane = h("div", { class: "pane wbcode", "data-pane": "code" }, stageBar,
+    resultBox, stageExtra, finishBar, starters, changes, lib.el, shipBar, detFold);
+  Object.assign(panes, { code: codePane, agent: agentPane });
+  layoutPanes(sec, panes); optSync(); syncStage();
+  if (store.get("freshgo", 0) && ag) { store.set("freshgo", 0); ag.newBtn.click(); ag.status.textContent = "🧼 Clean slate — say what to make."; }
   return [projectRow(), h("nav", { class: "wbtabs", "aria-label": "Workbench" }, tabBtns), sec];
 }
 
@@ -1280,6 +1673,19 @@ function madeCard(pid, run) {
 }
 /* 🎛 Batch results (2026-11-24 Module 3): one tile per picture/doc (⬇ · ✏️ · ⭐), the earlier ones of the same
    series folded below, and ➕ Make more (same words, same dial, new variations — test small, then go big) */
+/* 👁 Eyes (M1, 2026-11-25): match score + what is missing + 🔁 Fix and try again. A check is $0; the fix starts a
+   normal run (a paid model still shows its price first). fix = null hides the button (a run is going). */
+function eyesBox(e, fix) {
+  if (!e) return null;
+  if (e.error) return h("p", { class: "eyes note" }, `👁 Couldn't check it: ${e.error}${e.fix ? ` 👉 ${e.fix}` : ""}`);
+  if (e.score == null) return h("p", { class: "eyes note" }, e.refused ? "👁 The vision model wouldn't describe this one, so there is no match score." : "👁 The vision model didn't answer, so there is no match score.");
+  const miss = e.missing || [];
+  return h("div", { class: "eyes" },
+    h("span", { class: "eyechip" + (e.low ? " low" : ""), title: "How well it matches your words — checked by a vision model on this computer, $0" }, `👁 ${e.score}% match`),
+    h("span", {}, miss.length ? `missing: ${miss.join(" · ")}` : "nothing missing"),
+    miss.length && fix && e.fix_task ? h("button", { class: "btn" + (e.low ? " pri" : ""), type: "button", title: "Your words stay the same; the missing things are spelled out. Starts a new run.", onclick: () => fix(e.fix_task) }, "🔁 Fix and try again") : null,
+    e.caption ? h("details", {}, h("summary", {}, "👁 What it saw"), h("p", {}, e.caption)) : null);
+}
 function batchGrid(pid, run, startWith) {
   const b = run.batch; if (!b) return null;
   const kept = new Set(b.kept || []);
@@ -1305,13 +1711,15 @@ function batchGrid(pid, run, startWith) {
     chg.onkeydown = e => { if (e.key === "Enter") chgGo(); };
     const pen = h("button", { class: "btn", type: "button", onclick: () => { if (chg.hidden) { chg.hidden = false; chg.focus(); } else chgGo(); } }, "✏️ Change it");
     return h("div", { class: "mtile btile" + (kept.has(it.path) ? " kept" : "") },
-      h("div", { class: "mhd" }, h("b", {}, `#${it.k + 1}`), h("span", { class: "note" }, it.variation || "your words as typed")),
-      body, chg,
+      h("div", { class: "mhd" }, h("b", {}, `#${it.k + 1}${it.best ? " ⭐ best match" : ""}`), h("span", { class: "note" }, it.variation || "your words as typed")),
+      body, eyesBox(it.eyes, run.state !== "running" && startWith ? t => startWith(t, ids, false) : null), chg,
       run.folder ? h("div", { class: "note wherepath", title: "Where this file is" }, `📍 ${run.folder}/${it.path}`) : null,
       h("div", { class: "runbar" }, h("a", { class: "btn", href: url, download: name }, "⬇ Download"), pen, star,
         it.kind === "picture" ? null : h("a", { class: "btn", href: url, target: "_blank", rel: "noopener", title: "Read all" }, "⤢")));
   };
-  const items = b.items || [], earlier = b.earlier || [];
+  /* 👁 M1: once the vision model has checked them, best match first */
+  const eyeScore = it => (it.eyes && it.eyes.score != null ? it.eyes.score : -1);
+  const items = [...(b.items || [])].sort((x, y) => eyeScore(y) - eyeScore(x) || x.k - y.k), earlier = b.earlier || [];
   const noun = b.kind === "picture" ? "pictures" : "docs";
   const out = h("section", { class: "madecard batchgrid", "aria-label": "Batch results" },
     h("h3", {}, `🎛 Batch — ${items.length} of ${b.n} ${noun} · ${b.level_words} (dial ${b.dial})`),
@@ -1381,17 +1789,18 @@ function handoffBtn(ho, star) {
     title: ho.label ? `Opens Hermes ${ho.name} — the picture is in your Gallery (ai-lab)` : `The Lab can't make this itself yet — ${ho.file} in this project has the ready-to-use brief` },
     (ho.label || `${ho.icon} Take the brief to ${ho.name}`) + (star ? " ⭐" : ""));
 }
-/* 🎨 only (2026-11-24): hide every model not tagged "fewer limits". Remembered. */
+/* 🔓 uncensored only (2026-11-24): hide every model not labelled uncensored. Remembered. */
+const UNC = "🔓 uncensored";   /* policy (Scott 2026-11-24): every low/no-censorship model carries this label and comes first */
 function artToggle(sel, r) {
-  const art = m => ((r.tags || {})[m] || {}).limits === "🎨";
+  const art = m => ((r.tags || {})[m] || {}).limits === UNC;
   const n = (r.models || []).filter(art).length;
-  const cb = h("input", { type: "checkbox", checked: !!store.get("artonly", false), "aria-label": "Show only fewer-limits models" });
+  const cb = h("input", { type: "checkbox", checked: !!store.get("artonly", true), "aria-label": "Uncensored models only — untick to allow filtered models" });
   const apply = () => { store.set("artonly", cb.checked);
     [...sel.options].forEach(o => { o.hidden = cb.checked && !art(o.value); });
     if (cb.checked && sel.selectedOptions[0] && sel.selectedOptions[0].hidden) { const f = [...sel.options].find(o => !o.hidden); if (f) { f.selected = true; sel.dispatchEvent(new Event("change")); } } };
   cb.onchange = apply; if (n) apply();
   return h("label", { class: "note", style: "display:inline-flex;gap:6px;align-items:center;min-height:44px" }, cb,
-    n ? `🎨 only (${n} here)` : "🎨 only — none on this provider; try 🌐 openrouter or 🏠 ollama");
+    n ? `🔓 uncensored only (${n} here) — untick to allow 🔒 filtered models` : "🔓 uncensored only — none on this provider; try ◆ venice, 🌐 openrouter or 🏠 ollama");
 }
 const legendNote = (r) => h("details", { class: "note" }, h("summary", {}, "What do the tags and $ mean?"), r.legend || "");
 function rosterCard(pid) {
@@ -1630,6 +2039,7 @@ const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Wo
 let LOOKS = null;
 async function looksLoad(force) { if (!LOOKS || force) { const r = await api("/api/looks"); if (r.ok) LOOKS = r; } return LOOKS; }
 const LOOK_SEP = " · ";
+const lookFill = (el, ...k) => el.replaceChildren(...k.flat().filter(x => x != null));   /* replaceChildren prints null as text */
 function lookFromText(t) { const m = String(t || "").match(/^Look:\s*(.*)$/m); return m ? m[1].split(/\s*[·;|,]\s*/).map(s => s.trim()).filter(Boolean) : []; }
 function lookStrip(t) { return String(t || "").replace(/^Look:.*(?:\n|$)/gm, "").replace(/\n+$/, ""); }
 function lookIndex() { const ix = {}; (LOOKS ? LOOKS.tabs : []).forEach(t => (t.items || []).forEach(it => { ix[it.n.toLowerCase()] = { tab: t, it }; })); return ix; }
@@ -1649,7 +2059,7 @@ function lookPicker(pid) {
     row.hidden = !shown;
     if (!shown) return;
     const c = cur || [], clash = LOOKS ? lookClashes(c) : [];
-    row.replaceChildren(h("span", { class: "tlead" }, "🎨 Look:"),
+    lookFill(row, h("span", { class: "tlead" }, "🎨 Look:"),
       ...(c.length ? c.map(n => h("button", { class: "lchip", type: "button", title: `Take ${n} off`, "aria-label": `Take ${n} off`,
         onclick: () => { cur = c.filter(x => x !== n); save(); paint(); } }, n, h("span", { "aria-hidden": "true" }, " ✕")))
         : [h("span", { class: "note" }, "none yet")]),
@@ -1692,12 +2102,12 @@ function lookPicker(pid) {
       } else {
         const t = LOOKS.tabs.find(x => x.id === tab) || LOOKS.tabs[0], items = t.items || [], few = innerWidth < 700 ? 6 : 8;
         const list = all ? items : items.slice(0, few);
-        chipsEl.replaceChildren(...list.map(it => chip(it, t)),
+        lookFill(chipsEl, ...list.map(it => chip(it, t)),
           items.length > few ? h("button", { class: "tchip more2", type: "button", onclick: () => { all = !all; paintDlg(); } }, all ? "▴ Fewer" : `▾ Show all ${items.length}`) : null,
           h("span", { class: "note looklimit" }, t.max === 1 ? "Pick 1" : `Up to ${t.max || 3}`));
       }
       const clash = lookClashes(picks);
-      picked.replaceChildren(h("b", {}, `Your look (${picks.length}/${maxT}): `),
+      lookFill(picked, h("b", {}, `Your look (${picks.length}/${maxT}): `),
         ...(picks.length ? picks.map(n => h("button", { class: "lchip", type: "button", "aria-label": `Take ${n} off`, onclick: () => { picks = picks.filter(x => x !== n); paintDlg(); } }, n, " ✕"))
           : [h("span", { class: "note" }, "nothing picked — the picture follows your words only")]),
         clash.length ? h("div", { class: "note lookwarn" }, `⚠️ ${clash.join(", ")} may fight each other (it still runs).`) : null);
@@ -1747,7 +2157,10 @@ function agentView(wb) {
   api(`/api/models?provider=${encodeURIComponent(prov)}&project=${encodeURIComponent(p.id)}`).then(r => {
     modelSel.innerHTML = "";
     if (!r.ok) { modelSel.append(h("option", { value: "" }, `${r.icon || "⚠️"} ${r.message || "no models"}`)); return; }
-    const want = store.get("model." + prov, r.models[0]);
+    /* 2026-11-24 (Scott 2): lists put 🔓 uncensored first, but the build agent's first-time default is the first model that
+       isn't — most uncensored models can't call tools, so builds stall on them */
+    const tgs = r.tags || {}, uncOn = !!store.get("artonly", true),      /* 2026-11-24 (Scott): "fully uncensored as default. i will have to choose censorship" */
+      want = store.get("model." + prov, r.models.find(m => ((tgs[m] || {}).limits === UNC) === uncOn) || r.models[0]);
     r.models.forEach(m => modelSel.append(h("option", { value: m, selected: m === want }, mlabel(r, m))));
     if (r.legend) legend.replaceChildren(legendNote(r), artToggle(modelSel, r));
     loaded = r; suggest();
@@ -1778,7 +2191,9 @@ function agentView(wb) {
     const w = picked.length ? { use: picked[0].use, why: `you picked ${picked.map(t => t.icon + " " + t.label).join(" + ")}`, art } : wantFor(task.value);
     if (!w) { hint.hidden = true; return; }
     /* 2026-11-23: real code in a linked folder (Hermes, ailab) — local models got lost in the live test; claude-sonnet-5-5 finished it for ~$0.06 */
-    if (/linked folders?|repo (find|pull|propose)/i.test(task.value)) {
+    const build = !w.art && w.use !== "💬 general";
+    const stall = () => { hint.replaceChildren("🔓 Uncensored model. Many of them can't run the build tools — if this build stalls, untick 🔓 uncensored only in ⚙️ Options to let a 🔒 filtered coder do the code."); hint.hidden = false; };
+    if (!store.get("artonly", true) && /linked folders?|repo (find|pull|propose)/i.test(task.value)) {
       const strong = "claude-sonnet-5-5", here = S.providers.find(x => x.id === prov) || {};
       if (here.local) {
         const hosted = provs.find(x => !x.local && x.id === "claude") || provs.find(x => !x.local);
@@ -1795,13 +2210,19 @@ function agentView(wb) {
       }
     }
     const tg = loaded.tags || {}, picks = loaded.picks || {};
-    const freer = w.art ? loaded.models.filter(m => (tg[m] || {}).limits === "🎨") : [];
+    const unc = m => (tg[m] || {}).limits === UNC;
+    /* 2026-11-24 (Scott 2): 🔓 uncensored first for art + writing only; builds get a coder first */
+    const uncOn = !!store.get("artonly", true);
+    const freeFirst = uncOn || !!w.art || w.use === "💬 general";
+    const freer = freeFirst ? loaded.models.filter(unc) : [];
     const fits = freer.length ? freer : loaded.models.filter(m => (tg[m] || {}).use === w.use || (picks[m] || "").includes(w.use.slice(3)));
-    if (freer.length) w.why += " — 🎨 fewer limits for art";
+    if (freer.length) w.why += w.art ? " — 🔓 uncensored for art" : w.use === "💬 general" ? " — 🔓 uncensored for writing" : " — 🔓 uncensored is your default";
     const pool = fits.length ? fits : loaded.models.filter(m => picks[m]);           // nothing tagged for it → the ⭐ picks
     if (!pool.length) { hint.hidden = true; return; }
-    const cheapest = [...pool].sort((a, b) => (picks[b] ? 1 : 0) - (picks[a] ? 1 : 0) || RANK[(tg[a] || {}).tier || ""] - RANK[(tg[b] || {}).tier || ""])[0];
-    if (cheapest === modelSel.value) { hint.hidden = true; return; }
+    /* policy 2026-11-24: 🔓 uncensored first, then ⭐ picks, then cheapest */
+    const uo = (a, b) => freeFirst ? (unc(b) ? 1 : 0) - (unc(a) ? 1 : 0) : (unc(a) ? 1 : 0) - (unc(b) ? 1 : 0);
+    const cheapest = [...pool].sort((a, b) => uo(a, b) || (picks[b] ? 1 : 0) - (picks[a] ? 1 : 0) || RANK[(tg[a] || {}).tier || ""] - RANK[(tg[b] || {}).tier || ""])[0];
+    if (cheapest === modelSel.value) { if (build && unc(cheapest)) stall(); else hint.hidden = true; return; }
     const tier = (tg[cheapest] || {}).tier;
     hint.replaceChildren(`💡 For this task try ${cheapest}${tier ? " (" + tier + ")" : ""} — ${w.why}${fits.length ? "" : " (no model here is tagged for it; this is a ⭐ pick)"}. `,
       h("button", { class: "btn", type: "button", onclick: () => { modelSel.value = cheapest; store.set("model." + prov, cheapest); hint.hidden = true; } }, "Use it"));
@@ -1831,7 +2252,7 @@ function agentView(wb) {
         onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me")] : []),
       h("button", { class: "tchip more", type: "button", "aria-expanded": String(typesOpen),
         onclick: () => { typesOpen = !typesOpen; paintTypes(); } }, typesOpen ? "▴ Fewer" : on.length ? "▾ More" : "▾ Pick what you're making"));
-    look.show(on.includes("image"));
+    look.show(on.includes("image") || on.includes("video"));   /* 🎬 2026-11-25 (Scott: "I need access to the mood/theme options") */
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
@@ -1883,6 +2304,38 @@ function agentView(wb) {
   bCount.onchange = () => { store.set("batchn", +bCount.value); batchPaint(); };
   bDial.oninput = () => { store.set("batchdial", +bDial.value); batchPaint(); };
   const batchReq = () => bKind && +bCount.value > 1 ? { n: +bCount.value, dial: +bDial.value } : null;
+  /* 🪄 Prompt improvement cycle (2026-11-24, Scott: "i want my prompts to get an improvement cycle"): his words → the
+     🔓 uncensored writer adds what is missing and keeps every word → ✍️ Yours beside 🪄 Improved →
+     ✓ Use it · 🔁 Again · ✏️ Fix it · ✗ Keep mine, as many rounds as he likes. Nothing runs until ▶ Start. */
+  const impBtn = h("button", { class: "btn", type: "button", id: "agimpbtn", title: "The writer model makes your prompt stronger and keeps every word you wrote. You check it before anything runs." }, "🪄 Improve my prompt");
+  const impNote = h("span", { class: "note", role: "status" }), impCard = h("div", { class: "impcard", hidden: true });
+  const impRow = h("div", { class: "improve", id: "agimprove" }, h("div", { class: "runbar" }, impBtn, impNote), impCard);
+  let impMine = "", impRound = 0, impSpent = 0;
+  async function impGo(prev, fix) {
+    if (!prev) { impMine = task.value.trim(); impRound = 0; impSpent = 0; }
+    if (!impMine) { impNote.textContent = "✏️ Type your idea first — rough words are fine."; task.focus(); return; }
+    impBtn.disabled = true; impNote.textContent = "🪄 Improving…";
+    const r = await api("/api/agent/rephrase", { project: p.id, mode: "prompt", text: impMine, previous: prev || "", fix: fix || "", ctypes: typePicked(), provider: prov, model: modelSel.value === "⏳" ? "" : modelSel.value });
+    impBtn.disabled = false;
+    if (!r.ok) { impNote.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't improve it just now — your own words work too."}`; return; }
+    impRound++; impSpent += +r.usd || 0; impNote.textContent = "";
+    const ta = h("textarea", { "aria-label": "Improved prompt — change anything you like" }); ta.value = r.text;
+    const fixIn = h("input", { type: "text", placeholder: "What should it fix? e.g. shorter · more about the light", "aria-label": "What to fix in the improved prompt" });
+    const close = () => { impCard.hidden = true; impCard.replaceChildren(); };
+    const again = () => { if (fixIn.value.trim()) impGo(ta.value, fixIn.value.trim()); else fixIn.focus(); };
+    fixIn.onkeydown = e => { if (e.key === "Enter") again(); };
+    impCard.hidden = false;
+    impCard.replaceChildren(
+      h("details", {}, h("summary", {}, "✍️ Yours"), h("div", { class: "impmine" }, impMine)),
+      h("b", {}, `🪄 Improved · round ${impRound} · $${impSpent.toFixed(4)}`),
+      r.learned && (r.learned.kept || r.learned.tossed) ? h("span", { class: "note", title: "The writer saw the prompts you ✅ kept and 🗑 threw away in this project" }, `🧠 learned from ${r.learned.kept} kept · ${r.learned.tossed} thrown away`) : null, ta,
+      h("div", { class: "runbar" },
+        h("button", { class: "btn pri", type: "button", onclick: () => { task.value = ta.value.trim(); task.oninput(); close(); impNote.textContent = "✓ In the box — press ▶ Start when you're ready."; task.focus(); } }, "✓ Use it ⭐"),
+        h("button", { class: "btn", type: "button", title: "A fresh, different take on your words", onclick: () => impGo(ta.value, "") }, "🔁 Again"),
+        h("button", { class: "btn", type: "button", onclick: () => { close(); impNote.textContent = "✗ Kept your words."; } }, "✗ Keep mine")),
+      h("div", { class: "runbar" }, fixIn, h("button", { class: "btn", type: "button", onclick: again }, "✏️ Fix it")));
+  }
+  impBtn.onclick = () => impGo("", "");
   const startBtn = h("button", { class: "btn pri", id: "agstart" }, "▶ Start");
   /* 2026-11-24: questions with choices + a plan to OK before it builds (on unless Scott unticks it) */
   const askFirst = h("input", { type: "checkbox", id: "agaskfirst", checked: !!store.get("askfirst", true), onchange: e => store.set("askfirst", e.target.checked) });
@@ -1926,16 +2379,18 @@ function agentView(wb) {
   function paint(run) {
     status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.real_steps != null ? run.real_steps : run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
-    steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
-    if (run.batch) steps.append(batchGrid(p.id, run, startWith));   /* 🎛 the batch grid fills in as each one lands */
+    const stage = [], put = el => { if (wb) stage.push(el); else steps.append(el); };
+    if (!wb) steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
+    if (run.batch) put(batchGrid(p.id, run, startWith));   /* 🎛 the batch grid fills in as each one lands */
     if (run.state !== "running") {                         /* 📦 + ✏️ right under it (2026-11-24) */
-      if (run.gate) steps.append(h("button", { class: "btn pri gatebtn", type: "button", title: "Carry on with the build prompt — it stops again at the next check-in",
+      if (run.gate) put(h("button", { class: "btn pri gatebtn", type: "button", title: "Carry on with the build prompt — it stops again at the next check-in",
         onclick: () => startWith(run.gate.next_task, run.ctypes && run.ctypes.length ? run.ctypes : null, false) }, `▶ Go on to ${run.gate.next_name} ⭐`));
-      const mc = run.batch ? null : madeCard(p.id, run); if (mc) steps.append(mc);
-      else if (!run.batch && run.state === "done" && !run.gate) steps.append(h("div", { class: "step" }, "ℹ️ No files were made or changed in this run."));
-      const cb = run.batch ? null : changeBox(p.id, run, startWith, { prov, model: modelSel.value }); if (cb) steps.append(cb);
+      const mc = run.batch ? null : madeCard(p.id, run), shownBig = !!((run.pictures || []).length || (run.videos || []).length);
+      if (mc) put(wb ? h("details", { class: "madefold", open: !shownBig }, h("summary", {}, `📦 Files made (${(run.made || []).length})`), mc) : mc);
+      else if (!run.batch && run.state === "done" && !run.gate) put(h("div", { class: "step" }, "ℹ️ No files were made or changed in this run."));
+      const cb = run.batch ? null : changeBox(p.id, run, startWith, { prov, model: modelSel.value }); if (cb) put(cb);
     }
-    const ml = memLine(run); if (ml) steps.append(h("div", { class: "step" }, ml));
+    const ml = memLine(run); if (ml && !wb) steps.append(h("div", { class: "step" }, ml));
     /* M5: plain progress list from the build prompt's modules */
     if ((run.plan || []).length) { const IC = { done: "✅", doing: "🔨", left: "⏳" };
       steps.append(h("div", { class: "step plan" }, run.plan.map(m => h("div", {}, `${IC[m.state]} ${m.module}`)))); }
@@ -1946,6 +2401,7 @@ function agentView(wb) {
     askPop(run);
     /* 2026-11-24: the raw step log is folded away — the list above and the picture are the main view */
     const log = h("details", { class: "steplog", open: !!store.get("steplog", false) }, h("summary", { onclick: () => store.set("steplog", !log.open) }, `🔎 Step by step (${run.steps.length})`));
+    if (ml && wb) log.append(h("div", { class: "step" }, ml));
     run.steps.forEach(s => {
       const r = s.result || {};
       if (s.action === "bad_reply") {                         /* a retry is not an alarm: calm card, no red, costs no step */
@@ -1971,14 +2427,14 @@ function agentView(wb) {
     const running = run.state === "running";
     /* 🏃 art runs share a project: ▶ Start stays on (the Lab says no if a second build would clash) */
     startBtn.disabled = false; stopBtn.disabled = !running; newBtn.disabled = running && !run.art;
-    final.hidden = running || !run.why; final.replaceChildren(run.why || "");
+    final.hidden = running || !run.why || !!wb; final.replaceChildren(run.why || "");   /* 🧹 M1: the Stage says it once */
     if (run.can_continue) final.append(" ", h("button", { class: "btn pri", type: "button", title: "Give it more steps and carry on from where it stopped", onclick: () => more(run) }, "▶ Continue ⭐"));
     if (run.can_resume) final.append(" ", h("button", { class: "btn pri", type: "button", title: "The Lab restarted mid-run — carry on from the last step", onclick: () => more(run, "resume") }, "▶ Resume ⭐"));
     if (!wb && !running && (run.state === "done" || run.state === "unproven")) (run.handoffs || []).forEach(ho => final.append(" ", handoffBtn(ho, true)));
     if (running) { clearTimeout(agTimer); agTimer = setTimeout(poll, 1000); }
     else api("/api/agent/approvals").then(a => { const n = (a.items || []).length;
       held.hidden = !n; held.textContent = wb ? `✋ ${n} waiting — look` : `✋ ${n} waiting for your approval — 📋 open`; });
-    if (wb) wb.onRun(run);
+    if (wb) wb.onRun(run, stage);
   }
   async function more(run, how) {                        /* ▶ Continue (step limit) or ▶ Resume (Lab restarted, 2026-11-24) */
     const a = await api(how === "resume" ? "/api/agent/resume" : "/api/agent/more", { id: run.id });
@@ -1992,10 +2448,41 @@ function agentView(wb) {
     if (r.spend) { S.spend = r.spend; paintBar(); }
     paint(r.run);
   }
-  startBtn.onclick = async () => {
+  /* 🔓→🔒 remodel M2b (Scott: "fully uncensored as default. i will have to choose censorship"): a build on a 🔓 model
+     stops at one card — 🔓 Stay uncensored ⭐ · 🔒 a filtered coder for this run only · ✖. Never switched silently. */
+  const cenCard = h("div", { class: "impcard", id: "agcensor", hidden: true });
+  const ART_IDS = ["image", "video", "text"];
+  function censorChoice() {                               /* null = no card; else the 🔒 coders on this provider, best first */
+    if (!loaded || !loaded.ok || !store.get("artonly", true) || store.get("censorstay." + p.id, false)) return null;
+    const tg = loaded.tags || {}, picks = loaded.picks || {}, unc = m => (tg[m] || {}).limits === UNC;
+    if (!unc(modelSel.value)) return null;
+    const ids = typePicked(), w = wantFor(task.value);
+    const build = ids.length ? ids.some(id => !ART_IDS.includes(id)) : !!(w && !w.art && w.use !== "💬 general");
+    if (!build) return null;
+    const code = m => (tg[m] || {}).use === "💻 coding" ? 0 : picks[m] ? 1 : 2;
+    return loaded.models.filter(m => !unc(m)).sort((a, b) => code(a) - code(b));
+  }
+  startBtn.onclick = () => {
     if (!task.value.trim()) { status.textContent = "✏️ Tell the agent what to do first."; return; }
+    const coders = censorChoice();
+    if (!coders) { doStart(); return; }
+    const close = () => { cenCard.hidden = true; cenCard.replaceChildren(); };
+    const stay = h("input", { type: "checkbox", "aria-label": "Don't ask again in this project — always stay uncensored" });
+    cenCard.hidden = false;
+    cenCard.replaceChildren(h("div", { class: "cenline" }, h("b", {}, "🔓 Build — who writes the code?"),
+        h("button", { class: "btn pri", type: "button", onclick: () => { if (stay.checked) store.set("censorstay." + p.id, true); close(); doStart(); } }, "🔓 Stay uncensored ⭐"),
+        coders.length ? h("button", { class: "btn", type: "button", title: "This run only. Your model choice stays 🔓. With a game, site or app chip the 🔓 writer still writes your words and art — the coder gets a plain brief.",
+          onclick: () => { close(); doStart(coders[0]); } }, `🔒 Filtered coder, this run only: ${coders[0]}`)
+          : h("span", { class: "note" }, "🔒 No filtered coder on this provider — pick another provider in ⚙️ Options if you want one."),
+        h("button", { class: "btn", type: "button", onclick: close }, "✖ Cancel")),
+      h("details", {}, h("summary", { class: "note" }, "ℹ️ Why am I asked?"),
+        h("p", { class: "note" }, `${modelSel.value} is uncensored. Many uncensored models can't run the build tools, so a build can stall.`),
+        h("label", { class: "note", style: "display:inline-flex;gap:6px;align-items:center;min-height:44px" }, stay, "Don't ask again in this project — always stay 🔓")));
+    cenCard.scrollIntoView({ block: "nearest" });
+  };
+  async function doStart(model) {
     startBtn.disabled = true;
-    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: look.text(task.value), ask_first: askFirst.checked, ctypes: typePicked(), batch: batchReq() });
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: model || modelSel.value, task: look.text(task.value), ask_first: askFirst.checked, ctypes: typePicked(), batch: batchReq() });
     if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); paintLive();
   };
@@ -2014,12 +2501,12 @@ function agentView(wb) {
     if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
   }
-  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
+  if (wb) return { startWith, typeRow, improve: impRow, censor: cenCard, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
   return [projectRow(), h("section", { class: "agent" },
-    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, look.row, hint, batchRow, repoRow, goals,
+    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, impRow, look.row, hint, batchRow, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, newBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
-    liveRow, status, final, steps,
+    cenCard, liveRow, status, final, steps,
     h("details", {}, h("summary", {}, "ℹ️ Limits"),
       h("p", {}, "Runs in the sandbox (no internet, writes only in this project). Stops at the step cap, the $ cap, ⏹ Stop, or Hermes STOP_SHIFTS. Writes anywhere else wait for your approval.")))];
 }
@@ -2468,15 +2955,106 @@ function reviewView() {
   return [projectRow(), box];
 }
 
+/* 🚪 Clean start (2026-11-25, Scott: "start in a current or new project with a fresh and clean slate").
+   Shown every time the Lab opens. Every choice lands on an empty box — files and past runs stay in the project. */
+function freshStart(pid) {
+  store.set("project", pid); chatLog = [];
+  ["wbopt", "wbdetails", "wbfilesed", "libopen", "wbsteps", "steplog"].forEach(k => store.set(k, false));
+  store.set("wbtab", "agent"); store.set("agrun." + pid, null); store.set("agtask." + pid, ""); store.set("freshgo", 1);
+  trail = []; view = "start"; render();
+}
+function welcomeView() {
+  const last = curProject(), others = S.projects.filter(p => p.id !== last.id);
+  const big = (icon, title, sub, on, pri) => h("button", { class: "wbig" + (pri ? " pri" : ""), type: "button", onclick: on },
+    h("span", { class: "wi", "aria-hidden": "true" }, icon), h("span", {}, title, sub ? h("span", { class: "ws" }, sub) : null));
+  const pick = h("details", { class: "optfold", open: others.length <= 6 }, h("summary", {}, `📂 Pick a project (${others.length})`),
+    h("div", { class: "wplist" }, others.map(p => big(p.sensitive ? "🔒" : "📁", p.name, null, () => freshStart(p.id)))));
+  return [h("div", { class: "welcome" }, h("h2", {}, "🧪 What are we making?"),
+    big("▶", `Continue ${last.name}`, "Clean screen · your files and past work stay", () => freshStart(last.id), true),
+    others.length ? pick : null,
+    big("➕", "New project", "Its own folder, empty", () => { const d = $("#newproj"); newProject();
+      d.addEventListener("close", () => { if (d.returnValue === "ok" && $("#pname").value.trim()) { store.set("freshgo", 1); trail = []; view = "start"; } }, { once: true }); }),
+    big("📚", "See everything I've made", "All projects, pictures, videos, writing, pages", () => go("library")))];
+}
+
+/* 📚 Library — everything (2026-11-25, Scott: "view my library entirely or select projects"). All projects by default;
+   tick projects to narrow it. Tap a thing → big view → ✏️ Change this / ↗ Go to its project. */
+function libraryAllView() {
+  const KINDS = [["", "All"], ["pic", "🖼"], ["vid", "🎬"], ["doc", "📝"], ["page", "🌐"], ["kept", "✅ Kept"]];
+  const WHEN = [[0, "Any time"], [1, "Today"], [7, "7 days"], [30, "30 days"]];
+  let items = [], picked = store.get("liball.projects", []), kind = store.get("liball.kind", ""), days = store.get("liball.days", 0), cur = null, more = 0;
+  const box = h("div", { class: "liball" }), projChips = h("div", { class: "runbar" }), kindChips = h("div", { class: "runbar" }), whenChips = h("div", { class: "runbar" });
+  const count = h("p", { class: "note", role: "status" }, "⏳ Gathering every project…"), strip = h("div", { class: "libstrip" }), big = h("div", { class: "libbig", hidden: true });
+  const filt = h("details", { class: "libfilt", open: !!store.get("liball.filt", false), ontoggle: e => store.set("liball.filt", e.target.open) },
+    h("summary", {}, "🎚 Filters"), kindChips, whenChips);
+  const pname = id => (S.projects.find(p => p.id === id) || {}).name || id;
+  const url = it => `/preview/${it.project}/${encodeURI(it.path)}`;
+  const chip = (on, label, fn, title) => h("button", { class: "tchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), title: title || "", onclick: fn }, label);
+  function shown() {
+    const cut = days ? Date.now() / 1000 - days * 86400 : 0;
+    return items.filter(it => (!picked.length || picked.includes(it.project)) && (!cut || (it.mtime || 0) >= cut)
+      && (!kind || (kind === "kept" ? !!it.kept : LIB_KIND(it.path) === kind)));
+  }
+  function paint() {
+    projChips.replaceChildren(chip(!picked.length, `🌐 All projects`, () => { picked = []; store.set("liball.projects", picked); more = 0; paint(); }),
+      ...S.projects.filter(p => items.some(it => it.project === p.id)).map(p => chip(picked.includes(p.id), `${p.sensitive ? "🔒" : "📁"} ${p.name}`, () => {
+        picked = picked.includes(p.id) ? picked.filter(x => x !== p.id) : picked.concat(p.id); store.set("liball.projects", picked); more = 0; paint(); })));
+    kindChips.replaceChildren(...KINDS.map(([k, n]) => chip(k === kind, n, () => { kind = k; store.set("liball.kind", k); more = 0; paint(); })));
+    whenChips.replaceChildren(...WHEN.map(([d, n]) => chip(d === days, `🕑 ${n}`, () => { days = d; store.set("liball.days", d); more = 0; paint(); })));
+    const list = shown(), cutAt = list.slice(0, 48 + more);
+    count.textContent = items.length ? `${list.length} of ${items.length} things${picked.length ? ` · ${picked.length} project${picked.length === 1 ? "" : "s"}` : " · all projects"}` : "Nothing made yet. What you make shows up here.";
+    strip.replaceChildren(...cutAt.map(it => { const k = LIB_KIND(it.path), name = it.path.split("/").pop();
+      return h("button", { class: "libtile" + (cur === it ? " on" : ""), type: "button", title: `${pname(it.project)} · ${it.path}`, "aria-label": `Open ${name} from ${pname(it.project)}`, onclick: () => open(it) },
+        k === "pic" ? h("img", { src: url(it), alt: "", loading: "lazy", decoding: "async" }) : k === "vid" ? h("video", { src: url(it) + "#t=0.5", preload: "metadata", playsinline: true, muted: true }) : h("span", { class: "ln" }, name),
+        h("span", { class: "lk", "aria-hidden": "true" }, LIB_ICON[k]), it.kept ? h("span", { class: "lkept", title: "Kept" }, `#${it.kept}`) : null,
+        picked.length === 1 ? null : h("span", { class: "lp" }, pname(it.project))); }),
+      ...(list.length > cutAt.length ? [h("button", { class: "libtile", type: "button", title: "Show more", onclick: () => { more += 96; paint(); } }, `+${list.length - cutAt.length}`)] : []));
+  }
+  function goTo(it, msg) { store.set("libgo", { project: it.project, path: it.path }); store.set("libopen", true); store.set("wbtab", "code");
+    store.set("project", it.project); trail = []; view = "start"; render(); if (msg) navNote(msg); }
+  function open(it) {
+    cur = it; const k = LIB_KIND(it.path), u = url(it), name = it.path.split("/").pop();
+    const body = k === "pic" ? h("img", { src: u, alt: name }) : k === "vid" ? h("video", { src: u, controls: true, playsinline: true, preload: "metadata" })
+      : k === "page" ? h("iframe", { src: u, sandbox: "allow-scripts allow-forms allow-modals", referrerpolicy: "no-referrer", title: name, style: "width:100%;height:60vh;border:1px solid var(--line);border-radius:12px" })
+      : h("pre", {}, "⏳");
+    if (k === "doc") { if (/\.(md|txt)$/i.test(name)) fetch(u).then(r => r.text()).then(t => { body.textContent = t.slice(0, 60000); }).catch(() => { body.textContent = "Couldn't open it here — use ⬇ Download."; });
+      else body.textContent = `📄 ${name} — ⬇ Download opens it.`; }
+    big.hidden = false;
+    big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, `${LIB_ICON[k]} ${name}`),
+        h("button", { class: "btn pri", type: "button", title: "Opens it in its project, ready to make the next version", onclick: () => goTo(it, "✏️ Opened in its project — use ✏️ Change this under it.") }, "✏️ Change this"),
+        h("button", { class: "btn", type: "button", onclick: () => goTo(it) }, `↗ Go to ${pname(it.project)}`),
+        h("a", { class: "btn", href: u, download: name }, "⬇"), h("a", { class: "btn", href: u, target: "_blank", rel: "noopener", title: "Full size" }, "⤢"),
+        h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => { cur = null; big.hidden = true; big.replaceChildren(); paint(); } }, "✖")),
+      h("div", { class: "note wherepath" }, `📁 ${pname(it.project)} · 📍 ${it.path}`), body);
+    paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  (async () => {
+    const all = await Promise.all(S.projects.map(async p => {
+      const [r, sh] = await Promise.all([api(`/api/preview/files?project=${encodeURIComponent(p.id)}`), api(`/api/shelf?project=${encodeURIComponent(p.id)}`)]);
+      if (!r.ok) return [];
+      const kept = {}; if (sh.ok) (sh.kept || []).forEach(x => (x.files || []).forEach(f => { kept[f] = x.n; }));
+      return (r.files || []).filter(f => LIB_KIND(f.path) && !/^repos\//.test(f.path)).map(f => ({ ...f, project: p.id, kept: kept[f.path] || 0 }));
+    }));
+    items = all.flat().sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+    picked = picked.filter(id => S.projects.some(p => p.id === id));
+    paint();
+  })();
+  if (!S.flags.preview) return [offCard("preview", "📚", "Library")];
+  box.append(h("h2", { style: "margin:4px 0" }, "📚 Everything you've made"), projChips, filt, count, big, strip);
+  return [box];
+}
+
 function render() {
   const main = $("#main"); main.innerHTML = "";
   clearInterval(pvTimer); pvTimer = null; pvPoll = null; clearTimeout(agTimer); clearTimeout(cmpTimer);
   clearTimeout(liveTimer); if (liveMsg) { removeEventListener("message", liveMsg); liveMsg = null; }
-  main.classList.toggle("wide", view === "start" || view === "live" || (view === "preview" && !!S.flags.preview));
+  main.classList.toggle("wide", view === "start" || view === "library" || view === "live" || (view === "preview" && !!S.flags.preview));
   paintProjects();
   const path = PATHS.find(p => p.id === view);
   let kids;
   if (view === "start") kids = startView();
+  else if (view === "welcome") kids = welcomeView();
+  else if (view === "library") kids = libraryAllView();
   else if (view === "chat") kids = chatView();
   else if (view === "preview") kids = previewView();
   else if (view === "agent") kids = agentView();
@@ -2496,8 +3074,8 @@ function render() {
   const r = await api("/api/state");
   if (!r.ok) { $("#main").innerHTML = ""; $("#main").append(h("div", { class: "offcard" }, h("div", { class: "big" }, "🔌"), h("h2", {}, "The Lab server isn't answering."))); return; }
   S = r; paintBar();
-  /* always opens on the 🛠 workbench, in the last project (2026-11-22) */
-  render();
+  /* 2026-11-25 (Scott, pick 2A): every open starts at 🚪 Continue / Pick / New — then a clean slate */
+  view = "welcome"; render();
 })();
 </script>
 </body>
