@@ -387,13 +387,47 @@ class App:
         proj = store.project(self._pid(b.get("project")))
         made = ", ".join(str(x)[:80] for x in (b.get("made") or [])[:8] if isinstance(x, str))
         ctx = f"What was made: {made}.\n" if made else ""
-        r = self.lab.chat(proj, str(b.get("provider") or ""), str(b.get("model") or ""),
-                          [{"role": "system", "content": self.REPHRASE_SYS},
-                           {"role": "user", "content": ctx + "His words: " + text}], 300, cap_usd=0.05, task="lab-rephrase")
-        out = (r.text or "").strip().strip('"').strip()
-        if not out or len(out) > 1200:
-            out = text
-        return 200, {"ok": True, "text": out, "usd": round(float(r.usd or 0), 6)}
+        from . import picture
+        msgs = [{"role": "system", "content": self.REPHRASE_SYS}, {"role": "user", "content": ctx + "His words: " + text}]
+        usd, why = 0.0, ""
+        for prov, model in self._rephrase_writers(b):            # 2026-11-24 live: "⏳ is not a valid model ID" (HTTP 400)
+            try:
+                r = self.lab.chat(proj, prov, model, msgs, 300, cap_usd=0.05, task="lab-rephrase")
+            except Exception as e:                               # noqa: BLE001 — try the next writer
+                why = f"{model}: {str(e)[:120]}"
+                continue
+            usd += float(r.usd or 0)
+            out = (r.text or "").strip().strip('"').strip()
+            if out and len(out) <= 1200 and not picture.REFUSAL_RX.search(out[:80]):
+                return 200, {"ok": True, "text": out, "usd": round(usd, 6), "writer": f"{prov}/{model}"}
+            why = f"{model} didn't give a usable rewrite"
+        return 200, {"ok": False, "code": "no_writer", "icon": "🪄",
+                     "message": f"No writer could help ({why or 'none set up'}) — your own words work too.", "usd": round(usd, 6)}
+
+    @staticmethod
+    def _real_model(m: str) -> bool:
+        """A model id, not a list placeholder like ⏳ (the select box before its models load)."""
+        return bool(re.fullmatch(r"[A-Za-z0-9][\w.:/@+-]*", m or ""))
+
+    def _rephrase_writers(self, b: dict) -> list[tuple[str, str]]:
+        """🪄 writers in order: picture changes → the uncensored picture writers first (a mainstream writer refuses
+        body words); otherwise the pane's own model, then the prompt writer and its backups. Placeholders skipped."""
+        from . import picture
+        prov, model = str(b.get("provider") or ""), str(b.get("model") or "")
+        mine = [(prov, model)] if prov and self._real_model(model) else []
+        pw = [tuple(w) for w in [self.cfg.get("prompt_writer") or []] + list(self.cfg.get("prompt_writer_backups") or [])
+              if isinstance(w, (list, tuple)) and len(w) == 2]
+        if b.get("picture"):
+            pics = [tuple(w) for w in (self.cfg.get("picture_writers") or []) if isinstance(w, (list, tuple)) and len(w) == 2]
+            order = (pics or list(picture.WRITERS)) + mine + pw
+        else:
+            order = mine + pw
+        have = getattr(self.lab, "providers", None)
+        out: list[tuple[str, str]] = []
+        for w in order:
+            if w not in out and self._real_model(w[1]) and (have is None or w[0] in have):
+                out.append(w)
+        return out
 
     def agent_more(self, b: dict) -> tuple[int, dict]:
         """▶ Continue a run that hit its step limit."""

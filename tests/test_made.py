@@ -80,9 +80,37 @@ class Routes(AgentOn):
                                                       "text": "title bigger, blue", "made": ["index.html"]})
         self.assertEqual(code, 200, r)
         self.assertEqual(r["text"], "Make the page title twice as big and dark blue.")
-        self.lab.chat = Brain([""]).chat
-        self.assertEqual(self.req("/api/agent/rephrase", {"project": "scratch", "provider": "ollama", "model": "m", "text": "x"})[1]["text"], "x")
+        self.lab.chat = lambda *a, **k: Brain([""]).chat(*a, **k)       # every writer gives nothing → says so, his words stay
+        r = self.req("/api/agent/rephrase", {"project": "scratch", "provider": "ollama", "model": "m", "text": "x"})[1]
+        self.assertFalse(r["ok"])
+        self.assertIn("your own words work too", r["message"])
         self.assertEqual(self.req("/api/agent/rephrase", {"project": "scratch", "text": " "})[0], 400)
+
+    def test_rephrase_skips_the_loading_placeholder(self):
+        # 2026-11-24 live: the pane's model box still said ⏳ → "⏳ is not a valid model ID" (HTTP 400)
+        seen = []
+        def chat(proj, prov, model, *a, **k):
+            seen.append((prov, model))
+            return Brain(["Open the legs slightly."]).chat(proj, prov, model, *a, **k)
+        self.lab.chat = chat
+        code, r, _ = self.req("/api/agent/rephrase", {"project": "scratch", "provider": "openrouter", "model": "⏳", "text": "legs apart"})
+        self.assertEqual(code, 200, r)
+        self.assertTrue(r["ok"], r)
+        self.assertNotIn("⏳", [m for _, m in seen])
+
+    def test_picture_rephrase_tries_the_uncensored_writer_first_and_skips_refusals(self):
+        seen = []
+        def chat(proj, prov, model, *a, **k):
+            seen.append((prov, model))
+            text = "Sorry, I can't help with that." if len(seen) == 1 else "Stand with the legs slightly apart."
+            return Brain([text]).chat(proj, prov, model, *a, **k)
+        self.lab.chat = chat
+        self.lab.providers = {"venice": 1, "openrouter": 1, "ollama": 1}
+        code, r, _ = self.req("/api/agent/rephrase", {"project": "scratch", "provider": "openrouter", "model": "x/y",
+                                                      "text": "legs slightly apart", "picture": True})
+        self.assertEqual(code, 200, r)
+        self.assertEqual(seen[0], ("venice", "venice-uncensored-1-2"))
+        self.assertEqual(r["text"], "Stand with the legs slightly apart.")
 
     def test_prompt_send_keeps_the_chips(self):
         self.lab.chat = Brain([act(action="done", summary="ok")]).chat

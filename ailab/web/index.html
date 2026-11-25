@@ -1172,7 +1172,7 @@ function changeBox(pid, run, startWith, pm) {
   const help = h("button", { class: "btn", type: "button", title: "Type a few rough words — the writer model makes them clear, you check them before anything runs", onclick: async () => {
     const t = ta.value.trim(); if (!t) { note.textContent = "✏️ Type a few rough words first — I'll make them clear."; ta.focus(); return; }
     help.disabled = true; note.textContent = "🪄 Writing it clearly…";
-    const r = await api("/api/agent/rephrase", { project: pid, text: t, provider: pm.prov, model: pm.model, made: (run.made || []).map(m => m.path) });
+    const r = await api("/api/agent/rephrase", { project: pid, text: t, provider: pm.prov, model: pm.model === "⏳" ? "" : pm.model, picture: !!run.picture, made: (run.made || []).map(m => m.path) });
     help.disabled = false;
     if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't help just now — your own words work too."}`; return; }
     ta.value = r.text; note.textContent = `🪄 Here it is ($${(r.usd || 0).toFixed(4)}) — change anything you like, then ▶ Make this change.`; ta.focus(); } }, "🪄 Help me say it");
