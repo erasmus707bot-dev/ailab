@@ -27,6 +27,12 @@ COUNT = re.compile(rf"\b({_NUM})\s+((?:[a-z'-]+\s+){{0,2}}?[a-z'-]+?s)\b", re.I)
 LAB_LINE = re.compile(r"^(Style|Shape|Look|Change|Variation):\s*(.*)$", re.M)
 NO_TEXT_Q = "Is there any written text, caption, logo or watermark anywhere on the picture?"
 NO_TEXT_WHAT = "no writing on the art"
+# a camera MOVE can't be seen in one still or one frame — live 2026-11-25 a story shot was marked "missing: slow push-in,
+# tracking shot". Framing (close-up, wide, from above) is visible and stays.
+CAMERA_MOVE = re.compile(r"\b(?:(?:very |slow(?:ly)? |quick(?:ly)? |fast |gentle |smooth )?(?:push[- ]?in|pull[- ]?(?:out|back)|"
+                         r"dolly(?:[- ](?:in|out|zoom))?|zoom(?:s|ing)?(?:[- ](?:in|out))?|pan(?:s|ning)?(?: (?:left|right|across|over))?|"
+                         r"tilt(?:s|ing)?(?: (?:up|down))?|tracking(?: shot)?|track(?:s)? (?:alongside|with|behind)|crane(?: shot| up| down)?|"
+                         r"orbit(?:s|ing)?(?: shot)?|handheld(?: shot)?|whip[- ]pan|rack focus|slow[- ]motion)\b)(?: (?:camera|shot|move|movement))?", re.I)
 # what fix_words() writes into a Change: line — those parts restate his own words, so they never become new points
 OWN_FIX = re.compile(r"(?:there must be [^;]*?— count them|clearly show [^;]+|give it the [^;]+ look|"
                      r"no written text, captions, logos or watermarks anywhere)\s*;?\s*", re.I)
@@ -54,6 +60,9 @@ def _clauses(text: str) -> list[str]:
     out = []
     for p in parts:
         p = re.sub(r"[*`#\"]+", "", p).strip(" -–—:")
+        p = re.sub(r"\s{2,}", " ", CAMERA_MOVE.sub("", p)).strip(" ,-–—:")
+        if re.fullmatch(r"(?:camera|shot|the camera|a shot)?", p, re.I):
+            continue
         if len(p) >= 4 and p.lower() not in {x.lower() for x in out}:
             out.append(p)
     return out

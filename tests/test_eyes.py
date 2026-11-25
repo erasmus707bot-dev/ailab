@@ -214,3 +214,12 @@ def test_a_fixed_task_is_checked_against_his_words_once():
     own = eyes.points("a fox\nChange: at dawn; there must be exactly 2 foxes — count them; give it the Anime look")
     assert [p["what"] for p in own] == ["a fox", "at dawn", "no writing on the art"]   # his own change still counts
     assert [p["what"] for p in eyes.points("a fox, a fox")].count("a fox") == 1
+
+
+def test_camera_moves_are_not_graded_but_framing_is():
+    """Live 2026-11-25: a story still was marked "missing: slow push-in, tracking shot" — a still can't show a move."""
+    whats = [p["what"] for p in eyes.points("Aria races down a wet street, close-up from the side, tracking shot, slow push-in")]
+    assert whats == ["Aria races down a wet street", "close-up from the side", "no writing on the art"]
+    assert [p["what"] for p in eyes.points("a fox, camera pans left")] == ["a fox", "no writing on the art"]
+    assert "wide shot" in [p["what"] for p in eyes.points("a fox, wide shot")]
+    assert "a panda eating bamboo" in [p["what"] for p in eyes.points("a panda eating bamboo")]   # "pan" inside a word stays
