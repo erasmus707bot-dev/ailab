@@ -72,6 +72,10 @@ def _clauses(text: str) -> list[str]:
     return out
 
 
+# live 2026-11-25: "a picture of three red apples" left "a picture of" as its own 👁 point (never answered)
+FRAME_WORDS = re.compile(r"^(?:make |draw |paint )?(?:an? |the )?(?:picture|photo|image|painting|drawing|illustration) of\s*$", re.I)
+
+
 def points(task: str, look: list[str] | None = None, moving: bool = False) -> list[dict]:
     """His words as yes/no points: [{"q", "want", "what", "kind"}]. kind: show | count | look | notext."""
     own, lines = split_task(task)
@@ -85,7 +89,7 @@ def points(task: str, look: list[str] | None = None, moving: bool = False) -> li
             noun = m.group(2).strip()
             pts.append({"q": f"Are there exactly {n} {noun} in the picture? Count them.", "want": True,
                         "what": f"exactly {n} {noun}", "kind": "count"})
-            rest = (c[:m.start()] + c[m.end():]).strip(" ,")
+            rest = FRAME_WORDS.sub("", (c[:m.start()] + c[m.end():]).strip(" ,")).strip(" ,")
             if len(rest.split()) >= 3:
                 pts.append({"q": f"Does the picture show this: {rest}?", "want": True, "what": rest, "kind": "show"})
         else:

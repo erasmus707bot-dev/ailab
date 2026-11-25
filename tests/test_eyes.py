@@ -223,3 +223,10 @@ def test_camera_moves_are_not_graded_but_framing_is():
     assert [p["what"] for p in eyes.points("a fox, camera pans left")] == ["a fox", "no writing on the art"]
     assert "wide shot" in [p["what"] for p in eyes.points("a fox, wide shot")]
     assert "a panda eating bamboo" in [p["what"] for p in eyes.points("a panda eating bamboo")]   # "pan" inside a word stays
+
+
+def test_picture_of_frame_words_are_not_a_point():
+    """Live 2026-11-25: 'a picture of three red apples' left 'a picture of' as a 👁 point."""
+    pts = eyes.points("a picture of three red apples and two green pears on a wooden table, a blue jug behind them")
+    whats = [p["what"] for p in pts]
+    assert "a picture of" not in whats and "exactly 3 red apples" in whats and "exactly 2 green pears" in whats
