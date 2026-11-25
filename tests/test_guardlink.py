@@ -101,6 +101,37 @@ class GuardedApply(unittest.TestCase):
         self.assertEqual(self.restarts, ["ailab"])
         self.assertEqual(agent.approvals("applied")[0]["backup"], "guard:ailab:20261124-120000-000")
 
+    def test_two_programs_all_proved_first_and_the_lab_restarts_last(self):
+        """2026-11-25: 'Apply all' on a Lab + Hermes pair — the Lab's own restart must not cut the Hermes half off."""
+        other = self.home / "hermescode"
+        (other / "web").mkdir(parents=True)
+        (other / "web" / "page.html").write_text("<p>old</p>\n")
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        (self.home / "cfg" / "config.json").write_text(json.dumps(
+            {"guarded": {"ailab": str(self.prog), "hermes": str(other)}, "guard_url": self.guard.url}))
+        lab = self.hold("ailab/thing.py", "X = 2\n")                       # the Lab row comes first, as it did live
+        item = agent.hold_for_approval("p1", "r1", str(other / "web" / "page.html"), "<p>new</p>\n")
+        her = next(r for r in review.held() if r["id"] == item["id"])
+        self.assertEqual(her["guarded"], "hermes")
+        delays = {}
+        self.rl.stop()
+        self.rl = mock.patch.object(guardlink, "restart_later",
+                                    lambda cfg, name, delay=1.5: (self.restarts.append(name), delays.update({name: delay})))
+        self.rl.start()
+
+        def runner(root, cmd):                                              # every proof runs before ANY real write
+            self.assertEqual((self.prog / "ailab" / "thing.py").read_text(), "X = 1\n")
+            self.assertEqual((other / "web" / "page.html").read_text(), "<p>old</p>\n")
+            self.assertEqual(self.restarts, [])
+            return {"exit": 0, "output": ""}
+        r = review.apply_group([{"id": lab["id"], "sha": lab["sha"]}, {"id": her["id"], "sha": her["sha"]}], "apply", runner=runner)
+        self.assertEqual(sorted(r["guarded"]), ["ailab", "hermes"])
+        self.assertEqual((self.prog / "ailab" / "thing.py").read_text(), "X = 2\n")
+        self.assertEqual((other / "web" / "page.html").read_text(), "<p>new</p>\n")
+        self.assertEqual(self.restarts, ["hermes", "ailab"])                # the Lab itself last…
+        self.assertGreater(delays["ailab"], delays["hermes"])               # …and later, so the reply gets out
+        self.assertEqual(len(agent.approvals("applied")), 2)
+
     def test_guard_down_writes_nothing(self):
         row = self.hold("ailab/thing.py", "X = 2\n")
         self.guard.fail.add("/api/snap")

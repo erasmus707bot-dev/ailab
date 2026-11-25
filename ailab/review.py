@@ -227,7 +227,7 @@ def apply(aid: str, sha: str, confirm: str) -> dict:
 
 
 def apply_group(picks: list[dict], confirm: str, runner=None) -> dict:
-    """🛡 Apply changes to the Lab or Hermes together: prove → Guard copy → watch → write → restart (guardlink)."""
+    """🛡 Apply changes to the Lab or Hermes together: prove all → Guard copy → watch → write → restart last (guardlink)."""
     if str(confirm or "").strip().lower() != APPLY_WORD:
         raise ReviewError(f'Type "{APPLY_WORD}" to write the files.', "confirm", "✋")
     cfg = config.load()
@@ -250,46 +250,54 @@ def apply_group(picks: list[dict], confirm: str, runner=None) -> dict:
         name, root = g
         grp = groups.setdefault(name, {"root": root, "items": []})
         grp["items"].append({"id": aid, "target": t, "rel": str(t.relative_to(root)), "text": text})
-    done = []
-    for name, grp in groups.items():
-        changes = {x["rel"]: x["text"] for x in grp["items"]}
+    done, restarts = [], []
+    for name, grp in groups.items():            # 1) prove EVERY program first — nothing is written until all pass
+        grp["changes"] = {x["rel"]: x["text"] for x in grp["items"]}
         try:
-            checks = guardlink.prove(cfg, name, grp["root"], changes, runner=runner)
+            grp["checks"] = guardlink.prove(cfg, name, grp["root"], grp["changes"], runner=runner)
         except guardlink.ProofFailed as e:
             raise ReviewError(f"🧪 Not written — {e}", "proof", "🧪") from e
         except Exception as e:  # noqa: BLE001 — e.g. no sandbox: new code never runs unsandboxed
             raise ReviewError(f"🧪 The tests couldn't run ({e}) — not written.", "proof", "🧪") from e
-        why = f"before a Lab change: {', '.join(sorted(changes))[:200]}"
-        try:
-            sid = guardlink.snap(cfg, name, why)
-            guardlink.watch(cfg, name, sid, why)
-        except guardlink.GuardDown as e:
-            raise ReviewError(str(e), "guard_down", "🛡") from e
-        written = []
-        try:
-            for x in grp["items"]:
-                t = x["target"]
-                t.parent.mkdir(parents=True, exist_ok=True)
-                tmp = t.with_name(f".{t.name}.ailab-{x['id']}")
-                tmp.write_text(x["text"])
-                os.replace(tmp, t)
-                if t.read_text() != x["text"]:
-                    raise OSError(f"{t.name} doesn't read back the same")
-                written.append(x)
-        except OSError as e:
+    try:
+        for name, grp in groups.items():        # 2) Guard copy → watch → write, one program at a time
+            changes, checks = grp["changes"], grp["checks"]
+            why = f"before a Lab change: {', '.join(sorted(changes))[:200]}"
             try:
-                guardlink.restore(cfg, name, sid)
-                why2 = "the Guard put everything back"
-            except guardlink.GuardDown:
-                why2 = "and the Guard couldn't put it back — open 🛟"
-            raise ReviewError(f"Writing stopped half-way ({e}); {why2}.", "write", "⚠️") from e
-        for x in written:
-            agent.set_approval_state(x["id"], "applied", target=str(x["target"]), backup=f"guard:{name}:{sid}")
-        guardlink.restart_later(cfg, name)
-        done.append({"program": name, "files": [x["rel"] for x in written], "guard_copy": sid, "checks": checks,
-                     "watching_minutes": cfg.get("guard_watch_minutes") or 5})
-    for pk in plain:
-        done.append({"program": "", **apply(str(pk["id"]), str(pk["sha"]), confirm)})
+                sid = guardlink.snap(cfg, name, why)
+                guardlink.watch(cfg, name, sid, why)
+            except guardlink.GuardDown as e:
+                raise ReviewError(str(e), "guard_down", "🛡") from e
+            written = []
+            try:
+                for x in grp["items"]:
+                    t = x["target"]
+                    t.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = t.with_name(f".{t.name}.ailab-{x['id']}")
+                    tmp.write_text(x["text"])
+                    os.replace(tmp, t)
+                    if t.read_text() != x["text"]:
+                        raise OSError(f"{t.name} doesn't read back the same")
+                    written.append(x)
+            except OSError as e:
+                try:
+                    guardlink.restore(cfg, name, sid)
+                    why2 = "the Guard put everything back"
+                except guardlink.GuardDown:
+                    why2 = "and the Guard couldn't put it back — open 🛟"
+                raise ReviewError(f"Writing stopped half-way ({e}); {why2}.", "write", "⚠️") from e
+            for x in written:
+                agent.set_approval_state(x["id"], "applied", target=str(x["target"]), backup=f"guard:{name}:{sid}")
+            restarts.append(name)
+            done.append({"program": name, "files": [x["rel"] for x in written], "guard_copy": sid, "checks": checks,
+                         "watching_minutes": cfg.get("guard_watch_minutes") or 5})
+        for pk in plain:
+            done.append({"program": "", **apply(str(pk["id"]), str(pk["sha"]), confirm)})
+    finally:
+        # 3) restarts only after every write, the Lab itself last and a little later (2026-11-25: the Lab used to
+        #    restart 1.5 s after ITS write, which killed the Hermes half of an "Apply all" and cut the reply off)
+        for name in sorted(restarts, key=lambda n: n == "ailab"):
+            guardlink.restart_later(cfg, name, delay=4.0 if name == "ailab" else 0.5)
     return {"ok": True, "state": "applied", "done": done,
             "guarded": [d["program"] for d in done if d.get("program")]}
 
