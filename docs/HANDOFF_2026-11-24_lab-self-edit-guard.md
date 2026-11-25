@@ -144,6 +144,12 @@ Both made by the Lab (deepseek-v4.1-flash, Scratch), diffs read, **not applied �
 
 **Left:** confirm "🔧 Show the code" by touch once the top bar fits the phone · Iris rebuild + 🛟 tile touch test · pushes (Scott) · Guard improvement worth considering: restore only the files a change touched, not the whole tree.
 
+## Session 7 — 2026-11-25 10:10 (Scott: "things i need to click on will glow and pulse") — ailab `d2055d6`
+- `.yours` gold outline + pulse (steady under reduced motion). Auto: ✋ chip, the AI's question/plan button, a waiting row's "type apply" box → ✅ Apply once it says apply.
+- Deep links: `https://gandalf-nuc11phi7.tail5f20a0.ts.net:8850/#yours=reject:<id>` (or `apply:<id>`, `held`) → opens the row's project past 🚪, opens ✋, glows + scrolls to the button. Checked in desktop Chrome: ✗ Reject glows and is on screen.
+- Fixed on the way: a `#yours=` link in an open Lab tab was taken as Back and left for Hermes (`popstate`).
+- Not done: Argus touch check; same glow in Hermes / Iris / 🛟 page.
+
 No night tail: M4 needs the guard installed + `check` all ✅ first.
 
 **Continue phrase:** `continue AI Lab self-edit guard from the 2026-11-24 handoff`
