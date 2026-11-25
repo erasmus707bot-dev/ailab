@@ -334,21 +334,39 @@ WRITING_PT = {"q": "Look closely at every sign, shop front, wall, the ground, ve
               "what": "no letters or words anywhere (signs, ground, walls)", "kind": "notext"}
 
 
-def writing_check(run, raw: bytes, e: dict, task: str, k: int) -> dict:
+def onlooker_pt(shot: dict, b: dict, cast: dict[str, dict]) -> dict | None:
+    """👁 the shot's cast as (hair, outfit) → a 'nobody else copies them' point (R4 live: a spectator wore Dina's look)."""
+    from . import eyes
+    ppl = []
+    for w in shot.get("who") or []:
+        c = cast.get(str(w).lower())
+        p = next((p for p in b.get("people", []) if p["name"].lower() == str(w).lower()), None)
+        look = ((c or {}).get("brief", "") or (p or {}).get("who", "")).split(": ", 1)[-1]
+        hair = re.search(r"([a-z-]+(?: [a-z-]+)?) hair\b", look)
+        outfit = re.search(r"wearing an? (.+?) outfit", look) or re.search(r"wearing (.+?)(?:,\s*with\b|$)", look)   # 👕 wardrobe form
+        if hair and outfit:
+            ppl.append((hair.group(1), outfit.group(1)))
+    return eyes.onlooker_point(ppl, len(shot.get("who") or []) or None)
+
+
+def writing_check(run, raw: bytes, e: dict, task: str, k: int, extra: list[dict] | None = None) -> dict:
     """👁 a second, closer look for writing (live 2026-11-25: painted letters on the ground and sign text slipped past the
     one-line no-text point). Writing found → it counts as a miss and the $0 remake gets the fix — and the remake keeps the
     shot's real words + looks (the first fix was built from the name-free 👁 words)."""
     from . import eyes
     if e.get("error"):
         return e
-    w = eyes.ask(run, raw, [WRITING_PT], f"shot {k + 1} — any writing?")
+    pts = [WRITING_PT] + [x for x in extra or [] if x]           # one look, $0: writing + 🧍 onlooker copies
+    w = eyes.ask(run, raw, pts, f"shot {k + 1} — any writing?" + (" any look-alikes?" if len(pts) > 1 else ""))
     rows = list(e.get("points") or [])
-    if not w.get("error") and w.get("points") and w["points"][0].get("ok") is False:
-        rows.append(w["points"][0])
-        run._record({"action": "eyes", "why": f"👁 shot {k + 1}: writing found — {WRITING_PT['what']} is missing",
-                     "result": {"caption": w.get("caption", "")[:200]}, "usd": 0.0})
-        e = {**e, "missing": list(e.get("missing") or []) + [WRITING_PT["what"]], "low": True,
-             "score": round(100 * sum(1 for r in rows if r.get("ok")) / max(1, sum(1 for r in rows if r.get("ok") is not None)))}
+    for r in ([] if w.get("error") else w.get("points") or []):
+        if r.get("ok") is not False:
+            continue
+        rows.append(r)
+        run._record({"action": "eyes", "why": f"👁 shot {k + 1}: {'writing found' if r.get('kind') == 'notext' else 'an onlooker copies a cast look'}"
+                     f" — {r['what']} is missing", "result": {"caption": w.get("caption", "")[:200]}, "usd": 0.0})
+        e = {**e, "missing": list(e.get("missing") or []) + [r["what"]], "low": True,
+             "score": round(100 * sum(1 for x in rows if x.get("ok")) / max(1, sum(1 for x in rows if x.get("ok") is not None)))}
     e["fix_task"] = eyes.fix_task(task, rows)
     e["fix"] = eyes.fix_words(rows)
     return e
@@ -618,7 +636,7 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                                label=f"shot {s['k'] + 1}")          # 👁 grades what a picture can show, not the bracketed looks
                 eyes.record(run, f"shot {s['k'] + 1}", e)
                 picture._craft_seen(run, "story", e, shot_prompt(s, bib, cast, looks=False))
-                e = writing_check(run, (root / pic["path"]).read_bytes(), e, task, s["k"])
+                e = writing_check(run, (root / pic["path"]).read_bytes(), e, task, s["k"], [onlooker_pt(s, bib, cast)])
                 s["eyes"] = {x: e.get(x) for x in ("score", "missing", "error") if e.get(x) is not None}
                 if e.get("low") and e.get("fix_task") and tries < retries and not float(pic.get("usd") or 0):
                     tries += 1

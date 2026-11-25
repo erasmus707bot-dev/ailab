@@ -117,9 +117,24 @@ def fix_words(rows: list[dict]) -> str:
         if r.get("ok") is not False:
             continue
         w = r["what"]
-        out.append({"count": f"there must be {w} — count them", "look": f"give it {w}",
+        out.append({"count": f"there must be {w} — count them", "look": f"give it {w}", "onlooker": w,
                     "notext": "no written text, captions, logos or watermarks anywhere"}.get(r["kind"], f"clearly show {w}"))
     return "; ".join(out)
+
+
+def onlooker_point(people: list[tuple[str, str]], n: int | None = None) -> dict | None:
+    """👁 R4 live 2026-11-25: the standing spectator came out as a copy of a cast member (same grey hair, same red outfit) and
+    nothing caught it — the count point allows onlookers. people = [(hair, outfit)] of the cast in this shot. Want: no."""
+    looks = [(h.strip(), o.strip()) for h, o in people if h and o][:3]
+    if not looks:
+        return None
+    n = n or len(looks)
+    who = "person" if n == 1 else f"{n} people"
+    each = " or ".join(f"{h} hair and {o} clothes" for h, o in looks)
+    return {"q": f"Apart from the main {who} in the action, is there anyone else in the picture (someone watching, standing or in the "
+                 f"background) who has the same hair and clothes as a main person ({each})?", "want": False,
+            "what": "anyone else in the picture (onlookers, background people) wears plain dark clothes and has different hair "
+                    "from the main people", "kind": "onlooker"}
 
 
 def fix_task(task: str, rows: list[dict]) -> str:

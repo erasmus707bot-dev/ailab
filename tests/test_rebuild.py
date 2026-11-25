@@ -56,13 +56,36 @@ class Pure(Base):
     def test_identity_points_and_failures(self):
         pts = rebuild.identity_points([MARA, JUN])
         kinds = [p["kind"] for p in pts]
-        self.assertEqual(kinds, ["count", "identity", "identity", "swap", "limbs"])
+        self.assertEqual(kinds, ["count", "identity", "identity", "swap", "limbs", "onlooker"])
         self.assertIn("exactly 2 main people", pts[0]["q"])
         self.assertIn("watching in the background", pts[0]["q"])
         self.assertFalse(pts[3]["want"] or pts[4]["want"])
         rows = [{"kind": "count", "ok": True, "what": "2"}, {"kind": "swap", "ok": False, "what": "no swap"},
                 {"kind": "show", "ok": False, "what": "table"}, {"kind": "limbs", "ok": None, "what": "limbs"}]
         self.assertEqual(rebuild.identity_failed(rows), ["no swap"])
+
+    def test_onlooker_copy_is_an_identity_miss_with_a_fix(self):
+        """R4 shot 7: the standing spectator wore Dina's grey hair + red outfit; the count point allowed it."""
+        from ailab import eyes
+        onl = rebuild.identity_points([MARA, JUN])[-1]
+        self.assertFalse(onl["want"])
+        self.assertIn("copper red hair and forest green clothes", onl["q"])
+        self.assertIn("jet black hair and mustard yellow clothes", onl["q"])
+        self.assertIn("main 2 people", onl["q"])
+        row = {**onl, "ok": False}
+        self.assertEqual(rebuild.identity_failed([row]), [onl["what"]])
+        self.assertIn("plain dark clothes", eyes.fix_words([row]))
+        self.assertNotIn("clearly show", eyes.fix_words([row]))
+        self.assertIsNone(eyes.onlooker_point([("", "red")]))
+        self.assertEqual(rebuild.identity_points([{"name": "X"}]), [rebuild.identity_points([{"name": "X"}])[0]])
+
+    def test_story_shot_gets_the_onlooker_point(self):
+        from ailab import story
+        cast_ = {"aria": {"name": "Aria", "brief": "Aria: a woman with copper red hair wearing a royal blue outfit"}}
+        pt = story.onlooker_pt({"who": ["Aria"]}, {"people": []}, cast_)
+        self.assertIn("copper red hair and royal blue clothes", pt["q"])
+        self.assertIn("main person", pt["q"])
+        self.assertIsNone(story.onlooker_pt({"who": ["Aria"]}, {"people": []}, {"aria": {"name": "Aria", "brief": "tall"}}))
 
     def test_cast_for_maps_letters(self):
         b = rebuild.beats(SCENES)[0]
@@ -113,7 +136,7 @@ class RbMCP(RefMCP):
             ans = []
             for i, q in enumerate(self.points):
                 yes = True
-                if "merged" in q or "AND wear" in q or "written text" in q:
+                if "merged" in q or "AND wear" in q or "written text" in q or "anyone else" in q:
                     yes = not self.identity_ok if "AND wear" in q else False
                 ans.append({"n": i + 1, "q": q, "yes": yes})
             return {"state": "done", "finished": True, "result": {"caption": "two people", "answers": ans}}

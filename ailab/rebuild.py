@@ -143,7 +143,8 @@ def words_for(beat: dict, cast: list[dict]) -> str:
 
 
 def identity_points(people: list[dict]) -> list[dict]:
-    """👁 multi-character identity: count, each person's own hair + outfit, no swapped traits, no merged limbs."""
+    """👁 multi-character identity: count, each person's own hair + outfit, no swapped traits, no merged limbs, no onlooker copies."""
+    from . import eyes
     pts = []
     if people:
         n = len(people)
@@ -162,7 +163,9 @@ def identity_points(people: list[dict]) -> list[dict]:
                         "what": f"no swap ({people[0]['name']}'s hair with {people[1]['name']}'s clothes)", "kind": "swap"})
         pts.append({"q": "Are any arms, legs or bodies merged or fused together in an impossible way?", "want": False,
                     "what": "no merged limbs", "kind": "limbs"})
-    return pts
+    onl = eyes.onlooker_point([((c.get("traits") or {}).get("hair_colour", ""), (c.get("traits") or {}).get("outfit_colour", ""))
+                               for c in people], len(people))          # R4 shot 7: the spectator copied Dina
+    return pts + ([onl] if onl else [])
 
 
 def check_points(beat: dict, cast: list[dict]) -> list[dict]:
@@ -176,7 +179,7 @@ def check_points(beat: dict, cast: list[dict]) -> list[dict]:
 
 
 def identity_failed(rows: list[dict]) -> list[str]:
-    return [r["what"] for r in rows or [] if r.get("kind") in ("count", "identity", "swap", "limbs") and r.get("ok") is False]
+    return [r["what"] for r in rows or [] if r.get("kind") in ("count", "identity", "swap", "limbs", "onlooker") and r.get("ok") is False]
 
 
 def table(bs: list[dict]) -> list[dict]:
