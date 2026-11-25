@@ -54,9 +54,16 @@ def items_from(questions: list, why: str = "the usual pick") -> list[dict]:
     return out
 
 
-def write(run, system: str, user: str, max_tokens: int, label: str, task: str) -> tuple[str, str]:
-    """(text, writer). Uncensored writers first, then the run's model; refusals and failures skipped. ('', why) if none."""
+CRAFT_KIND = {"lab-video": "video", "lab-motion": "motion", "lab-doc": "doc"}       # story opts in per call (shot lists only)
+
+
+def write(run, system: str, user: str, max_tokens: int, label: str, task: str, craft: str | None = None) -> tuple[str, str]:
+    """(text, writer). Uncensored writers first, then the run's model; refusals and failures skipped. ('', why) if none.
+    📓 craft = which Craft Book notes ride along ("" = none; default: by task — video, motion, doc)."""
     why = "no writer answered"
+    kind = CRAFT_KIND.get(task, "") if craft is None else craft
+    if kind:
+        system += picture._craft_note(run, kind, user)
     for prov, model in picture.writers(run):
         try:
             picture.stage(run, "✍️", f"{label} with {short(model)}")

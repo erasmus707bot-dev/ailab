@@ -48,4 +48,10 @@ Full preamble, rationale and the deployment model: `~/hermes/prompts/HERMES_SESS
 <!-- HERMES_BLOCK_END -->
 <!-- HERMES_BLOCK_END -->
 
+## 📓 Craft tail — every session teaches the Lab (Scott 2026-11-25)
 
+Learned something about making pictures / clips / stories / builds come out right? End the handoff with a fenced
+`craft` block (`kind:` · `when:` · `do:` · `why:` with the evidence). The Lab files it as a proposed Craft Book note.
+Format: `~/hermes/prompts/HERMES_SESSION_INIT.md` § Craft tail · code `ailab/craft.py`. A fix made in code still gets
+its note when a writer model or a later build needs to know it. New maker (anything that writes a prompt)? Route its
+writer through `makers.write(..., craft="<kind>")` and send its 👁 result to `picture._craft_seen`.

@@ -377,6 +377,7 @@ def run(run) -> None:
     if eyes.on(run):                                             # 👁 M1: one frame from the middle, checked against his words
         seen = eyes.check(run, eyes.frame(dst), words, moving=True, label="a frame of the video")
         eyes.record(run, "video", seen)
+        picture._craft_seen(run, "video", seen, words)
     _done(run, {"path": rel, **({"eyes": seen} if seen else {}), "model": out.get("model", ""), "usd": round(usd, 4), "seconds": int(out.get("seconds") or 0),
                 "duration": out.get("duration", f"{secs}s"), "media_item": out.get("media_item", ""), "prompt": prompt,
                 "from_picture": pic.name if pic else ""},

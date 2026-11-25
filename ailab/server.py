@@ -67,7 +67,7 @@ PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'sel
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
 PROVIDER_ICONS = {"ollama": "🏠", "openrouter": "🌐", "claude": "✳️", "hf": "🤗", "qwen": "🐉", "kimi": "🌙", "gemini": "💎"}
 OFF = {"router": "💬 Ask models", "preview": "👁 Live preview", "agent": "🤖 Agent", "compare": "⚖️ Compare models",
-       "live": "🪞 Show & change", "memory": "🧠 Memory", "prompt": "📝 Prompt builder"}
+       "live": "🪞 Show & change", "memory": "🧠 Memory", "prompt": "📝 Prompt builder", "craft": "📓 Craft Book"}
 # Static comparison page: our own escaped HTML; only an inline theme-toggle script, images inline.
 PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; "
             "frame-ancestors 'self'; form-action 'none'")
@@ -215,6 +215,38 @@ class App:
         r = self.lab.list_models(name, {})
         n = len(r.get("models") or [])
         return 200, {"ok": True, "provider": name, "models": n, "source": r.get("source")}
+
+    # ---- 📓 Craft Book (flag `craft`, 2026-11-25): what makes the work come out right, learned from results ----
+    def craft_get(self, q: dict) -> tuple[int, dict]:
+        from . import craft
+        if not self.cfg["flags"].get("craft"):
+            return _off("craft")
+        if (q.get("review") or [""])[0]:
+            return 200, {"ok": True, "md": craft.review_md()}
+        return 200, {"ok": True, **craft.view(), "settings": craft.settings(self.cfg)}
+
+    def craft_post(self, op: str, b: dict) -> tuple[int, dict]:
+        from . import craft
+        if not self.cfg["flags"].get("craft"):
+            return _off("craft")
+        ids = [str(x) for x in (b.get("ids") or [])][:400]
+        if op in ("live", "retired", "proposed"):
+            return 200, {"ok": True, **craft.set_status(ids, op), **craft.view()}
+        if op == "add":                                   # typed by Scott → his own note, live at once
+            r = craft.add({k: b.get(k) for k in ("kind", "when", "do", "why")}, "scott", "live")
+            return 200, {"ok": bool(r.get("note")), **r, **craft.view()}
+        if op == "edit":
+            r = craft.edit(str(b.get("id") or ""), str(b.get("do") or ""), b.get("when"), str(b.get("why") or ""))
+            return 200, {"ok": bool(r.get("saved")), **r, **craft.view()}
+        if op == "undo":
+            return 200, {"ok": True, **craft.undo_last(), **craft.view()}
+        if op == "seed":
+            return 200, {"ok": True, "report": craft.seed(), **craft.view()}
+        if op == "handoffs":
+            return 200, {"ok": True, "report": craft.import_handoffs(), **craft.view()}
+        if op == "review":
+            return 200, {"ok": True, "report": craft.apply_review(str(b.get("text") or "")[:400_000]), **craft.view()}
+        return 404, {"ok": False, "code": "not_found"}
 
     # ---- 🧠 memory (flag `memory`, 2026-11-24 M1) ----
     def memory_get(self, q: dict) -> tuple[int, dict]:
@@ -583,7 +615,9 @@ class App:
         try:
             r = self._shelf_run(b)
             from . import styles
-            return 200, {"ok": True, "item": shelf.keep(r.root, r.id, r.task, r.made_view(), self._seen(r), styles.facts(r))}
+            item = shelf.keep(r.root, r.id, r.task, r.made_view(), self._seen(r), styles.facts(r))
+            self._craft_verdict(r.id, True)
+            return 200, {"ok": True, "item": item}
         except (ValueError, KeyError) as e:
             return 200, {"ok": False, "code": "shelf", "icon": "🗄",
                          "message": "Can't find that run — it may be from before a Lab restart." if isinstance(e, KeyError) else str(e)}
@@ -629,6 +663,7 @@ class App:
     def preview_save(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["preview"]:
             return _off("preview")
+            self._craft_verdict(r.id, False)
         return 200, preview.save_file(self._pid(b.get("project")), str(b.get("path") or ""), str(b.get("text") or ""))
 
     def preview_version(self, q: dict) -> tuple[int, dict]:
@@ -809,6 +844,12 @@ class App:
         """🪄 Help me say it: rough words → a clear change request Scott can edit before it runs."""
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
+    def _craft_verdict(self, run_id: str, keep: bool) -> None:
+        """📓 ✅ Keep / 🗑 Throw away counts on the craft notes that run used."""
+        if self.cfg["flags"].get("craft"):
+            from . import craft
+            craft.verdict(run_id, keep)
+
         improve = b.get("mode") == "prompt"
         text = str(b.get("text") or "").strip()[:4000 if improve else 1500]
         if not text:
@@ -1371,6 +1412,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.story_get, q)
             if u.path == "/api/motions":                   # 🏃 Motion Presets library (search, shelves)
                 return self._run(app.motions_get, q)
+            if u.path == "/craft":                         # 📓 Craft Book page (2026-11-25)
+                return self._send(200, (WEB / "craft.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/api/craft":
+                return self._run(app.craft_get, q)
             if u.path == "/api/motion/scene":              # 🏃 this project's timeline (rows, words, plan)
                 return self._run(app.motion_scene_get, q)
             if u.path == "/api/motion/file":               # 🏃 a preset's preview / frame / pose — only inside its folder
@@ -1521,6 +1566,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                                                "/api/motion/delete": "motion_delete"}[p]), b)
             if p in ("/api/styles/make", "/api/styles/choose", "/api/styles/answer"):
                 return self._run(getattr(app, "styles_" + p.rsplit("/", 1)[1]), b)
+            if p.startswith("/api/craft/"):
+                return self._run(app.craft_post, p[len("/api/craft/"):], b)
             if p == "/api/looks/save":
                 return self._run(lambda: (200, looks.save(b.get("name"), b.get("look") if isinstance(b.get("look"), list) else [])))
             if p == "/api/looks/delete":

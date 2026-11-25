@@ -135,6 +135,24 @@ def writers(run) -> list[tuple[str, str]]:
     return [w for w in out if w[0] in getattr(run.lab, "providers", {w[0]: 1})]
 
 
+def _craft_note(run, kind: str, words: str) -> str:
+    """📓 Craft Book: the fitting notes for the writer ('' when off or nothing fits). Never a blocker."""
+    try:
+        from . import craft
+        return craft.for_run(run, kind, words)
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
+def _craft_seen(run, kind: str, e: dict, words: str) -> None:
+    """📓 what 👁 saw goes back to the Craft Book (counts on the notes used; a measured need wakes its note)."""
+    try:
+        from . import craft
+        craft.observe(run, kind, e, words)
+    except Exception:                                            # noqa: BLE001
+        pass
+
+
 def _style_note(run) -> str:
     """🎨 R2: lessons of the project's official style (empty when none is chosen)."""
     try:
@@ -160,11 +178,12 @@ def write_prompt(run, words: str) -> str:
     """Scott's words stay exactly as typed; a writer model (uncensored first) only adds detail after them.
     Any writer that refuses or fails is skipped; with none left, his words alone make the picture."""
     mine, why = own_words(words), "no writer answered"
+    sys = PROMPT_SYS + _style_note(run) + _craft_note(run, "picture", words)
     for prov, model in writers(run):
         try:
             stage(run, "✍️", f"Adding detail to your words with {model.split('/')[-1]}")
             r = run.lab.chat(run.project, prov, model,
-                             [{"role": "system", "content": PROMPT_SYS + _style_note(run)}, {"role": "user", "content": words}], 300,
+                             [{"role": "system", "content": sys}, {"role": "user", "content": words}], 300,
                              cap_usd=max(0.0, run.cap_usd - run.usd), task=f"lab-picture:{run.project['id']}")
             run.usd += float(r.usd or 0)
             run.tokens_in += int(getattr(r, "tokens_in", 0) or 0)
@@ -433,6 +452,7 @@ def run(run) -> None:
     if eyes.on(run) and not getattr(run, "batch", None):     # 👁 M1: does it match his words? ($0, never fails the run)
         pic["eyes"] = eyes.check(run, p.read_bytes(), words, look, label="the picture")
         eyes.record(run, "picture", pic["eyes"])
+        _craft_seen(run, "picture", pic["eyes"], words)
     run.state = "done"
     run.why = (f"🖼 Picture made with {pic['model'].split('/')[-1]} in {pic['seconds']} s for ${usd:.3f}. "
                f"Saved in {rel}" + (" and in your Gallery (ai-lab)." if pic["library"] else ".") + f" {pic['keys']}")

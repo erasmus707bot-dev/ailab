@@ -311,7 +311,8 @@ def _hard(e) -> bool:
 
 def _write_json(run, sys: str, user: str, want, tokens: int, label: str):
     from . import makers
-    text, who = makers.write(run, sys, user, tokens, label, "lab-story")
+    shots = label.startswith(("Planning chapter", "Fixing the chapter"))      # 📓 craft notes ride only where shots are written
+    text, who = makers.write(run, sys, user, tokens, label, "lab-story", craft="story" if shots else "")
     return _json(text, want), text, who
 
 
@@ -470,6 +471,7 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                 e = eyes.check(run, (root / pic["path"]).read_bytes(), shot_prompt(s, bib, cast, looks=False), look,
                                label=f"shot {s['k'] + 1}")          # 👁 grades what a picture can show, not the bracketed looks
                 eyes.record(run, f"shot {s['k'] + 1}", e)
+                picture._craft_seen(run, "story", e, shot_prompt(s, bib, cast, looks=False))
                 s["eyes"] = {x: e.get(x) for x in ("score", "missing", "error") if e.get(x) is not None}
                 if e.get("low") and e.get("fix_task") and tries < retries and not float(pic.get("usd") or 0):
                     tries += 1

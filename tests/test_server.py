@@ -87,7 +87,7 @@ class RouterOff(Srv):
         code, s, _ = self.req("/api/state")
         self.assertEqual(code, 200)
         self.assertEqual(s["flags"], {"router": False, "preview": False, "agent": False, "compare": False, "live": False,
-                                      "memory": False, "prompt": False})
+                                      "memory": False, "prompt": False, "craft": False})
         self.assertEqual(s["spend"], {"today_usd": 0.25, "cap_usd": 2.0})
         self.assertEqual(s["projects"][0]["id"], "scratch")
         self.assertIn("ollama", [p["id"] for p in s["providers"]])

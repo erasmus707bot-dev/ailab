@@ -363,6 +363,15 @@ def for_context(project: str = "", ask: str = "", budget_chars: int = 6000) -> t
     if fit and size < budget_chars + 1500:                                   # not only by their names
         out.append("## other lines that fit this task\n" + "\n".join(f"- {t} ({nm})" for nm, t in fit))
         used += sorted({nm for nm, _ in fit})
+    try:                                                  # 📓 Craft Book: build lessons that fit this task (2026-11-25)
+        from . import craft                               # noqa: PLC0415
+        rows = craft.pick("build", f"{project} {ask}", limit=4) if craft.settings(config.load()).get("on") else []
+        rows = [n for n in rows if n["when"]]
+        if rows:
+            out.append("## craft-book (lessons from earlier builds — follow them)\n" + "\n".join(f"- {n['do']}" for n in rows))
+            used.append("craft-book")
+    except Exception:                                     # noqa: BLE001 — craft never blocks memory
+        pass
     return ("What you know about Scott (from his Lab memory):\n" + "\n\n".join(out)) if out else "", used
 
 
