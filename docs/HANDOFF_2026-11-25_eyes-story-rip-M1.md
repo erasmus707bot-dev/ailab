@@ -55,3 +55,12 @@ A1 **confirmed by the pilot** (06:46). The model is one setting, no code edit to
 Starts with a `missing_nodes()` proof of `workflows.py:85 build_ref` on gandalf. Nothing touches real people.
 
 Continue phrase: `continue AI Lab eyes + story + rip from the 2026-11-25 build prompt`
+
+## Live check 2026-11-25 07:32–07:43 (Claude, Lab through the built-in browser, project image-testing)
+- ✅ "three foxes in the snow" → FLUX.2 Klein, 28 s, $0 → **👁 100% match**, look took 8 s. Checked by eye: 3 foxes, snow, no writing.
+- ✅ Miss caught: "seven foxes sitting in a row in the snow" → model drew **5** → **👁 67% match — missing: exactly 7 foxes**, caption "Five red foxes…". Card on screen: chip, missing line, 🔁 Fix and try again (primary, 50 px tall), text 23 px.
+- ✅ 🔁 pressed → new run with `Change: there must be exactly 7 foxes — count them`. 1st try: Hermes connection dropped mid-call (nothing charged). Retry: still **5 foxes, 60%** — FLUX.2 Klein can't draw 7 even when told; the eyes reported it honestly.
+- 🐛 → fixed: the fix's own Change line became extra points ("missing: exactly 7 foxes, exactly 7 foxes"). `eyes.points()` now drops what `fix_words()` wrote and de-duplicates. Test added (12 eyes tests; Lab suite 541 pass). **Live after a Lab restart.**
+- 🎨 fixed: "👁 What it saw" had lost its ▶ marker (summary was inline-flex). Live on page refresh.
+- ⚠️ ComfyUI went down between 07:38 and 07:43 (connection refused on 8188; it was up for the 07:38 picture). Cause unknown from this shell — check `journalctl --user -u hermes-comfy --since 07:35`.
+- ⚠️ With ComfyUI down, the pinned-reference test fell back to **venice/lustify-v8 without the reference, $0.01**. That fallback is the existing picture route; it means a 📌 reference silently stops working when the card is down. Reference test (M2 live step 3) still owed. Pin removed again; image-testing's cast strip is empty.

@@ -38,3 +38,10 @@ On gandalf:
 - Night tail: none (uncommitted base).
 
 Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 build prompt #2` (next = R1 global cast).
+
+## Live update 2026-11-25 07:28 (eyes session)
+- ✅ Probe ran **$0, all local**: `probe_identity --go --only local --anchor local --vision-model local --skip-meshy`. FLUX.2 Klein anchor + 4 shots (front · side · back · smile), ~30 s each, peak card 5.7 GB. Judge `qwen3.5:4b`: **95 / 95 / 95 / 95**.
+- ✅ Checked by eye (grid `~/hermes-data/assets/_probe/2026-11-25/local-flux2-klein-4b-grid.png`): same face, freckles, auburn hair, grey tee in all four. The identity holds.
+- ✅ **Armed by Scott:** `~/hermes-data/settings/image_ref_flags.json` = `{"local": true}`.
+- ⚠️ The 4b judge tops out at 95 and gave the same number four times — it confirms a match but **may not catch small drift**. Before trusting the 🎭 same-face line, test it once on a planted mismatch (two different people) and see it score low.
+- Next: `systemctl --user restart hermes-mcp && systemctl --user restart ailab`, then live step 3 above (pin a picture → 4 scenes → 🎭 Character sheet).
