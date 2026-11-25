@@ -27,3 +27,9 @@ Scott picked **1, 1** (asset-library brainstorm). Build prompt: Project `claude/
 Continue: `continue asset library build from the M0 handoff`
 
 No night tail: this build prompt is finished; asset M1 waits on the M0 live probe (it spends money).
+
+## PROVEN live 2026-11-25 11:45 (Lab already restarted by other sessions)
+- `/api/agent/live` answers 200 → new code is running.
+- **Long clip:** 30 s / 67.8 MB clip (`test/videos/longclip-check-30s.mp4`, 3× the 10 s waves clip, stream copy, $0) — 206 ranges, metadata loaded, seek to 28 s in 1.4 s, played; only 0–0.5 s and 20–30 s buffered (no whole-file load).
+- **Parallel:** two 🖼 runs started back-to-back in project `test` — both `running` together, both listed in `/api/agent/live`, both finished (local flux2-klein-4b, $0.000, 26 s / 46 s).
+- Still owed: 🏃 strip seen on screen + Argus touch test.
