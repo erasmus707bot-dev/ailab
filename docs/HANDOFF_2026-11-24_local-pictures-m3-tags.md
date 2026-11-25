@@ -18,6 +18,14 @@ Anime missed the prompt (closed umbrella, no rain, park bench). Scott 20:46 "1" 
 - Writer call cost not measured (shows in the run's cost line).
 - Still owed from M3: Argus touch check of ⚙️ "🖼 Pictures: which side first". Keep-model-loaded parked. Nothing pushed.
 
+## Proof result (21:07, 6/6 made, $0, checked by eye — one seed only)
+- **Illustrious:** sentence → open umbrella + sign but NO rain, stray second handle · rules tags → rain + sign, odd red shape behind her · writer-style tags → rain, puddles, two signs, city, full body. **Tags clearly best.**
+- **Pony:** sentence already had rain + open umbrella + sign; rules about the same; writer-style tags → full wet-street scene. **Small gain.**
+- Sentence did better here than in the M3 proof (closed umbrella) → part of that miss was seed luck.
+- "full body, city" tags made the girl small in frame — the tags steer framing, so the live writer's tag choice matters.
+- Real card time: 34–39 s per picture (5 s steps).
+- Still not verified: the live writer's own tags (🏷 line in the Lab).
+
 ## Gandalf
 1. `systemctl --user restart ailab`
 2. `bash ~/ailab/tools/m3_tag_proof.sh` (~4–5 min, $0) — then tell Claude it finished.
