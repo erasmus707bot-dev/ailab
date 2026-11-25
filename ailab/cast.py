@@ -165,7 +165,7 @@ def import_refs(mcp, root, project_id: str) -> dict:
     out = []
     for rel in rels:
         stem = re.sub(r"[^A-Za-z0-9]+", " ", Path(rel).stem).strip().title()[:30] or "Character"
-        r = mcp.call("cast_make", {"name": stem, "age": 18, "anchor_b64": base64.b64encode((Path(root) / rel).read_bytes()).decode(),
+        r = mcp.call("cast_make", {"name": stem, "age": 18, "anchor_b64": _b64(Path(root) / rel),
                                    "brief": f"Copied from 📌 references in project {project_id} ({rel}). Age: please check.",
                                    "project": project_id, "source": f"ailab refs:{project_id}/{rel}"})
         out.append({"id": r["id"], "name": r["name"], "from": rel})
@@ -188,6 +188,45 @@ def picture(path: str) -> tuple[bytes, str]:
     if not ct or len(rel) < 3 or not rel[0].startswith("c-") or rp.stat().st_size > 12 * 1024 * 1024:
         return b"", ""
     return rp.read_bytes(), ct
+
+
+SEND_PX = 1280                                     # long side of a picture sent to the cast store
+SEND_MAX = 9_000_000                               # Hermes refuses a call over 10 MB (live 2026-11-25: 6 full PNGs ≈ 24 MB → broken pipe)
+
+
+def small(raw: bytes) -> bytes:
+    """A picture shrunk for the cast store: JPEG, long side ≤ 1280 px (~300 KB). Unchanged if ffmpeg can't."""
+    import shutil
+    import subprocess
+    import tempfile
+    ff = shutil.which("ffmpeg")
+    if not ff or len(raw) < 400_000:
+        return raw
+    with tempfile.TemporaryDirectory() as d:
+        src, out = Path(d) / "in", Path(d) / "out.jpg"
+        src.write_bytes(raw)
+        vf = f"scale='if(gt(iw,ih),min({SEND_PX},iw),-2)':'if(gt(iw,ih),-2,min({SEND_PX},ih))'"
+        try:
+            subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(src), "-vf", vf, "-frames:v", "1", "-q:v", "3", str(out)],
+                           capture_output=True, timeout=40, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return raw
+        return out.read_bytes() if out.exists() and 1000 < out.stat().st_size < len(raw) else raw
+
+
+def _fit(xs: list[str], budget: int = SEND_MAX - 5_000_000) -> list[str]:
+    """Sheet views that fit beside the anchor in one call (the anchor is ≤ ~5 MB as base64 even unshrunk)."""
+    out, used = [], 0
+    for x in xs:
+        if used + len(x) > budget:
+            break
+        out.append(x)
+        used += len(x)
+    return out
+
+
+def _b64(path: Path) -> str:
+    return base64.b64encode(small(path.read_bytes())).decode()
 
 
 # ---------- 🎲 the design run ----------
@@ -342,8 +381,8 @@ def run(run) -> None:
         try:
             r = run.lab.mcp.call("cast_make", {
                 "name": br["name"], "age": br["age"], "brief": brief_text(br), "traits": br["traits"],
-                "anchor_b64": base64.b64encode((run.root / anchors[i]["path"]).read_bytes()).decode(),
-                "sheet_b64": [base64.b64encode((run.root / p).read_bytes()).decode() for p in sheets.get(i, [])][:8],
+                "anchor_b64": _b64(run.root / anchors[i]["path"]),
+                "sheet_b64": _fit([_b64(run.root / p) for p in sheets.get(i, [])][:8]),
                 "casts": [name], "project": run.project["id"], "source": f"ailab cast design:{run.project['id']}"})
             saved.append({"id": r["id"], "name": br["name"], "views": len(sheets.get(i, [])), "same": same.get(i, 0)})
         except Exception as e:                                   # noqa: BLE001

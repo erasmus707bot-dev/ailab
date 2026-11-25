@@ -181,3 +181,23 @@ class UI(Base):
         for s in ("function castPicker", "♻️ Reuse a cast", "🆕 Make a new one", "/api/cast/choose", "/api/cast/import",
                   "castDesign:", "cast: { n }", "🎭 Global cast"):
             self.assertIn(s, HTML)
+
+
+class SendSize(Base):
+    def test_big_pictures_are_shrunk_under_the_hermes_limit(self):
+        import io
+        import random
+        from PIL import Image
+        rnd = random.Random(1)
+        im = Image.frombytes("RGB", (1600, 2400), bytes(rnd.getrandbits(8) for _ in range(1600 * 2400 * 3)))
+        b = io.BytesIO()
+        im.save(b, "PNG")
+        raw = b.getvalue()
+        self.assertGreater(len(raw), 3_000_000)
+        out = cast.small(raw)
+        self.assertLess(len(out), len(raw) // 3)
+        self.assertEqual(out[:3], b"\xff\xd8\xff", "JPEG")
+        w, h = Image.open(io.BytesIO(out)).size
+        self.assertEqual(max(w, h), cast.SEND_PX)
+        self.assertEqual(cast.small(b"tiny"), b"tiny")
+        self.assertEqual(len(cast._fit(["x" * 2_000_000] * 5)), 2, "views that don't fit beside the anchor are dropped")
