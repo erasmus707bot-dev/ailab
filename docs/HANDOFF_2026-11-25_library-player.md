@@ -14,4 +14,11 @@
 
 **Verified live (Chrome, 127.0.0.1:8850):** both Libraries; next/prev/arrow keys; video ended → advanced; picture advanced after 3 s; no console errors. 4/4 static tests pass.
 
-**Open:** Argus phone touch test (swipe, 44 px buttons) not done yet.
+
+## Argus touch test, 2026-11-25 10:15 (Pixel 5 AVD, real Chrome, http://10.0.2.2:8850, 447×822 CSS px)
+- **Pass:** real tap on ◀ and on ▶ each moved one item; a left swipe on the picture moved to the next item without scrolling the page (0 px); a real tap on ▶ Slideshow turned it to "⏸ Slideshow on" and it moved every 3 s; a video came up with sound on (muted=false, because the tap is a real user gesture).
+- **Pass:** all 7 player controls are ≥44 px tall (◀ 46×44 · ▶ 46×44 · Slideshow 115 · 🎬 146 · 📝 158 · ⏱ 70 · ⛶ 44×44); the picture is 373×545 on an 822 px screen.
+- **Rig finding:** tap y was off by 73–94 CSS px (the Chrome toolbar moved). I worked around it with a probe tap on the 📍 line before each tap. Two stray taps toggled 📝 and opened ⤢ — the rig, not the page.
+- **Not finished:** a 30 s mp4 never loaded on the emulator (readyState 0), then the emulator hung ("Pixel Launcher isn't responding"; DevTools dropped). Video play-through was verified on desktop Chrome only.
+- **Fix from this:** e690787 — when a video hasn't started within 15 s, the slideshow skips it, so it never gets stuck. Desktop re-check: a playing video was not cut off at 15 s (it was at 18 s, same video).
+- **Not tested:** the native ⏱ picker by finger, and full screen on the phone.
