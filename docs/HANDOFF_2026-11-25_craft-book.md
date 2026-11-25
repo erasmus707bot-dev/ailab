@@ -63,3 +63,13 @@ Continue phrase: `continue AI Lab Craft Book from the 2026-11-25 handoff — liv
   Needs a Lab restart to load. (The Lab restarted on its own mid-test; 3 runs resumed fine.)
 - Too few runs to judge with vs without. Count stays the weak spot even with the note.
 - Still owed: Argus touch test of /craft (needs the phone).
+
+## Session 2 — counts + touch test (13:10) · ailab `688287c`, 669 tests OK
+- Ducks picture checked by eye: 4 ducks — 👁 was right. Writer said "exactly five" but no layout; flux2-klein drew 4.
+- 🔢 `picture.count_layout`: 3–8 things → "Exactly N X (N in all), in one row side by side, evenly spaced…; no other X"
+  right after his words, built in code. People nouns get no row. Two or 9+ = nothing added.
+- 🔢 One $0 retry (local route only) when the 👁 count point fails: new seed, better score becomes the main (last)
+  picture, both files kept. `config.json "count_fix": {"layout": true, "retry": 1}` (retry 0–3).
+- Argus touch test of /craft: page was 1226 px wide on a 393 px phone (a long `.tag` with nowrap widened the grid) —
+  fixed (grid minmax(0,1fr) + tags wrap). After: 393/393, 23 px text, 0 targets <44 px, theme tap ✓ both ways,
+  details tap ✓, swipe scrolls ✓, no late shift (13857→13857 px), no console errors. Screenshot failed (rig/CDP).
