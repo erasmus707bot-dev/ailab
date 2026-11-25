@@ -116,7 +116,14 @@ Other sessions were still editing the same files (index.html 04:08, tag_prompt.p
 - Not pushed (ailab → GitHub origin; hermes is 153 ahead of its Dropbox mirror — Scott's call, NUC terminal).
 - Guard source: own git repo started in `~/hermes-forge/ailab-guard/` — `7486861` (as installed). Remote `all` = `~/Dropbox/ailab-guard-mirror.git` (Scott's pick 1); first push confirmed 2026-11-25 04:30 (`rev-list --count all/master..master` = 0). After each push: `find ~/Dropbox/ailab-guard-mirror.git \( -name '*.lock' -o -name '*.keep' -o -name 'incoming-*' \) -exec rm -rf {} +`
 
-**Left:** "🛡 Apply all N together" touch test (needs 2+ rows) · Iris ☰ More 🛟 link (M5 plan, never built) · Lab row findings (type-apply box 42 px, 13.9 px text).
+## Session 5 — 2026-11-25 04:45 (Scott: "1+2" — Lab row fix + Iris ☰ More 🛟 link) — 2 rows WAITING in ✋
+Both made by the Lab (deepseek-v4.1-flash, Scratch), diffs read, **not applied — Scott's tap** ("🛡 Apply all 2 together" or one by one):
+- Lab — run `9dec5befb9` (run shows "interrupted" after it proposed; the row is whole): `ailab/web/index.html` +2 CSS lines after `.chg input {…}` — ✋ row text 23 px (17pt floor), box / buttons / "what changed" 48 px, `#guardline` 23 px.
+- Hermes — run `5274754543`: `companion-app/www/index.html` — 🛟 Rollback tile after the 🧪 AI Lab tile in Iris ☰ More + `openGuard()` (copy of `openLab()`, port 8860). **Reaches the phone only after an Iris app rebuild**; not touch-tested (needs the rebuilt app).
+- **"🛡 Apply all 2 together" touch-tested on Argus ✅ (display only, not tapped):** 2 rows + the all-row show, no sideways scroll, no console errors; "🛟 Rollback page" link now 48 px. Sizes before the fix: all-row box 262×46, "Apply all" 200×44, per-row box 42, ✅/✗ 44.
+- The Lab's layout changed under this test (remodel: 🤖 Make | 👀 Stage; waiting list opens from the "✋ 2" button in the top bar).
+
+**Left:** apply the 2 rows · Argus re-check of the ✋ rows after the CSS is live (the all-row box/button are outside `.chg` — may still be 44–46 px) · Iris rebuild + touch test of the 🛟 tile · commit both (ailab index.html: HEAD + guard hunk only while other sessions' edits are open; hermes companion-app/www/index.html).
 
 No night tail: M4 needs the guard installed + `check` all ✅ first.
 
