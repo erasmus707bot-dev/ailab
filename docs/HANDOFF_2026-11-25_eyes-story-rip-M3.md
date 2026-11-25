@@ -108,3 +108,13 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
 - Re-test 13:02 (after Scott's 13:01 safe restart): planted "Ben never went near any tunnel" → card now reads **"Fact (ch 2):
   Ben has taken a shortcut through a flooded tunnel — but his idea says Ben never went near any tunnel."** Right clash, but 4
   flags for 2 facts → `99eef92` keeps one flag per fact, at most 3 (live after the next Lab restart). Run stopped, nothing made.
+
+## Ch 4 — plan follows his idea (2026-11-25 13:15–13:28, eyes session)
+- `492a33a` chapter 2+ planning: earlier chapters already happened, every shot shows his idea for this chapter.
+- Live after Scott's 13:15 safe restart: "Next morning in a quiet diner, Aria and Ben share breakfast and open the empty
+  package box together, laughing" → **all 6 shots in the diner, morning light** (no race re-told). 👁 avg **95%** (ch3: 84% —
+  the name-free words from `a67e992` count now). 18 s film, $0. By eye (`_pilot/story_ch4.jpg`): both people in every shot,
+  box opened, mugs clinked, laughing. Drift: Ben's shirt swaps teal ↔ orange between shots (anchor = teal shirt, orange trousers).
+- 🔗 false alarm on the same run: "next morning in a diner" was flagged against ch1 "they are racing", as two half-flags
+  ("Fact…" / "His idea…"). Answered ↔️ Keep both. `4f9f981`: checker told facts are the past and a chapter may move on;
+  half-flags without a clash are dropped (live after the next Lab restart).
