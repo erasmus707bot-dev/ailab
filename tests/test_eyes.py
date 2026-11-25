@@ -110,7 +110,7 @@ def test_switch_and_standalone_turn_it_off():
     r = fake_run(FakeMCP())
     r.connected = False
     assert eyes.on(r) is False
-    assert eyes.settings({"eyes": {"low": 50}})["low"] == 50 and eyes.settings(None) == {"on": True, "low": 70}
+    assert eyes.settings({"eyes": {"low": 50}})["low"] == 50 and eyes.settings(None) == {"on": True, "low": 70, "retry": None}
 
 
 def test_batch_is_checked_after_it_is_made_and_the_best_is_starred():
