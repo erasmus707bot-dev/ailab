@@ -435,6 +435,42 @@ class App:
         pid = self._pid(b.get("project"))
         return self._cast_do(lambda: cast.import_refs(self._cast_mcp(), preview.ensure_site(pid), pid))
 
+    # ---------- 🎞 M4 video breakdown (Hermes does the work) ----------
+    def bd_list(self, q: dict) -> tuple[int, dict]:
+        return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call("breakdown_list", {})})
+
+    def bd_get(self, q: dict) -> tuple[int, dict]:
+        bid = str((q.get("id") or [""])[0])
+        return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call("breakdown_get", {"id": bid})})
+
+    def bd_search(self, q: dict) -> tuple[int, dict]:
+        qq = str((q.get("q") or [""])[0])
+        return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call("breakdown_search", {"query": qq, "n": 12})})
+
+    def bd_status(self, q: dict) -> tuple[int, dict]:
+        key = str((q.get("key") or [""])[0])
+        return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call("job_get", {"key": key})})
+
+    def bd_start(self, b: dict) -> tuple[int, dict]:
+        """🎞 Break a project video down. Only files inside the project folder; Hermes guards its own folders too."""
+        from . import shelf
+        root = preview.ensure_site(self._pid(b.get("project"))).resolve()
+        p = shelf._safe(root, str(b.get("path") or ""))
+        if not p or not p.is_file():
+            return 200, {"ok": False, "icon": "🎞", "message": "Pick a video in this project first."}
+        return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call(
+            "video_breakdown", {"path": str(p), "title": p.stem, "private": bool(b.get("private"))})})
+
+    def bd_make(self, b: dict) -> tuple[int, dict]:
+        from . import rip
+        root = preview.ensure_site(self._pid(b.get("project")))
+        return self._cast_do(lambda: rip.make_like(self._cast_mcp(), root, str(b.get("id") or ""), int(b.get("scene") or 0)))
+
+    def bd_frame(self, b: dict) -> tuple[int, dict]:
+        from . import rip
+        root = preview.ensure_site(self._pid(b.get("project")))
+        return self._cast_do(lambda: rip.use_frame(self._cast_mcp(), root, str(b.get("id") or ""), int(b.get("scene") or 0)))
+
     # ---------- 🎨 R2 official styles ----------
     def _style_ctx(self, b: dict):
         proj = store.project(self._pid(b.get("project")))
@@ -664,6 +700,13 @@ class App:
                 out["style"] = {"name": st["name"], "lessons": st["prompt_lessons"][-10:]}
         except Exception:                                        # noqa: BLE001
             pass
+        try:                                                     # 🎞 M4: shot recipes he made from video scenes (recipe shelf)
+            from . import rip
+            rs = [x.get("words") for x in rip.shelf(root)[-5:] if x.get("words")]
+            if rs:
+                out["recipes"] = rs
+        except Exception:                                        # noqa: BLE001
+            pass
         return out
 
     @staticmethod
@@ -683,6 +726,8 @@ class App:
             user += "\n\nPrompts he threw away (do not steer toward these): " + " || ".join(taste["tossed"])
         if taste and taste.get("style"):
             user += f"\n\nLessons from his official style “{taste['style']['name']}”: " + " || ".join(taste["style"]["lessons"])
+        if taste and taste.get("recipes"):
+            user += "\n\nShot recipes he took from videos in this project (framing, camera and light that he liked): " + " || ".join(taste["recipes"])
         if prev:
             user += "\n\nYour last version: " + prev + ("\n\nHe says to fix: " + fix if fix else "\n\nGive a fresh, different take.")
         return [{"role": "system", "content": self.IMPROVE_SYS.format(what=what, adds=adds, words=words)}, {"role": "user", "content": user}]
@@ -1228,6 +1273,13 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.shelf_get, q)
             if u.path == "/api/refs":                      # 🎭 M2 the project's reference pictures (cast strip)
                 return self._run(app.refs_get, q)
+            if u.path == "/api/breakdown/pic":             # 🎞 M4 a scene frame — only from Hermes's breakdowns folder
+                from . import rip as ripmod
+                fp = ripmod.frame_file(str((q.get("path") or [""])[0]))
+                return self._send(200, fp.read_bytes(), "image/jpeg") if fp else self._send(404, b"Not a breakdown frame.", "text/plain; charset=utf-8")
+            if u.path in ("/api/breakdowns", "/api/breakdown", "/api/breakdown/search", "/api/breakdown/status"):
+                return self._run(getattr(app, {"/api/breakdowns": "bd_list", "/api/breakdown": "bd_get",
+                                               "/api/breakdown/search": "bd_search", "/api/breakdown/status": "bd_status"}[u.path]), q)
             if u.path == "/api/cast/pic":                  # 🎭 R1 a cast thumbnail — only inside Hermes's assets folder
                 from . import cast as castmod
                 b_, ct_ = castmod.picture(str((q.get("path") or [""])[0]))
@@ -1366,6 +1418,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_shots, b)
             if p in ("/api/refs/pin", "/api/refs/unpin"):
                 return self._run(getattr(app, "refs_" + p.rsplit("/", 1)[1]), b)
+            if p in ("/api/breakdown/start", "/api/breakdown/make", "/api/breakdown/frame"):
+                return self._run(getattr(app, "bd_" + p.rsplit("/", 1)[1]), b)
             if p == "/api/story/bible":                    # 📖 M3 edit the story bible
                 return self._run(app.story_bible, b)
             if p in ("/api/cast/choose", "/api/cast/import"):

@@ -440,6 +440,14 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   @media (max-width: 640px) { .libcmp { grid-template-columns: minmax(0, 1fr); } }
   .libtoss .trow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
   .libtoss .trow span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  /* 🎞 M4 breakdown sheet — side by side on wide screens, stacked on a phone */
+  .bdscene { display: grid; grid-template-columns: minmax(0, 360px) 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .bdscene p { margin: 4px 0; overflow-wrap: anywhere; }
+  .bdhits { display: flex; flex-wrap: wrap; gap: 8px; }
+  .bdhit { display: flex; flex-direction: column; align-items: flex-start; max-width: 220px; text-align: left; }
+  .bdlist { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bdbox input[type=search] { flex: 1; min-width: 0; min-height: 44px; }
+  @media (max-width: 640px) { .bdscene { grid-template-columns: 1fr; } }
   /* 🧹 2026-11-25 simplify: 🚪 clean start + 📚 all-projects Library */
   .welcome { max-width: 640px; margin: 4vh auto 0; display: flex; flex-direction: column; gap: 14px; }
   .welcome h2 { margin: 0; }
@@ -1065,6 +1073,67 @@ function castPicker(p, hooks, opts) {
   paint();
   return box;
 }
+/* 🎞 M4 (Scott 2026-11-25): video breakdown — scenes with what is shown, what is said and a shot recipe; ask across
+   videos; 🎬 Make one like this (his cast swapped in) · 📌 Use frame as reference. Hermes does the work, $0 on gandalf. */
+function breakdownBox(p, hooks) {
+  const box = h("div", { class: "bdbox", id: "bdbox" }), note = h("span", { class: "note", role: "status" });
+  const list = h("div", { class: "bdlist" }), sheet = h("div", { class: "bdsheet" }), hits = h("div", { class: "bdhits" });
+  const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  const pic = fp => h("img", { src: `/api/breakdown/pic?path=${encodeURIComponent(fp)}`, alt: "", loading: "lazy", style: "width:100%;max-width:360px;border-radius:8px" });
+  const q = h("input", { type: "search", placeholder: "Ask across your videos — e.g. hand slap, kitchen, close-up", "aria-label": "Search video breakdowns" });
+  async function search() {
+    if (!q.value.trim()) { hits.replaceChildren(); return; }
+    const r = await api(`/api/breakdown/search?q=${encodeURIComponent(q.value.trim())}`);
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
+    hits.replaceChildren(...(r.hits || []).map(x => h("button", { class: "bdhit btn", type: "button", onclick: () => openSheet(x.id, x.scene - 1) },
+      pic(x.frame_path), h("span", {}, `${x.title} · scene ${x.scene} · ${fmt(x.start)}`), h("span", { class: "note" }, x.shown.slice(0, 120)))),
+      (r.hits || []).length ? "" : h("span", { class: "note" }, "Nothing matched."));
+  }
+  const sbtn = h("button", { class: "btn", type: "button", onclick: search }, "🔎 Ask");
+  q.addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+  async function openSheet(id, focus) {
+    const r = await api(`/api/breakdown?id=${encodeURIComponent(id)}`);
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
+    const act = (path, sc, ok) => async () => { const x = await api(path, { project: p.id, id, scene: sc });
+      if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message}`; return; } ok(x); };
+    const cards = (r.scenes || []).map(s => h("div", { class: "bdscene", id: `bd-${id}-${s.i}` },
+      pic(s.frame_path),
+      h("div", {}, h("b", {}, `Scene ${s.i + 1} · ${fmt(s.start)}–${fmt(s.end)}`),
+        h("p", {}, h("b", {}, "Shown: "), s.caption || "—"), h("p", {}, h("b", {}, "Said: "), s.said || "—"),
+        h("p", { class: "note" }, h("b", {}, "Recipe: "), ["subject", "setting", "motion", "framing", "camera", "light"].map(k => `${k}: ${(s.recipe || {})[k] || "—"}`).join(" · ")),
+        h("div", { class: "runbar" },
+          h("button", { class: "btn pri", type: "button", disabled: !(hooks && hooks.make), title: "This shot's recipe as words, with your chosen cast in place of the people — a picture run you can watch in 🤖 Make",
+            onclick: act("/api/breakdown/make", s.i, x => { hooks.make(x.task); note.textContent = `🎬 Started: ${x.task.slice(0, 90)}…${x.cast.length ? "" : " (no cast chosen — people stay as person A/B)"}`; }) }, "🎬 Make one like this"),
+          h("button", { class: "btn", type: "button", onclick: act("/api/breakdown/frame", s.i, x => { note.textContent = `📌 Frame copied to ${x.path} and pinned as a reference.`; }) }, "📌 Use frame as reference")))));
+    sheet.replaceChildren(h("div", { class: "trow" }, h("b", {}, `🎞 ${r.title || r.name}`), h("span", { class: "note" }, `${r.count} scenes · ${Math.round(r.duration || 0)} s${r.private ? " · 🔒 private" : ""}${r.state !== "done" ? ` · ⏸ ${r.state}` : ""}`),
+      h("button", { class: "btn", type: "button", onclick: () => sheet.replaceChildren() }, "✕ Close")), ...cards);
+    const f = focus != null && document.getElementById(`bd-${id}-${focus}`); if (f) f.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  async function paint() {
+    const r = await api("/api/breakdowns");
+    if (!r.ok) { list.replaceChildren(h("span", { class: "note" }, `${r.icon || "⚠️"} ${r.message || "Hermes isn't reachable."}`)); return; }
+    const xs = r.breakdowns || [];
+    list.replaceChildren(...(xs.length ? xs.map(b => h("button", { class: "btn", type: "button", onclick: () => openSheet(b.id) },
+      `🎞 ${b.title || b.name} (${b.count})${b.state === "done" ? "" : " ⏸"}`)) : [h("span", { class: "note" }, "No videos broken down yet — open a video in 📚 Library and tap 🎞 Break it down.")]));
+  }
+  async function start(path) {
+    note.textContent = "🎞 Starting the breakdown on gandalf ($0)…";
+    const r = await api("/api/breakdown/start", { project: p.id, path });
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
+    if (r.state === "done") { note.textContent = "🎞 Already broken down."; paint(); return openSheet(r.id); }
+    const t0 = Date.now();
+    const tick = async () => { const s = await api(`/api/breakdown/status?key=${encodeURIComponent(r.key)}`);
+      if (!s.ok) { note.textContent = `${s.icon || "⚠️"} ${s.message}`; return; }
+      if (s.state === "running") { note.textContent = `🎞 ${(s.detail || {}).phase || "working"} — ${Math.round((Date.now() - t0) / 1000)} s ($0, on gandalf). You can close the page; it keeps going.`; return setTimeout(tick, 3000); }
+      if (s.state === "done") { note.textContent = "✅ Breakdown ready."; paint(); return openSheet(r.id); }
+      note.textContent = `⚠️ ${(s.error || {}).message || "It stopped."} 👉 ${(s.error || {}).fix || "Tap 🎞 Break it down again."}`; };
+    tick();
+  }
+  box.start = start;
+  box.replaceChildren(h("div", { class: "trow" }, q, sbtn), hits, list, sheet, note);
+  paint();
+  return box;
+}
 /* 📖 M3 Story (Scott 2026-11-25): pick a cast (♻️ reuse / 🆕 make), say the idea, pick ⚡ Short / 📚 Long / ✍️ Words,
    ▶ Make the story → one chapter per run: 📚 bible → 🗒 shots → 🖼 stills (cast as references, 👁 checked) → 🎞 clips →
    🎙 voice → one film. 📚 Story bible = what every later chapter must respect; edit it here. */
@@ -1227,9 +1296,15 @@ function libraryBox(p, hooks) {
   }
   const strip = h("div", { class: "libstrip" }), chips = h("div", { class: "runbar" }), big = h("div", { class: "libbig", hidden: true });
   const sum = h("summary", {}, "📚 Library"), none = h("p", { class: "note" }, "Nothing made here yet. What you make in this project shows up here.");
+  let bdBox = null;
+  const bdFold = h("details", { class: "libtoss", id: "libbreakdown" }, h("summary", {}, "🎞 Video breakdowns — scenes, words, shot recipes"));
+  const bdEnsure = () => { if (!bdBox) { bdBox = breakdownBox(p, hooks); bdFold.append(bdBox); } return bdBox; };
+  bdFold.addEventListener("toggle", () => { if (bdFold.open) bdEnsure(); });
+  const bdBtn = f => h("div", { class: "runbar" }, h("button", { class: "btn", type: "button", title: "Scenes, what is shown, what is said and a shot recipe for each — on gandalf, $0",
+    onclick: () => { bdFold.open = true; bdEnsure().start(f.path); bdFold.scrollIntoView({ block: "start", behavior: "smooth" }); } }, "🎞 Break it down"));
   const globalCast = h("details", { class: "libtoss", id: "libglobalcast" }, h("summary", {}, "🎭 Global cast — reuse a cast or make a new one"));
   globalCast.addEventListener("toggle", () => { if (globalCast.open && !globalCast.querySelector(".castpick")) globalCast.append(castPicker(p, hooks, { id: "libcastpick", importBtn: true })); }, { once: false });
-  const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, globalCast);
+  const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, globalCast, bdFold);
   const url = f => `/preview/${p.id}/${encodeURI(f.path)}`;
   const shut = () => { cur = ""; big.hidden = true; big.replaceChildren(); };
   function open(f) {
@@ -1243,7 +1318,7 @@ function libraryBox(p, hooks) {
     big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, `${LIB_ICON[k]} ${name}`), h("a", { class: "btn", href: u, download: name }, "⬇ Download"),
       h("a", { class: "btn", href: u, target: "_blank", rel: "noopener" }, "⤢ Full size"),
       h("button", { class: "btn", type: "button", onclick: () => { shut(); paint(); } }, "✖ Close")),
-      h("div", { class: "note wherepath", title: "Where this file is in the project folder" }, `📍 ${f.path}`), body, k === "pic" ? refBar(f) : null, changeBox2(f, k));
+      h("div", { class: "note wherepath", title: "Where this file is in the project folder" }, `📍 ${f.path}`), body, k === "pic" ? refBar(f) : k === "vid" ? bdBtn(f) : null, changeBox2(f, k));
     paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
   function paint() {
@@ -1648,6 +1723,7 @@ function startView() {
     ag.newBtn.addEventListener("click", () => { stageExtra.replaceChildren(); syncStage(); }); }
   const libHooks = { change: (task, ids) => { if (ag) ag.startWith(task, ids, false); },
     sheet: path => { if (ag) ag.startWith("Character sheet of the person in this picture", ["image"], false, { n: 5, sheet: path }); },
+    make: task => { if (ag) ag.startWith(task, ["image"], false); },
     castDesign: (n, forWhat) => { if (ag) ag.startWith(`Design a cast of ${n} people` + (forWhat ? ` for: ${forWhat}` : ""), ["image"], false, { cast: { n } }); },
     story: (idea, opts) => { if (ag) ag.startWith(idea, ["image"], false, { story: opts }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject };
   const lib = libraryBox(p, libHooks);
