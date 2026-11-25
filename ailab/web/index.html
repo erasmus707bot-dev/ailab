@@ -940,13 +940,6 @@ function startView() {
     const sigNow = `${run.id}:${pics.length}:${chg.length}:${vids.length}:${run.state}`;
     if (sigNow === madeSig) return; madeSig = sigNow;
     madeBox.replaceChildren(); madeBox.hidden = true;
-    if (pics.length) {                                         /* newest first, big */
-      madeBox.hidden = false;
-      madeBox.append(h("div", { class: "pics" }, [...pics].reverse().map(pc => {
-        const url = `/preview/${p.id}/${pc.path}`;
-        return h("figure", {}, h("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" }, h("img", { src: url, alt: pc.prompt ? pc.prompt.slice(0, 140) : "Picture the Lab made", loading: "lazy" })),
-          h("figcaption", {}, `🎨 ${String(pc.model || "").split("/").pop()} · $${(+pc.usd || 0).toFixed(3)}${pc.seconds ? ` · ${pc.seconds} s` : ""}${pc.library ? " · 💾 in your Gallery" : ""}`),
-          pc.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, pc.prompt)) : null,
     if (vids.length || run.video || run.docmode) {             /* 🎬 video run · 📝 doc run (2026-11-24): every file as a tile */
       vids.slice().reverse().forEach(v => {
         const url = `/preview/${p.id}/${v.path}`;
@@ -959,6 +952,13 @@ function startView() {
       if (!running) { const mc = madeCard(p.id, run); if (mc) { madeBox.hidden = false; madeBox.append(mc); } }
       return;
     }
+    if (pics.length) {                                         /* newest first, big */
+      madeBox.hidden = false;
+      madeBox.append(h("div", { class: "pics" }, [...pics].reverse().map(pc => {
+        const url = `/preview/${p.id}/${pc.path}`;
+        return h("figure", {}, h("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" }, h("img", { src: url, alt: pc.prompt ? pc.prompt.slice(0, 140) : "Picture the Lab made", loading: "lazy" })),
+          h("figcaption", {}, `🎨 ${String(pc.model || "").split("/").pop()} · $${(+pc.usd || 0).toFixed(3)}${pc.seconds ? ` · ${pc.seconds} s` : ""}${pc.library ? " · 💾 in your Gallery" : ""}`),
+          pc.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, pc.prompt)) : null,
           h("a", { class: "btn", href: url, download: pc.path.split("/").pop() }, "⬇ Download"));
       })));
       if (!running && ag && ag.startWith) {                      /* 🔁 Make another · ✏️ Change it */
@@ -1698,6 +1698,12 @@ function agentView(wb) {
   function wantFor(text) {
     const t = text.toLowerCase();
     if (!t.trim()) return null;
+    /* 🎨 2026-11-24 (Scott: "I need something more neutral and uncensored"): an art idea — also inside a 🧱 build prompt —
+       gets 🔓 uncensored models first, never the research/coding pick (it suggested a filtered model for an art prompt) */
+    const idea = (t.match(/idea \(scott'?s words\)\W*\s*(.+)/) || [null, t])[1];
+    const esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hits = (CTYPES || []).filter(ty => (ty.words || []).some(w => new RegExp(`(^|[^a-z0-9])${esc(w.toLowerCase())}([^a-z0-9]|$)`).test(idea)));
+    if (hits.length && hits.every(ty => ["image", "video", "text"].includes(ty.id))) return { use: "💬 general", why: "it's an art idea — 🔓 uncensored models first", art: true };
     if (/\b(screenshot|picture|photo|image|icon|logo|mockup|diagram|look at the)\b/.test(t)) return { use: "🖼 sees images", why: "the task mentions pictures" };
     if (/\b(research|compare|investigate|analy[sz]e|explain why|which is better|pros and cons|audit|review the design)\b/.test(t)) return { use: "🔬 reasoning / research", why: "the task asks for research or reasoning" };
     if (/\b(refactor|architecture|rewrite|migrate|whole app|across (all|every)|multi-step|complex|hardest|big change)\b/.test(t)) return { use: "🧠 hardest work", why: "the task is a big change" };
@@ -1719,12 +1725,6 @@ function agentView(wb) {
         const hosted = provs.find(x => !x.local && x.id === "claude") || provs.find(x => !x.local);
         hint.replaceChildren("💡 Changing real code in a linked folder needs a strong hosted model — local models got lost on this in testing (claude-sonnet-5-5 finished one for about $0.06). ",
           hosted ? h("button", { class: "btn", type: "button", onclick: () => { store.set("provider", hosted.id); if (hosted.id === "claude") store.set("model.claude", strong); render(); } }, `Switch to ${hosted.icon} ${hosted.id}`)
-    /* 🎨 2026-11-24 (Scott: "I need something more neutral and uncensored"): an art idea — also inside a 🧱 build prompt —
-       gets 🔓 uncensored models first, never the research/coding pick (it suggested a filtered model for an art prompt) */
-    const idea = (t.match(/idea \(scott'?s words\)\W*\s*(.+)/) || [null, t])[1];
-    const esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const hits = (CTYPES || []).filter(ty => (ty.words || []).some(w => new RegExp(`(^|[^a-z0-9])${esc(w.toLowerCase())}([^a-z0-9]|$)`).test(idea)));
-    if (hits.length && hits.every(ty => ["image", "video", "text"].includes(ty.id))) return { use: "💬 general", why: "it's an art idea — 🔓 uncensored models first", art: true };
                  : h("span", { class: "note" }, "This project is 🔒 local-only, so expect to steer it step by step."));
         hint.hidden = false; return;
       }
