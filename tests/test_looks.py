@@ -216,7 +216,7 @@ def test_study_tab_adult_guard():
     from ailab import looks
     cat = looks.catalog()
     st = next(t for t in cat["tabs"] if t["id"] == "study")
-    assert st["max"] == 1 and len(st["items"]) == 10
+    assert st["max"] == 1 and len(st["items"]) == 19
     assert all("adult" in i["p"] for i in st["items"])
     neg = looks.negative(["Photo", "Feet study"], "text")
     assert "child" in neg and "extra toes" in neg

@@ -19,7 +19,7 @@ def call(n, a):
 cat = looks.catalog(); parts = [i["n"] for t in cat["tabs"] if t["id"] == "study" for i in t["items"]]
 mediums = {"Photo": ("local/juggernaut-xl-v9",), "Anatomy atlas": ("local/juggernaut-xl-v9",)}
 ONLY = sys.argv[2].split(",") if len(sys.argv) > 2 and sys.argv[2] else []
-FIG = {"face": "Male figure", "shoulders": "Male figure"}
+FIG = {"face": "Male figure", "shoulders": "Male figure", "arms": "Male figure", "elbows": "Male figure", "neck": "Male figure"}
 rows = []
 for part in parts:
     if ONLY and part.split()[0].lower() not in ONLY: continue
