@@ -45,3 +45,11 @@ notes written by hand get one batch review. Lab tests **648 OK** on the working 
 3. Tell Claude "craft is live" → live proof + Argus touch test + the three gaps above.
 
 Continue phrase: `continue AI Lab Craft Book from the 2026-11-25 handoff — live proof + gaps`
+
+## Session 2 (2026-11-25 pm) — ailab `37bae60`, 652 tests OK
+- Checked live (Chrome → /api/craft): go-live ran · flag on · holdout 5 · **19 proposed, 0 live**. Live proof waits on Scott's ✅.
+- Gap closed: batch pictures → `craft.observe(..., compare=False)` — misses wake notes and fix wording is kept; the
+  with/without score skips them (batch words are built in code, would bias "without"). Needs a Lab restart to load.
+- Gap re-scoped: 🔁 Loop pieces are run by Hermes executors (`forge/creative/executors.py`), not Lab runs — they never
+  carry craft notes, so a rating has nothing to credit. Needs a choice (see chat), not wiring.
+- Still open: code-built prompts (cast, story.shot_prompt, rebuild.words_for) get no notes — by design for now.
