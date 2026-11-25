@@ -55,3 +55,21 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
 - Fixed after the run: 👁 graded the bracketed looks ("Ethan (ambitious new keeper)") → now grades only what a picture can show,
   and each shot's 👁 line shows in 📜 Steps. Commit below.
 - Still owed: R1 cast live run, then a Story with that cast (faces held per shot) · ▶ Next chapter with 📚 Long (🔗 check) · Argus.
+
+## Live 2026-11-25 11:30–12:00 — cast + Story with the cast
+- 🎭 R1 cast live: **“Aria & Ben” saved** to the global cast and chosen for `test` (3rd try — 2 Lab restarts by other sessions,
+  1 cast_make "broken pipe"). Anchors went to Venice ($0.01 each, $0.02 total); sheets local $0. Tell-apart 1/1.
+- 📖 Story “Night Market Showdown” (⚡ Short · 🆓 · 🎙, resumed twice after restarts / a Hermes outage — finished shots were
+  skipped as designed): 6/6 shots, 👁 avg 88%, film `videos/story-night-market-showdown-ch1-20261125-120011.mp4`, **$0.000**.
+- ✅ **Faces/outfits hold in every shot**, both people present in all 4 two-person shots (2 anchors as references).
+- Found + fixed (committed, Lab restart needed for the last two):
+  - `9095117` cast/story stay "running" between pictures → a restart shows interrupted, not a false done.
+  - `a7683ba` cast_make got 6 full PNGs (~24 MB) > Hermes's 10 MB → pictures shrunk to 1280 px JPEG.
+  - `697486b` Ben's anchor put the teal on his **shirt**, not his hair → all 5 sheet views failed same-face (0/5, correctly).
+    Each anchor is now 👁-checked against its own brief (hair colour, outfit colour, one person) and remade ≤ 2×.
+  - `64552d1` 👁 marked "Aria" missing (a picture can't show a name) → people are checked as they look (hair + outfit).
+- Seen, not fixed:
+  - Shot 6 has painted letters on the ground and signs with writing — the no-text rule leaks in busy street scenes
+    (negative prompt is sent; FLUX.2 Klein ignores it partly). 👁's "no writing" point didn't catch it.
+  - Night market drifts to daylight in shots 4–6 — time of day isn't in the shot line. Fix idea: bible `time` field carried into every shot.
+  - Same false-"done" pattern exists in plain 🎛 picture batches (`batch.pictures`) — not touched (another session's hunks in batch.py).
