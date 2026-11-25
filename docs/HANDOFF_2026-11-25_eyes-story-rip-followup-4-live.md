@@ -31,3 +31,11 @@ Both services were already running the new code (Lab bible has `props`; dashboar
 `systemctl --user restart ailab`
 
 Continue: `continue AI Lab eyes + story + rip follow-ups — option 2`
+
+## 15:17 — proof on the real run (old code still live, no restart yet)
+- Same 6 planned shots through both matchers: **old** → shots 3, 4, 6 get no prop; **new** (`8faf85b`) → every shot gets
+  "red motorbike" / "small brown package" / "red motorbikes".
+- Shot 3 "swerving through the crowd" made on the old code: Alex **on foot in both tries**, bike gone
+  (`~/hermes-data/ailab/_pilot/props_shot3_old.jpg`). Shot 2 (bike named) kept it.
+- After `systemctl --user restart ailab`: in `fast pictures check` → 📖 Story, untick 🆕 New story → ▶ Make the story — the
+  unfinished chapter carries on from shot 4 on the new code (shots 4 + 6 are the ones the old code left bare).
