@@ -87,3 +87,14 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
 - 🐛 fixed (`49c6cb9`): 👁 graded camera moves ("missing: slow push-in, tracking shot") — a still can't show a move; moves are
   now dropped from the points, framing (close-up, wide) still graded.
 - Owed: 👁 doesn't check *who* is in a two-person shot (shot 5) · checker reason wording · time of day in the shot line.
+
+## Ch 3 + three fixes — 2026-11-25 12:44–13:05 (eyes session)
+- `17b16b7` a cast name in a shot's action joins the shot (reference sent, look checked).
+- Ch 3 live (after Scott's 12:42 safe restart): "At the drop-off, Ben watches Aria hand the package to a hooded stranger" →
+  6 shots, 👁 avg 84%, **18 s night film, $0**, 5 new facts. By eye (`_pilot/story_ch3.jpg`): **night in every shot** (other
+  session's `when` field, `c704d27`), Aria and Ben hold, **shot 5 = Aria herself handing the package to a hooded stranger**.
+- `a67e992` 👁 words lose the names in the action too ("the woman rides…") — ch3 still lost points for "missing: Aria hands the
+  package…" although she was there.
+- `<this commit>` 🔗 the checker now gets his idea as well as the plan, and each flag names the fact and the clash.
+- Seen, not fixed: the writer's ch3 plan re-told the race (shots 1–4) before reaching his idea (shots 5–6) — chapter plans
+  drift back to the bible's premise. Lab restart needed for `a67e992` + the checker change; re-test the planted contradiction.
