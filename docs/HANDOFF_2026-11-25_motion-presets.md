@@ -42,7 +42,7 @@ M6 proofs (by eye: right people moving, no text, same faces across clips):
 3. Add a second motion at the same time → both in one still. 4. Three blocks chained → 🎬 Make the video (🏠 local).
 
 ## UNVERIFIED
-ControlNet file size + fit on the 6 GB 2060 · rtmlib API on gandalf · ~3-actions limit · local Wan 5B clip (no proof
+✅ 11:19 installed: ControlNet 2.50 GB on disk, pose venv (rtmlib 0.0.16, onnxruntime 1.32; Body/draw_skeleton API matches the worker). Still UNVERIFIED: ControlNet fit on the 6 GB 2060 · first pose run (models download) · ~3-actions limit · local Wan 5B clip (no proof
 clip yet) · Venice pose input (none). Kling motion control (aaccefc5) could become a 4th clip mode "drive from the source clip".
 
 ## Owed
