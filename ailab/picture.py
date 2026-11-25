@@ -28,7 +28,10 @@ PROMPT_SYS = ("You help write prompts for a text-to-picture model. Scott's own w
               "body details he didn't ask for — what people wear, or don't, is only his to say. Never ask for text, captions, "
               "labels, signs or watermarks in the picture unless he did.")
 WRITERS = [("venice", "venice-uncensored-1-2"), ("openrouter", "venice/uncensored")]   # then the run's own model
-VENICE_PHOTO, VENICE_ART = "venice/lustify-v8", "venice/chroma"
+VENICE_PHOTO, VENICE_ART = "venice/lustify-v8", "venice/lustify-v8"
+# 2026-11-24 live (Scott 1 — test both, fix): Chroma painted fake artist signatures in 2 of 3 paintings even with
+# "signature" in the negative prompt and "unsigned" in the prompt (10-step model, ignores negatives). Lustify v8 with the
+# style in the prompt: painted look, 4 of 4 clean. Chroma stays choosable via cfg picture_model.
 REFUSAL_RX = re.compile(r"\b(i can'?t|i cannot|i won'?t|i'?m not able|sorry|as an ai)\b", re.I)
 WAIT_S = 20
 MAX_WAIT_TOTAL_S = 240
@@ -137,7 +140,7 @@ def write_prompt(run, words: str) -> str:
 
 
 def picture_model(run, style: str) -> tuple[str, bool]:
-    """(model, chosen by Scott in config). Photo-real → Lustify; any other style → Chroma."""
+    """(model, chosen by Scott in config). Every style → Lustify v8 (Chroma signed paintings, 2026-11-24)."""
     forced = str(run.cfg.get("picture_model") or "")
     if forced:
         return forced, True
@@ -172,6 +175,10 @@ def run(run) -> None:
     run._check_stop()
     prompt = write_prompt(run, words + extra)
     run._check_stop()
+    if style and style.lower() not in prompt.lower():       # 2026-11-24 live: the Style line was stripped and only reached
+        m = own_words(words)                                # the model if the writer happened to say it (Lustify drew photos)
+        prompt = (f"{m.rstrip('.')}. {style}. {prompt[len(m):].lstrip(' .')}" if prompt.startswith(m)
+                  else f"{prompt.rstrip('.')}. {style}.").strip()
     pmodel, forced = picture_model(run, style)
     args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}", "model": pmodel,
             "negative_prompt": NO_TEXT}

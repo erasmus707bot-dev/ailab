@@ -66,7 +66,9 @@ class ArtFreedom(Base):
         mcp2 = PicMCP()
         r2, _ = self.make(mcp2, task="a cabin\nStyle: Painted / illustrated")
         r2.loop()
-        self.assertEqual(mcp2.args[mcp2.calls.index("image_make")]["model"], "venice/chroma")
+        a2 = mcp2.args[mcp2.calls.index("image_make")]
+        self.assertEqual(a2["model"], "venice/lustify-v8")     # 2026-11-24 live: Chroma signed paintings; Lustify didn't
+        self.assertTrue(a2["prompt"].startswith("a cabin. Painted / illustrated."), a2["prompt"])   # the style reaches the model
 
     def test_no_venice_key_says_so_and_uses_default(self):
         mcp = NoVenice()
