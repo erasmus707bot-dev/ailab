@@ -53,3 +53,13 @@ Continue phrase: `continue AI Lab Craft Book from the 2026-11-25 handoff — liv
 - Gap re-scoped: 🔁 Loop pieces are run by Hermes executors (`forge/creative/executors.py`), not Lab runs — they never
   carry craft notes, so a rating has nothing to credit. Needs a choice (see chat), not wiring.
 - Still open: code-built prompts (cast, story.shot_prompt, rebuild.words_for) get no notes — by design for now.
+
+## Session 2 — live proof (12:40) · ailab `50b85fd`, 653 tests OK
+- Scott made all 19 live (1 retired: the never-helping story note). 5 local pictures (flux2-klein-4b, $0):
+  foxes = holdout (no notes) 100% · watercolor 5 notes 100% · hands 4 notes 100% · oil painting 5 notes 100% ·
+  5 ducks 4 notes ("exactly N" rode along) **67% — still missed the count**. Picture: with 92% (4) · without 100% (2).
+- Notes picked right per job (medium note on painted, hands note on hands, count note on the number).
+- Bug found + fixed: holdout was decided per writer call, so a resumed run flipped with→without. Now once per run.
+  Needs a Lab restart to load. (The Lab restarted on its own mid-test; 3 runs resumed fine.)
+- Too few runs to judge with vs without. Count stays the weak spot even with the note.
+- Still owed: Argus touch test of /craft (needs the phone).
