@@ -114,9 +114,9 @@ Other sessions were still editing the same files (index.html 04:08, tag_prompt.p
 - ailab `50b61fc` — tools (guard_drill.sh, guard_drill_hermes.sh, patch_m4_guard.py, patch_m5_guard_ui.py).
 - hermes `90233f49` — remote.html 🛟 Rollback tile (the Lab-made Hermes change).
 - Not pushed (ailab → GitHub origin; hermes is 153 ahead of its Dropbox mirror — Scott's call, NUC terminal).
-- Guard source: own git repo started in `~/hermes-forge/ailab-guard/` — `7486861` (as installed). Local only, no remote = history but no off-box backup.
+- Guard source: own git repo started in `~/hermes-forge/ailab-guard/` — `7486861` (as installed). Remote `all` = `~/Dropbox/ailab-guard-mirror.git` (Scott's pick 1); first push confirmed 2026-11-25 04:30 (`rev-list --count all/master..master` = 0). After each push: `find ~/Dropbox/ailab-guard-mirror.git \( -name '*.lock' -o -name '*.keep' -o -name 'incoming-*' \) -exec rm -rf {} +`
 
-**Left:** "🛡 Apply all N together" touch test (needs 2+ rows) · Iris ☰ More 🛟 link (M5 plan, never built) · Lab row findings (type-apply box 42 px, 13.9 px text) · give the Guard repo a remote / mirror (off-box backup).
+**Left:** "🛡 Apply all N together" touch test (needs 2+ rows) · Iris ☰ More 🛟 link (M5 plan, never built) · Lab row findings (type-apply box 42 px, 13.9 px text).
 
 No night tail: M4 needs the guard installed + `check` all ✅ first.
 
