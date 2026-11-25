@@ -331,6 +331,8 @@ def run(run) -> None:
     pic = {"path": rel, "prompt": prompt, "model": out.get("model", model), "usd": round(usd, 4),
            "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape,
            "look": look, "keys": picture_route.keys_line(run, pmodel or "")}
+    if out.get("timing"):                                    # ⏱ where a local picture's seconds went (2026-11-25 probe)
+        pic["timing"] = out["timing"]
     run.pictures.append(pic)
     run._record({"action": "picture", "path": rel, "why": "🎨 made the picture", "result": {k: v for k, v in pic.items() if k != "prompt"},
                  "usd": usd})
