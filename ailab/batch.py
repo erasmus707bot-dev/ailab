@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import time
 
-from . import creation, picture
+from . import creation, makers, picture
 
 MAX_N = 24
 PICTURE_USD = 0.012       # Venice picture ($0.01) + the writer's few hundred tokens — shown as "about"
@@ -192,28 +192,17 @@ def docs(run) -> None:
         b["now"] = i
         k = b["start"] + i
         v = variation(b["dial"], k, "doc")
-        picture.stage(run, "✍️", f"Writing with {run.model.split('/')[-1]}" + (f" — {v[:60]}" if v else ""))
-        try:
-            r = run.lab.chat(run.project, run.provider, run.model,
-                             [{"role": "system", "content": DOC_SYS}, {"role": "user", "content": with_variation(base, v)}],
-                             3000, cap_usd=max(0.0, run.cap_usd - run.usd), task=f"lab-batch:{run.project['id']}")
-        except Exception as e:                                   # noqa: BLE001 — one bad reply doesn't end the batch
-            if type(e).__name__ in ("SpendBlocked", "PrivacyRefused"):
-                raise
+        # 2026-11-24 art in every form: the uncensored writer chain first (Venice), refusals skipped, then the run's model
+        before = run.usd
+        text, who = makers.write(run, DOC_SYS + " " + makers.KEEP_WORDS, with_variation(base, v), 3000,
+                                 "Writing" + (f" — {v[:60]}" if v else ""), "lab-batch")
+        usd = run.usd - before
+        if len(text) < 20:
             b["failed"] += 1
-            run._record({"action": "doc", "why": f"📝 doc {k + 1}", "result": {"error": f"{type(e).__name__}: {str(e)[:200]}"}, "usd": 0.0})
+            run._record({"action": "doc", "why": f"📝 doc {k + 1}", "result": {"error": who or "the model didn't write it"}, "usd": usd})
             if b["failed"] >= 3 and not b["items"]:
-                stop_reason = f"⚠️ {type(e).__name__}: {str(e)[:200]}"
+                stop_reason = f"⚠️ {who}"
                 break
-            continue
-        usd = float(r.usd or 0)
-        run.usd += usd
-        run.tokens_in += int(getattr(r, "tokens_in", 0) or 0)
-        run.tokens_out += int(getattr(r, "tokens_out", 0) or 0)
-        text = (r.text or "").strip()
-        if len(text) < 20 or picture.REFUSAL_RX.search(text[:80]):
-            b["failed"] += 1
-            run._record({"action": "doc", "why": f"📝 doc {k + 1}", "result": {"error": "the model didn't write it"}, "usd": usd})
             continue
         rel = f"docs/{stamp}-{slug}-{k + 1}.md"
         p = run.root / rel
