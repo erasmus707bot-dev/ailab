@@ -355,11 +355,62 @@ class App:
         # 🪞 Show & change runs get their own, larger step cap (2026-11-24: 12 capped both pilot lanes on a 1-spot edit)
         cap = int(self.cfg.get("live_step_cap", 60)) if b.get("kind") == "live" else None
         live = b.get("kind") == "live"          # 🪞 runs: Scott already pointed at the spot, and that flow has its own robot
+        ctypes = [] if live else (b.get("ctypes") if isinstance(b.get("ctypes"), list) else [])
+        bt = None if live else self._batch_req(b, ctypes)       # 🎛 Batch create (2026-11-24 Module 3)
+        if isinstance(bt, tuple):
+            return bt
         run = self.agents.start(self.lab, self.cfg, proj, str(b.get("provider") or ""), str(b.get("model") or ""),
                                 str(b.get("task") or ""), step_cap=cap, ask_first=bool(b.get("ask_first")) and not live,
-                                selftest=None if live else self._play_test,
-                                ctypes=[] if live else (b.get("ctypes") if isinstance(b.get("ctypes"), list) else []))
+                                selftest=None if live else self._play_test, ctypes=ctypes, batch=bt)
         return 200, {"ok": True, "run": run.view()}
+
+    def _batch_req(self, b: dict, ctypes: list):
+        """🎛 The batch part of a start: cleaned, cost-checked against today's cap, ➕ Make more carries the earlier
+        results. None = an ordinary run · (status, body) = refused before anything is spent."""
+        from . import batch as B
+        req = b.get("batch")
+        if not isinstance(req, dict) or not B.norm(req, ctypes):
+            return None
+        req = dict(req)
+        kind = B.kind_for(ctypes)
+        est = B.estimate(kind, max(1, min(B.MAX_N, int(req.get("n") or 1))), self.cfg, self.spend()["today_usd"] or 0.0)
+        if not est["fits"]:
+            return 200, {"ok": False, "code": "cap", "icon": "💲", "estimate": est,
+                         "message": f"That batch is about ${est['est_usd']:.2f}, but only ${est['left_usd']:.2f} is left of today's "
+                                    f"${est['cap_usd']:.2f} cap — make {est['max_n']} or fewer, or wait until tomorrow."}
+        prev = str(req.get("from_run") or "")
+        req["earlier"] = []
+        if prev:                                                   # ➕ Make more: same series, the grid keeps the earlier ones
+            try:
+                pv = self.agents.get(prev).view().get("batch") or {}
+                req["earlier"] = (pv.get("earlier") or []) + (pv.get("items") or [])
+                req["start"] = int(pv.get("next_start") or req.get("start") or 0)
+            except KeyError:
+                pass
+        return req
+
+    def batch_estimate(self, b: dict) -> tuple[int, dict]:
+        """🎛 What a batch would cost, before it runs. Spends nothing."""
+        from . import batch as B
+        ctypes = b.get("ctypes") if isinstance(b.get("ctypes"), list) else []
+        kind = B.kind_for(ctypes)
+        if not kind:
+            return 200, {"ok": True, "kind": "", "message": "🎛 Batch works for 🖼 pictures and 📝 docs (video later)."}
+        try:
+            n = max(1, min(B.MAX_N, int(b.get("n") or 1)))
+        except (TypeError, ValueError):
+            n = 1
+        return 200, {"ok": True, **B.estimate(kind, n, self.cfg, self.spend()["today_usd"] or 0.0)}
+
+    def batch_keep(self, b: dict) -> tuple[int, dict]:
+        """⭐ Keep / un-keep one batch result (kept.json in the project folder)."""
+        from . import batch as B
+        proj = store.project(self._pid(b.get("project")))
+        try:
+            kept = B.set_kept(preview.ensure_site(proj["id"]).resolve(), str(b.get("path") or ""), bool(b.get("keep")))
+        except ValueError as e:
+            return 400, {"ok": False, "code": "bad_args", "icon": "⭐", "message": str(e)}
+        return 200, {"ok": True, "kept": kept}
 
     def _play_test(self, run) -> dict | None:
         """🤖 Robot play-test of the project page when a run finishes (2026-11-24). None = no page to test."""
@@ -883,6 +934,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.agent_start, b)
             if p == "/api/where/open":
                 return self._run(app.where_open, b)
+            if p == "/api/batch/estimate":                 # 🎛 Batch create (2026-11-24)
+                return self._run(app.batch_estimate, b)
+            if p == "/api/batch/keep":
+                return self._run(app.batch_keep, b)
             if p == "/api/agent/rephrase":
                 return self._run(app.agent_rephrase, b)
             if p == "/api/agent/more":

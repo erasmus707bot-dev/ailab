@@ -269,6 +269,14 @@
   .mtile .mhd { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; overflow-wrap: anywhere; }
   .mtile img { width: 100%; height: auto; border-radius: 8px; }
   .mtile .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  /* 🎛 Batch create (2026-11-24) */
+  .batchrow { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); }
+  .batchrow select, .batchgrid select { min-height: 44px; font-size: 1rem; border-radius: 8px; }
+  .batchrow .bdial { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 280px; min-width: 0; }
+  .batchrow input[type=range] { flex: 1 1 140px; min-width: 120px; min-height: 44px; accent-color: var(--accent, #2f5d8a); }
+  .batchrow .dialword { flex-basis: 100%; font-size: .98rem; }
+  .btile.kept { outline: 2px solid var(--accent, #2f5d8a); }
+  .btile input[type=text] { min-height: 44px; font-size: 1rem; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px; }
   .docview.short { max-height: 40vh; }
   .changebox textarea { width: 100%; min-height: 66px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line);
     background: var(--panel2); color: inherit; padding: 10px; font: inherit; }
@@ -903,6 +911,7 @@ function startView() {
   const resultBox = h("div", { class: "result", id: "wbresult", hidden: true }, resHead, madeBox, baWrap, resRobot, resBtns, resNote);
   let madeSig = "";
   function paintMade(run, chg, pics, running) {
+    if (run.batch) { madeBox.replaceChildren(); madeBox.hidden = true; madeSig = ""; return; }   /* 🎛 the batch grid is in the agent pane */
     const sigNow = `${run.id}:${pics.length}:${chg.length}:${run.state}`;
     if (sigNow === madeSig) return; madeSig = sigNow;
     madeBox.replaceChildren(); madeBox.hidden = true;
@@ -1102,7 +1111,7 @@ function startView() {
     h("p", { class: "panesub" }, "Tell it what to build or change. It works step by step and asks before touching real code."),
     S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
     S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
-    ...(ag ? [ag.typeRow, ag.task, ...((r, pk) => matchMedia("(max-width: 640px)").matches ? [r, pk] : [pk, r])(  /* phones: ▶ Start before the model picker (Argus 2026-11-24) */
+    ...(ag ? [ag.typeRow, ag.task, ag.batchRow, ...((r, pk) => matchMedia("(max-width: 640px)").matches ? [r, pk] : [pk, r])(  /* phones: ▶ Start before the model picker (Argus 2026-11-24) */
           h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.newBtn, ag.askRow, ag.held), ag.picker), ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
@@ -1170,6 +1179,58 @@ function madeCard(pid, run) {
         h("a", { class: "btn", href: url, download: name }, "⬇ Download")));
   });
   return h("section", { class: "madecard", "aria-label": "What was made" }, h("h3", {}, `📦 What was made (${made.length})`), h("div", { class: "mtiles" }, tiles));
+}
+/* 🎛 Batch results (2026-11-24 Module 3): one tile per picture/doc (⬇ · ✏️ · ⭐), the earlier ones of the same
+   series folded below, and ➕ Make more (same words, same dial, new variations — test small, then go big) */
+function batchGrid(pid, run, startWith) {
+  const b = run.batch; if (!b) return null;
+  const kept = new Set(b.kept || []);
+  const base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].split("\nVariation:")[0].trim();
+  const pics = run.pictures || [], last = pics[pics.length - 1] || {};
+  const keep = (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : "");
+  const ids = run.ctypes && run.ctypes.length ? run.ctypes : null;
+  const tile = it => {
+    const url = `/preview/${pid}/${it.path}`, name = it.path.split("/").pop();
+    const body = it.kind === "picture"
+      ? h("a", { href: url, target: "_blank", rel: "noopener", title: "Full size" }, h("img", { src: url, alt: it.variation || "Batch picture", loading: "lazy" }))
+      : h("div", { class: "docview short" }, "⏳");
+    if (it.kind !== "picture") fetch(url).then(r => r.ok ? r.text() : Promise.reject()).then(t => { body.textContent = t.length > 900 ? t.slice(0, 900) + "\n…" : t; }).catch(() => { body.textContent = "Open it with ⤢."; });
+    const star = h("button", { class: "btn", type: "button", "aria-pressed": String(kept.has(it.path)), title: "Keep this one — listed in kept.json in the project folder" }, kept.has(it.path) ? "⭐ Kept" : "☆ Keep");
+    star.onclick = async () => { const on = star.getAttribute("aria-pressed") !== "true";
+      const r = await api("/api/batch/keep", { project: pid, path: it.path, keep: on });
+      if (r.ok) { star.setAttribute("aria-pressed", String(on)); star.textContent = on ? "⭐ Kept" : "☆ Keep"; star.closest(".btile").classList.toggle("kept", on); } };
+    const chg = h("input", { type: "text", placeholder: "What to change in this one", "aria-label": `What to change in number ${it.k + 1}`, hidden: true });
+    const chgGo = () => { const t = chg.value.trim(); if (!t || !startWith) return;
+      const txt = it.kind === "picture" ? `${base}${it.variation ? `\nVariation: ${it.variation}` : ""}\nChange: ${t}${keep}`
+        : `Change ${it.path}: ${t}\nRead it first, change only what this asks, keep everything else the same, then done.`;
+      startWith(txt, ids, false); };
+    chg.onkeydown = e => { if (e.key === "Enter") chgGo(); };
+    const pen = h("button", { class: "btn", type: "button", onclick: () => { if (chg.hidden) { chg.hidden = false; chg.focus(); } else chgGo(); } }, "✏️ Change it");
+    return h("div", { class: "mtile btile" + (kept.has(it.path) ? " kept" : "") },
+      h("div", { class: "mhd" }, h("b", {}, `#${it.k + 1}`), h("span", { class: "note" }, it.variation || "your words as typed")),
+      body, chg,
+      run.folder ? h("div", { class: "note wherepath", title: "Where this file is" }, `📍 ${run.folder}/${it.path}`) : null,
+      h("div", { class: "runbar" }, h("a", { class: "btn", href: url, download: name }, "⬇ Download"), pen, star,
+        it.kind === "picture" ? null : h("a", { class: "btn", href: url, target: "_blank", rel: "noopener", title: "Read all" }, "⤢")));
+  };
+  const items = b.items || [], earlier = b.earlier || [];
+  const noun = b.kind === "picture" ? "pictures" : "docs";
+  const out = h("section", { class: "madecard batchgrid", "aria-label": "Batch results" },
+    h("h3", {}, `🎛 Batch — ${items.length} of ${b.n} ${noun} · ${b.level_words} (dial ${b.dial})`),
+    items.length ? h("div", { class: "mtiles" }, items.map(tile)) : h("p", { class: "note" }, "⏳ The first one is on its way…"));
+  if (run.state !== "running" && startWith && items.length) {
+    const sizes = [2, 4, 8, 16, 24], want = sizes.find(x => x > b.n) || 24;
+    const cnt = h("select", { "aria-label": "How many more" }, sizes.map(x => h("option", { value: String(x) }, String(x))));
+    cnt.value = String(want);
+    const moreBtn = h("button", { class: "btn pri", type: "button", title: "Same words, same dial — new variations; the grid keeps these ones too" }, "➕ Make more ⭐");
+    const note = h("span", { class: "note", role: "status" });
+    moreBtn.onclick = async () => { moreBtn.disabled = true; note.textContent = "▶ Starting…";
+      const r = await startWith(base + keep, ids, false, { n: +cnt.value, dial: b.dial, from_run: run.id });
+      if (!r || !r.ok) { moreBtn.disabled = false; note.textContent = r && r.message ? `${r.icon || "⚠️"} ${r.message}` : ""; } };
+    out.append(h("div", { class: "runbar" }, moreBtn, h("label", { class: "bcount" }, "how many ", cnt), note));
+  }
+  if (earlier.length) out.append(h("details", {}, h("summary", {}, `🗂 Earlier in this batch (${earlier.length})`), h("div", { class: "mtiles" }, earlier.map(tile))));
+  return out;
 }
 /* ✏️ Change it: your own words, or 🪄 Help me say it (the writer model makes them clear — you see and edit before it runs) */
 function changeBox(pid, run, startWith, pm) {
@@ -1471,7 +1532,6 @@ const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Wo
 let LOOKS = null;
 async function looksLoad(force) { if (!LOOKS || force) { const r = await api("/api/looks"); if (r.ok) LOOKS = r; } return LOOKS; }
 const LOOK_SEP = " · ";
-const lookFill = (el, ...k) => el.replaceChildren(...k.flat().filter(x => x != null));   /* replaceChildren prints null as text */
 function lookFromText(t) { const m = String(t || "").match(/^Look:\s*(.*)$/m); return m ? m[1].split(/\s*[·;|,]\s*/).map(s => s.trim()).filter(Boolean) : []; }
 function lookStrip(t) { return String(t || "").replace(/^Look:.*(?:\n|$)/gm, "").replace(/\n+$/, ""); }
 function lookIndex() { const ix = {}; (LOOKS ? LOOKS.tabs : []).forEach(t => (t.items || []).forEach(it => { ix[it.n.toLowerCase()] = { tab: t, it }; })); return ix; }
@@ -1491,7 +1551,7 @@ function lookPicker(pid) {
     row.hidden = !shown;
     if (!shown) return;
     const c = cur || [], clash = LOOKS ? lookClashes(c) : [];
-    lookFill(row, h("span", { class: "tlead" }, "🎨 Look:"),
+    row.replaceChildren(h("span", { class: "tlead" }, "🎨 Look:"),
       ...(c.length ? c.map(n => h("button", { class: "lchip", type: "button", title: `Take ${n} off`, "aria-label": `Take ${n} off`,
         onclick: () => { cur = c.filter(x => x !== n); save(); paint(); } }, n, h("span", { "aria-hidden": "true" }, " ✕")))
         : [h("span", { class: "note" }, "none yet")]),
@@ -1534,12 +1594,12 @@ function lookPicker(pid) {
       } else {
         const t = LOOKS.tabs.find(x => x.id === tab) || LOOKS.tabs[0], items = t.items || [], few = innerWidth < 700 ? 6 : 8;
         const list = all ? items : items.slice(0, few);
-        lookFill(chipsEl, ...list.map(it => chip(it, t)),
+        chipsEl.replaceChildren(...list.map(it => chip(it, t)),
           items.length > few ? h("button", { class: "tchip more2", type: "button", onclick: () => { all = !all; paintDlg(); } }, all ? "▴ Fewer" : `▾ Show all ${items.length}`) : null,
           h("span", { class: "note looklimit" }, t.max === 1 ? "Pick 1" : `Up to ${t.max || 3}`));
       }
       const clash = lookClashes(picks);
-      lookFill(picked, h("b", {}, `Your look (${picks.length}/${maxT}): `),
+      picked.replaceChildren(h("b", {}, `Your look (${picks.length}/${maxT}): `),
         ...(picks.length ? picks.map(n => h("button", { class: "lchip", type: "button", "aria-label": `Take ${n} off`, onclick: () => { picks = picks.filter(x => x !== n); paintDlg(); } }, n, " ✕"))
           : [h("span", { class: "note" }, "nothing picked — the picture follows your words only")]),
         clash.length ? h("div", { class: "note lookwarn" }, `⚠️ ${clash.join(", ")} may fight each other (it still runs).`) : null);
@@ -1655,6 +1715,7 @@ function agentView(wb) {
   let typesOpen = false;                                   /* phones: all chips shown only after ▾ All types */
   function paintTypes() {
     const st = tstate(), on = typePicked();
+    try { batchPaint(); } catch (e) { /* 🎛 row not built yet */ }
     typeRow.classList.toggle("open", typesOpen);
     typeRow.replaceChildren(h("span", { class: "tlead" }, "🧩 Making:"),
       ...(CTYPES || []).map(ty => h("button", { class: "tchip" + (on.includes(ty.id) ? " on" : ""), type: "button", "aria-pressed": String(on.includes(ty.id)),
@@ -1691,6 +1752,33 @@ function agentView(wb) {
     h("button", { class: "btn", type: "button", title: S.mode === "connected" ? "Fill the task box" : "Needs 🔌 connected mode (Hermes studio tools)",
       onclick: () => { task.value = text; task.oninput(); task.focus(); } }, label)),
     S.mode === "connected" ? null : h("span", { class: "note" }, "🏝 Standalone — these need 🔌 Hermes"));
+  /* 🎛 Batch create (2026-11-24 Module 3): how many + the Similar ↔ Wild dial + the cost before anything runs */
+  const BN = [1, 2, 3, 4, 6, 8, 12, 16, 24];
+  const bCount = h("select", { id: "agbatchn", "aria-label": "How many to make" }, BN.map(n => h("option", { value: String(n) }, n === 1 ? "1 (one)" : String(n))));
+  bCount.value = String(store.get("batchn", 1));
+  const bDial = h("input", { type: "range", id: "agbatchdial", min: "0", max: "100", step: "1", value: String(store.get("batchdial", 20)), "aria-label": "How different each one is, Similar to Wild" });
+  const bWord = h("b", { class: "dialword" }), bCost = h("span", { class: "note", role: "status" });
+  const batchRow = h("div", { class: "batchrow", id: "agbatch", hidden: true },
+    h("label", { class: "bcount" }, "🎛 How many ", bCount),
+    h("div", { class: "bdial" }, h("span", { class: "note" }, "🟢 Similar"), bDial, h("span", { class: "note" }, "🔴 Wild"), bWord), bCost);
+  const dialWord = d => d < 34 ? "🟢 Similar — your words, a fresh one each time" : d < 67 ? "🟡 Middle — pose, light and setting change" : "🔴 Wild — style, scene and mood reimagined; your subject stays";
+  let bKind = "", bTimer = null;
+  function batchPaint() {
+    const d = +bDial.value, n = +bCount.value;
+    bWord.textContent = n < 2 ? "Pick 2 or more to make a batch" : dialWord(d); bDial.disabled = n < 2;
+    clearTimeout(bTimer);
+    bTimer = setTimeout(async () => {
+      const e = await api("/api/batch/estimate", { ctypes: typePicked(), n });
+      bKind = e.ok ? e.kind || "" : ""; batchRow.hidden = !bKind;
+      if (!bKind) return;
+      const noun = bKind === "picture" ? "picture" : "doc";
+      bCost.textContent = n < 2 ? `One ${noun} · about $${e.per_usd.toFixed(3)}`
+        : `${n} ${noun}s · about $${e.est_usd.toFixed(2)} · today $${e.today_usd.toFixed(2)} of $${e.cap_usd.toFixed(2)}` + (e.fits ? "" : ` · ⚠️ too much — ${e.max_n} fit today`);
+    }, 250);
+  }
+  bCount.onchange = () => { store.set("batchn", +bCount.value); batchPaint(); };
+  bDial.oninput = () => { store.set("batchdial", +bDial.value); batchPaint(); };
+  const batchReq = () => bKind && +bCount.value > 1 ? { n: +bCount.value, dial: +bDial.value } : null;
   const startBtn = h("button", { class: "btn pri", id: "agstart" }, "▶ Start");
   /* 2026-11-24: questions with choices + a plan to OK before it builds (on unless Scott unticks it) */
   const askFirst = h("input", { type: "checkbox", id: "agaskfirst", checked: !!store.get("askfirst", true), onchange: e => store.set("askfirst", e.target.checked) });
@@ -1718,12 +1806,13 @@ function agentView(wb) {
     status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.real_steps != null ? run.real_steps : run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
     steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
+    if (run.batch) steps.append(batchGrid(p.id, run, startWith));   /* 🎛 the batch grid fills in as each one lands */
     if (run.state !== "running") {                         /* 📦 + ✏️ right under it (2026-11-24) */
       if (run.gate) steps.append(h("button", { class: "btn pri gatebtn", type: "button", title: "Carry on with the build prompt — it stops again at the next check-in",
         onclick: () => startWith(run.gate.next_task, run.ctypes && run.ctypes.length ? run.ctypes : null, false) }, `▶ Go on to ${run.gate.next_name} ⭐`));
-      const mc = madeCard(p.id, run); if (mc) steps.append(mc);
-      else if (run.state === "done" && !run.gate) steps.append(h("div", { class: "step" }, "ℹ️ No files were made or changed in this run."));
-      const cb = changeBox(p.id, run, startWith, { prov, model: modelSel.value }); if (cb) steps.append(cb);
+      const mc = run.batch ? null : madeCard(p.id, run); if (mc) steps.append(mc);
+      else if (!run.batch && run.state === "done" && !run.gate) steps.append(h("div", { class: "step" }, "ℹ️ No files were made or changed in this run."));
+      const cb = run.batch ? null : changeBox(p.id, run, startWith, { prov, model: modelSel.value }); if (cb) steps.append(cb);
     }
     const ml = memLine(run); if (ml) steps.append(h("div", { class: "step" }, ml));
     /* M5: plain progress list from the build prompt's modules */
@@ -1784,7 +1873,7 @@ function agentView(wb) {
   startBtn.onclick = async () => {
     if (!task.value.trim()) { status.textContent = "✏️ Tell the agent what to do first."; return; }
     startBtn.disabled = true;
-    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: look.text(task.value), ask_first: askFirst.checked, ctypes: typePicked() });
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: look.text(task.value), ask_first: askFirst.checked, ctypes: typePicked(), batch: batchReq() });
     if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
     store.set("agrun." + p.id, r.run.id); paint(r.run);
   };
@@ -1794,18 +1883,18 @@ function agentView(wb) {
   };
   poll();
   /* 🖼 Make another / Change it start a new run from the result pane with these words and chips */
-  async function startWith(text, ids, ask) {
+  async function startWith(text, ids, ask, batch) {
     const lk = lookFromText(text); if (lk.length) look.set(lk);      /* 🎨 the Look rides along; the box stays your words */
     task.value = lookStrip(text); task.oninput();
     if (ids) store.set(tkey, { ids, manual: true });
     paintTypes();
-    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: text, ask_first: !!ask, ctypes: ids || typePicked() });
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: text, ask_first: !!ask, ctypes: ids || typePicked(), batch: batch || null });
     if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
   }
-  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, final, steps, more };
+  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, final, steps, more, batchRow };
   return [projectRow(), h("section", { class: "agent" },
-    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, look.row, hint, repoRow, goals,
+    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, look.row, hint, batchRow, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, newBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     status, final, steps,

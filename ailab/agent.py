@@ -20,6 +20,7 @@ import uuid
 from pathlib import Path
 
 from . import config, memory, picture, preview, repos, secretscan, store, creation
+from . import batch as batchmod
 from .mcp_client import HermesRefused
 from .transport import HttpError
 from .privacy import PrivacyRefused
@@ -239,7 +240,7 @@ class Run:
     def __init__(self, lab, cfg: dict, project: dict, provider: str, model: str, task: str,
                  root: Path | None = None, log_dir: Path | None = None, cap_usd: float | None = None,
                  autosave_field: str = "agent-last", step_cap: int | None = None, ask_first: bool = False,
-                 selftest=None, ctypes=None):
+                 selftest=None, ctypes=None, batch=None):
         """root/log_dir/cap_usd: ⚖️ Compare (M8) runs one lane in its own copy of the project."""
         self.id = uuid.uuid4().hex[:10]
         self.lab, self.cfg, self.project = lab, cfg, project
@@ -249,6 +250,11 @@ class Run:
         # 🖼 picture runs (2026-11-24): only the Image chip → ask style/shape → prompt → Hermes image_make → picture
         self.picture = creation.picture_mode(self.ctypes)
         self.pictures: list[dict] = []
+        # 🎛 Batch create (2026-11-24 Module 3): N pictures or docs, the dial sets how different each one is
+        self.batch = batchmod.norm(batch, self.ctypes) if root is None else None
+        if self.batch and isinstance(batch.get("earlier"), list):
+            self.batch["earlier"] = [x for x in batch["earlier"] if isinstance(x, dict)][:96]
+        self.docs: list[dict] = []
         self.stage: dict | None = None        # 📣 what is happening right now, in plain words (shown big on screen)
         self.started = time.time()
         self.root = (root or preview.ensure_site(project["id"])).resolve()
@@ -276,7 +282,7 @@ class Run:
         self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
         # M5 (2026-11-24): plain progress list from the prompt's "## Module N" headings + on-screen questions
         heads = list(re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)[ \t]*[—:–.-]*[ \t]*(.*)$", self.task, re.M))[:12]
-        if self.picture:                      # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
+        if self.picture or self.batch:        # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
             heads = []                        # — a picture run makes one picture; it has no modules or gates
         self.plan = [m.group(1) for m in heads]
         self.prompt_plan = bool(heads)        # modules came from a build prompt (not the agent's own plan)
@@ -327,7 +333,7 @@ class Run:
                 "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored,
                 **self.type_view(), "picture": getattr(self, "picture", False), "pictures": getattr(self, "pictures", []),
                 "stage": self.stage_view(), "elapsed_s": int(time.time() - getattr(self, "started", time.time())),
-                "made": self.made_view(), "gate": self.gate_info(), "folder": str(self.root)}
+                "made": self.made_view(), "gate": self.gate_info(), "folder": str(self.root), "batch": batchmod.view(self)}
 
     # 📣 M3 (2026-11-24, "I need to know what is going on"): one plain line for what the run is doing right now
     STAGE_WORDS = {"list": ("📂", "Looking at the files"), "read": ("📖", "Reading {path}"), "write": ("✍️", "Writing {path}"),
@@ -351,7 +357,7 @@ class Run:
             return {"icon": "🗺" if q.get("kind") == "plan" else "❓", "busy": False,
                     "text": "Waiting for you to OK the plan" if q.get("kind") == "plan" else "Waiting for your choice"}
         if st and time.time() - st.get("at", 0) < 600:
-            return {"icon": st["icon"], "text": st["text"], "busy": True}
+            return {"icon": st["icon"], "text": batchmod.stage_prefix(self) + st["text"], "busy": True}
         last = self.steps[-1] if self.steps else None
         if not last:
             return {"icon": "🧠", "text": f"Thinking with {self.model.split('/')[-1]}", "busy": True}
@@ -408,6 +414,8 @@ class Run:
             out[path] = {"path": path, "kind": kind, "new": out.get(path, {}).get("new", new), "step": st.get("n")}
         for pic in getattr(self, "pictures", []) or []:
             out.setdefault(pic["path"], {"path": pic["path"], "kind": "picture", "new": True, "step": None})
+        for d in getattr(self, "docs", []) or []:                 # 🎛 batch docs
+            out.setdefault(d["path"], {"path": d["path"], "kind": "doc", "new": True, "step": None})
         return list(out.values())
 
     def plan_view(self) -> list[dict]:
@@ -988,6 +996,9 @@ class Run:
         msgs = self.msgs
         self.live = True
         try:
+            if getattr(self, "batch", None):                # 🎛 batch: N pictures / docs, its own short path
+                (batchmod.pictures if self.batch["kind"] == "picture" else batchmod.docs)(self)
+                return
             if getattr(self, "picture", False):             # 🖼 picture run: its own short path, same safety handling
                 picture.run(self)
                 return
@@ -1074,14 +1085,14 @@ class Agents:
         self.lock = threading.Lock()
 
     def start(self, lab, cfg, project, provider, model, task, step_cap: int | None = None, ask_first: bool = False,
-              selftest=None, ctypes=None) -> Run:
+              selftest=None, ctypes=None, batch=None) -> Run:
         if not task.strip():
             raise ValueError("Tell the agent what to do.")
         with self.lock:
             if any(r.state == "running" and r.project["id"] == project["id"] for r in self.runs.values()):
                 raise ValueError("An agent is already working on this project. Stop it first.")
             run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap, ask_first=ask_first, selftest=selftest,
-                      ctypes=ctypes)
+                      ctypes=ctypes, batch=batch)
             self.runs[run.id] = run
         threading.Thread(target=run.loop, daemon=True, name=f"agent-{run.id}").start()
         return run
