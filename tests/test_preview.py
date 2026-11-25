@@ -130,7 +130,7 @@ class PreviewOn(Srv):
     def test_capture_saved_in_project(self):
         code, body, _ = self.req("/api/preview/capture", {"project": "scratch", "png": PNG})
         self.assertTrue(body["ok"], body)
-        f = Path(self.tmp.name) / "projects/scratch/captures" / body["file"]
+        f = preview.site_dir("scratch") / "captures" / body["file"]
         self.assertTrue(f.read_bytes().startswith(b"\x89PNG"))
         code, body, _ = self.req("/api/preview/capture", {"project": "scratch", "png": "data:image/png;base64,AAAA"})
         self.assertEqual(code, 400)

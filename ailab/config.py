@@ -59,6 +59,17 @@ def home() -> Path:
     return Path(os.environ.get("AILAB_HOME") or Path.home() / ".config/ailab")
 
 
+def files_home() -> Path:
+    """📍 2026-11-24 (Scott: "easier ways to know where things are"): each project's own files live in a visible folder,
+    ~/hermes-data/ailab/<project>/. Lab bookkeeping (agent logs, compare, before-copies) stays in home().
+    AILAB_FILES overrides; under a test AILAB_HOME they go to AILAB_HOME/files."""
+    if os.environ.get("AILAB_FILES"):
+        return Path(os.environ["AILAB_FILES"])
+    if os.environ.get("AILAB_HOME"):
+        return Path(os.environ["AILAB_HOME"]) / "files"
+    return Path.home() / "hermes-data" / "ailab"
+
+
 def cache_dir() -> Path:
     return Path(os.environ.get("AILAB_CACHE") or home() / "cache")
 

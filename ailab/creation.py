@@ -49,7 +49,7 @@ TYPES: list[dict] = [
     {"id": "text", "icon": "📝", "label": "Text", "use": "💬 general", "robot": "none", "ship": [],
      "words": ["write", "essay", "letter", "story", "article", "post", "email", "readme", "notes", "summary", "poem",
                "words", "description", "manual", "guide"],
-     "guide": "Writing, not code: put it in a .md file (one file unless told otherwise). Short paragraphs, plain words. "
+     "guide": "Writing, not code: put it in a .md file in docs/ (one file unless told otherwise). Short paragraphs, plain words. "
               "No page test runs — Scott reads it beside the old version.",
      "questions": [["How long?", ["Short — one screen ⭐", "Medium — a page or two", "Long and full"]],
                    ["Tone?", ["Plain and direct ⭐", "Warm and friendly", "Formal"]]]},

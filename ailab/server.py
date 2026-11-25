@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -287,6 +289,25 @@ class App:
         if not store.project(pid):
             raise preview.PreviewError("No such project.", "bad_args", "❓")
         return pid
+
+    def where_get(self, q: dict) -> tuple[int, dict]:
+        """📍 the real folders behind a project (2026-11-24)."""
+        return 200, {"ok": True, **preview.where(self._pid(q.get("project")))}
+
+    def where_open(self, b: dict) -> tuple[int, dict]:
+        """📂 Open a project folder (or its pictures/ docs/ / the Gallery) in the file manager on gandalf."""
+        w = preview.where(self._pid(b.get("project")))
+        which = str(b.get("which") or "folder")
+        if which not in ("folder", "pictures", "docs", "gallery"):
+            return 400, {"ok": False, "code": "bad_args", "icon": "❓", "message": "Unknown folder."}
+        path = Path(w[which])
+        path.mkdir(parents=True, exist_ok=True)
+        if not shutil.which("xdg-open"):
+            return 200, {"ok": True, "opened": False, "path": str(path), "message": "No file manager here — 📋 copy the path instead."}
+        subprocess.Popen(["xdg-open", str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        return 200, {"ok": True, "opened": True, "path": str(path),
+                     "message": "📂 Opened on gandalf's screen. On your phone, 📋 copy the path instead."}
 
     def preview_files(self, q: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["preview"]:
@@ -764,6 +785,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(lambda: (200, {"ok": True, "types": creation.public()}))
             if u.path == "/api/roster":
                 return self._run(app.roster, q)
+            if u.path == "/api/where":                     # 📍 where a project's files really are (2026-11-24)
+                return self._run(app.where_get, q)
             if u.path == "/api/preview/files":
                 return self._run(app.preview_files, q)
             if u.path == "/api/preview/file":
@@ -821,6 +844,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(getattr(app, LIVE_POST[p]), b)
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)
+            if p == "/api/where/open":
+                return self._run(app.where_open, b)
             if p == "/api/agent/rephrase":
                 return self._run(app.agent_rephrase, b)
             if p == "/api/agent/more":

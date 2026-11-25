@@ -58,7 +58,7 @@ def models_used(pid: str) -> list[str]:
 
 
 def latest_capture(pid: str) -> Path | None:
-    d = preview.site_dir(pid).parent / "captures"
+    d = preview.site_dir(pid) / "captures"
     caps = sorted(d.glob("capture-*.png")) if d.is_dir() else []
     return caps[-1] if caps else None
 

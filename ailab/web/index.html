@@ -264,6 +264,8 @@
   .madecard h3, .changebox h3 { margin: 0; font-size: 1.08rem; }
   .mtiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
   .mtile { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); min-width: 0; }
+  .wherepath { display: block; overflow-wrap: anywhere; font-size: .85em; opacity: .85; }
+  .whererow { padding: 8px 0; border-bottom: 1px solid var(--line, #3a4658); }
   .mtile .mhd { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; overflow-wrap: anywhere; }
   .mtile img { width: 100%; height: auto; border-radius: 8px; }
   .mtile .btn { min-height: 44px; display: inline-flex; align-items: center; }
@@ -360,6 +362,7 @@
   <label class="sr" for="projsel">Project</label>
   <select class="projsel" id="projsel" title="Project"></select>
   <button class="ib" id="projnew" title="New project" aria-label="New project">➕</button>
+  <button class="ib" id="projwhere" title="📍 Where are this project's files?" aria-label="Where are this project's files">📍</button>
   <button class="chip" id="waiting" title="Changes waiting for your OK" hidden></button>
   <span class="chips">
     <span class="chip" id="mode" title="Mode"></span>
@@ -370,6 +373,15 @@
   </span>
 </header>
 <main id="main" aria-live="polite"><div class="loading" aria-label="Loading">⏳</div></main>
+
+<dialog id="wheredlg" aria-label="Where this project's files are">
+  <form method="dialog">
+    <h3 style="margin-top:0">📍 Where it is</h3>
+    <div id="wherebody">⏳</div>
+    <p class="note" id="wherenote" role="status"></p>
+    <div class="row"><button class="btn" value="cancel" aria-label="Close">✕ Close</button></div>
+  </form>
+</dialog>
 
 <dialog id="newproj">
   <form method="dialog">
@@ -487,6 +499,29 @@ $("#projsel").onchange = e => {
   store.set("project", e.target.value); chatLog = []; render();
 };
 $("#projnew").onclick = () => newProject();
+/* 📍 Where (2026-11-24, Scott: "easier ways to know where things are in project storage") */
+function copyText(t, note) {
+  const ok = () => { note.textContent = "📋 Copied: " + t; };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(ok, () => { note.textContent = t; });
+  else { const ta = h("textarea", {}, t); document.body.append(ta); ta.select(); try { document.execCommand("copy"); ok(); } catch (e) { note.textContent = t; } ta.remove(); }
+}
+async function showWhere() {
+  const d = $("#wheredlg"), body = $("#wherebody"), note = $("#wherenote"), p = curProject();
+  body.textContent = "⏳"; note.textContent = ""; d.showModal();
+  const w = await api(`/api/where?project=${encodeURIComponent(p.id)}`);
+  if (!w.ok) { body.textContent = `${w.icon || "⚠️"} ${w.message || "Couldn't find the folder."}`; return; }
+  const row = (icon, label, path, which) => h("div", { class: "whererow" },
+    h("div", {}, h("b", {}, `${icon} ${label}`)), h("code", { class: "wherepath" }, path),
+    h("div", { class: "runbar" },
+      h("button", { class: "btn", type: "button", onclick: () => copyText(path, note) }, "📋 Copy path"),
+      which ? h("button", { class: "btn", type: "button", onclick: async () => { const r = await api("/api/where/open", { project: p.id, which }); note.textContent = r.message || (r.ok ? "📂 Opened" : "⚠️ Couldn't open it"); } }, "📂 Open") : null));
+  body.innerHTML = "";
+  body.append(h("p", { class: "note" }, `${p.name}: ${w.files} files · ${w.mb} MB`),
+    row("📁", "Project folder", w.folder, "folder"), row("🖼", "Pictures", w.pictures, "pictures"),
+    row("📝", "Documents", w.docs, "docs"), row("🎨", "Gallery copies (Image Studio)", w.gallery, "gallery"),
+    w.backup ? h("p", { class: "note" }, `🗄 Old hidden copy kept as a backup: ${w.backup}`) : null);
+}
+$("#projwhere").onclick = () => showWhere();
 function paintWaiting(n) {
   const c = $("#waiting"); c.hidden = !n; c.textContent = n ? `✋ ${n}` : "";
   c.setAttribute("aria-label", n ? `${n} change${n === 1 ? "" : "s"} waiting for your OK` : "");
@@ -1112,6 +1147,7 @@ function madeCard(pid, run) {
     return h("div", { class: "mtile" },
       h("div", { class: "mhd" }, h("span", { "aria-hidden": "true" }, KIND_ICON[m.kind] || "📄"), h("b", {}, name), h("span", { class: "note" }, (m.new ? "new" : "changed") + (dir ? ` · ${dir}` : ""))),
       body,
+      run.folder ? h("div", { class: "note wherepath", title: "Where this file is" }, `📍 ${run.folder}/${m.path}`) : null,
       h("div", { class: "runbar" }, h("a", { class: "btn" + (m.kind === "page" ? " pri" : ""), href: url, target: "_blank", rel: "noopener" }, open),
         h("a", { class: "btn", href: url, download: name }, "⬇ Download")));
   });

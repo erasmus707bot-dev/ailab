@@ -12,7 +12,7 @@ import time
 import unittest
 from pathlib import Path
 
-from ailab import compare, config, providers, secretscan, store
+from ailab import compare, config, preview, providers, secretscan, store
 from ailab.privacy import PrivacyRefused
 from ailab.providers.base import ChatResult
 from ailab.spend import SpendBlocked
@@ -92,7 +92,7 @@ class Acceptance(Base):
         self.assertLessEqual(v["usd"], 0.50)
         self.assertTrue(all(ln["secs"] is not None for ln in v["lanes"]))
         # lanes are isolated copies; the project itself is untouched
-        site = Path(self.tmp.name) / "projects/scratch/site/index.html"
+        site = preview.site_dir("scratch") / "index.html"
         lane = lambda k: (c.dir / "lanes" / str(k) / "site/index.html").read_text()   # noqa: E731
         self.assertIn("footer", lane(0))
         self.assertNotIn("<footer>", lane(1))

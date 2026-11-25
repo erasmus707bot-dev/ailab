@@ -44,19 +44,54 @@ class PreviewError(Exception):
 def site_dir(pid: str) -> Path:
     if not PID.fullmatch(pid or ""):
         raise PreviewError("Bad project id.", "bad_args", "❓")
+    return config.files_home() / pid
+
+
+def legacy_site_dir(pid: str) -> Path:
+    """Where project files lived before 2026-11-24 (hidden). Kept untouched as the backup after the move."""
     return config.home() / "projects" / pid / "site"
 
 
+SUBDIRS = ("pictures", "docs")
+
+
+def _tree_sum(d: Path) -> tuple[int, int]:
+    n = b = 0
+    for f in d.rglob("*"):
+        if f.is_file() and not f.is_symlink():
+            n, b = n + 1, b + f.stat().st_size
+    return n, b
+
+
 def ensure_site(pid: str) -> Path:
-    """New project folder starts as a copy of the fixture so there is always something to see."""
+    """The project's visible folder. First use: copied from the old hidden folder (checked file count + bytes, the old
+    one stays as a backup — nothing deleted), or from the starter fixture for a brand-new project."""
     d = site_dir(pid)
     if not d.exists():
         d.parent.mkdir(parents=True, exist_ok=True)
-        tmp = d.parent / ".site-new"
+        tmp = d.parent / f".{pid}-new"
         shutil.rmtree(tmp, ignore_errors=True)                       # our own half-made copy only
-        shutil.copytree(FIXTURE, tmp)
+        old = legacy_site_dir(pid)
+        src = old if old.is_dir() else FIXTURE
+        shutil.copytree(src, tmp, symlinks=True)
+        if src is old and _tree_sum(old) != _tree_sum(tmp):
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise PreviewError("Moving this project to its visible folder didn't copy every file — nothing was "
+                               "changed; the old folder is still in use.", "move_failed", "📍")
         os.replace(tmp, d)
+    for sub in SUBDIRS:
+        (d / sub).mkdir(exist_ok=True)
     return d
+
+
+def where(pid: str) -> dict:
+    """📍 Where panel: the real folders behind a project (Scott reads, copies or opens them)."""
+    d = ensure_site(pid)
+    n, b = _tree_sum(d)
+    old = legacy_site_dir(pid)
+    gallery = Path.home() / "hermes-data" / "images" / "ai-lab"
+    return {"folder": str(d), "pictures": str(d / "pictures"), "docs": str(d / "docs"), "gallery": str(gallery),
+            "files": n, "mb": round(b / 1e6, 1), "backup": str(old) if old.is_dir() else ""}
 
 
 def _path(pid: str, rel: str, *, editing: bool = True) -> Path:
@@ -115,7 +150,7 @@ def save_capture(pid: str, data_url: str) -> dict:
     if len(raw) > MAX_CAPTURE or raw[:8] != b"\x89PNG\r\n\x1a\n":
         raise PreviewError("Capture is not a usable PNG.", "bad_args", "❓")
     ensure_site(pid)
-    d = site_dir(pid).parent / "captures"
+    d = site_dir(pid) / "captures"   # 2026-11-24: inside the visible project folder
     d.mkdir(exist_ok=True)
     f = d / time.strftime("capture-%Y%m%d-%H%M%S.png")
     n = 2

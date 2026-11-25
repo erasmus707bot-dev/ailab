@@ -327,7 +327,7 @@ class Run:
                 "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored,
                 **self.type_view(), "picture": getattr(self, "picture", False), "pictures": getattr(self, "pictures", []),
                 "stage": self.stage_view(), "elapsed_s": int(time.time() - getattr(self, "started", time.time())),
-                "made": self.made_view(), "gate": self.gate_info()}
+                "made": self.made_view(), "gate": self.gate_info(), "folder": str(self.root)}
 
     # 📣 M3 (2026-11-24, "I need to know what is going on"): one plain line for what the run is doing right now
     STAGE_WORDS = {"list": ("📂", "Looking at the files"), "read": ("📖", "Reading {path}"), "write": ("✍️", "Writing {path}"),
