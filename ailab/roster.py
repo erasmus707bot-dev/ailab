@@ -31,23 +31,23 @@ ROSTER: list[dict] = [
     {"provider": "openrouter", "id": "qwen/qwen3.8-max-0902", "match": [r"^qwen/qwen3\.8-max"],
      "job": "pictures + tools in one model", "from": "Alibaba Qwen · China · closed",
      "price": "about $2 in / $6 out per million", "zdr": "UNVERIFIED — Alibaba is the only host", "id_checked": True},
-    # ---- 🎨 fewer limits (Scott 2026-11-24: "label the less censored models so I may make art in the most free ways") ----
+    # ---- 🔓 uncensored (Scott 2026-11-24: "label the less censored models so I may make art in the most free ways") ----
     # Sources: morphllm "best uncensored llm" (2026-11-05), atlascloud / featherless 2026 guides. UNVERIFIED until a Compare probe.
     {"provider": "openrouter", "id": "nousresearch/hermes-4-405b", "match": [r"^nousresearch/hermes-4-405b"],
-     "job": "🎨 fewer limits — big general model, neutral alignment (stories, art prompts)", "from": "Nous Research · USA · open weights (Llama 3.1 base)",
+     "job": "🔓 uncensored — big general model, neutral alignment (stories, art prompts)", "from": "Nous Research · USA · open weights (Llama 3.1 base)",
      "price": "about $1 in / $3 out per million — UNVERIFIED", "zdr": "UNVERIFIED (open weights, several hosts)", "id_checked": False,
      "limits": "fewer"},
     {"provider": "openrouter", "id": "venice/uncensored", "match": [r"^venice/uncensored$"],
-     "job": "🎨 fewer limits — chat + creative writing; NO tool calling (not for builds)", "from": "Venice · USA · open-weight fine-tune",
+     "job": "🔓 uncensored — chat + creative writing; NO tool calling (not for builds)", "from": "Venice · USA · open-weight fine-tune",
      "price": "about $0.20 in / $0.90 out per million — UNVERIFIED",
      "zdr": "UNVERIFIED — never the :free endpoint (logs prompts)", "id_checked": False, "limits": "fewer"},
-    # ---- 🎨 Venice direct (2026-11-24 art freedom). IDs + prices from docs.venice.ai/overview/models (2026-11-24). ----
+    # ---- 🔓 Venice direct (2026-11-24 art freedom). IDs + prices from docs.venice.ai/overview/models (2026-11-24). ----
     {"provider": "venice", "id": "venice-uncensored-1-2", "match": [r"^venice-uncensored-1-2$"],
-     "job": "🎨 fewer limits — picture prompt writer (keeps your words exactly); chat + creative writing",
+     "job": "🔓 uncensored — picture prompt writer (keeps your words exactly); chat + creative writing",
      "from": "Venice · USA · open-weight fine-tune", "price": "$0.20 in / $0.90 out per million",
      "zdr": "Venice says private (no prompt storage) — UNVERIFIED by us", "id_checked": True, "limits": "fewer"},
     {"provider": "venice", "id": "deepseek-v4-1-flash-uncensored", "match": [r"^deepseek-v4-1-flash-uncensored$"],
-     "job": "🎨 fewer limits — stronger writer, longer stories", "from": "DeepSeek weights · hosted by Venice (USA)",
+     "job": "🔓 uncensored — stronger writer, longer stories", "from": "DeepSeek weights · hosted by Venice (USA)",
      "price": "$0.33 in / $1.32 out per million", "zdr": "Venice says private — UNVERIFIED by us", "id_checked": True,
      "limits": "fewer"},
     # ---- local (Ollama on gandalf: RTX 2060 6 GB, 31 GB RAM) ----
@@ -62,10 +62,10 @@ ROSTER: list[dict] = [
     {"provider": "ollama", "id": "qwen3.5:9b", "match": [r"^qwen3\.5:9b"],
      "job": "middle local model (already on gandalf; slow off the card)", "from": "Alibaba Qwen · local", "price": "free", "pull": "qwen3.5:9b"},
     {"provider": "ollama", "id": "dolphin3:8b", "match": [r"^dolphin3:8b"],
-     "job": "🎨 fewer limits, local and private — stories, art prompts (fits the 6 GB card)", "from": "Dolphin (Eric Hartford) · local",
+     "job": "🔓 uncensored, local and private — stories, art prompts (fits the 6 GB card)", "from": "Dolphin (Eric Hartford) · local",
      "price": "free", "pull": "dolphin3:8b", "limits": "fewer"},
     {"provider": "ollama", "id": "hermes3:8b", "match": [r"^hermes3:8b"],
-     "job": "🎨 fewer limits, local — follows your system prompt closely (fits the 6 GB card)", "from": "Nous Research · local",
+     "job": "🔓 uncensored, local — follows your system prompt closely (fits the 6 GB card)", "from": "Nous Research · local",
      "price": "free", "pull": "hermes3:8b", "limits": "fewer"},
 ]
 
@@ -90,7 +90,8 @@ def arrange(provider: str, ids: list[str], live: bool, extra: list[str] | None =
             picks[e["id"]] = e["job"] + " (id not confirmed)"
     extra = [m for m in (extra or []) if isinstance(m, str) and m and m not in front]
     rest = [m for m in ids if m not in front and m not in extra]
-    return front + extra + rest, picks
+    unc = lambda m: 0 if limits_tag(provider, m) == UNCENSORED else 1                  # noqa: E731 — policy: uncensored first
+    return sorted(front, key=unc) + sorted(extra, key=unc) + sorted(rest, key=unc), picks
 
 
 def status(lab, project: dict | None = None) -> list[dict]:
@@ -138,24 +139,27 @@ USE_RULES: list[tuple[str, str]] = [
     (r"flash|mini|lite|haiku|nano|tiny|small|turbo|fast|instant|:[1-9](\.[0-9])?b\b", "⚡ fast & cheap"),
     (r"opus|ultra|max\b|large|405b|235b|480b|:[1-9][0-9]{1,2}b\b", "🧠 hardest work"),
 ]
-# ---- 🎨 how strict a model is (2026-11-24) ----------------------------------------------------------------------
-# 🎨 fewer limits = a fine-tune made to refuse less (stories, art prompts, mature themes). 🔒 strict = the company that
+# ---- 🔓 how strict a model is (2026-11-24) ----------------------------------------------------------------------
+# 🔓 uncensored = a fine-tune made to refuse less (stories, art prompts, mature themes). 🔒 strict = the company that
 # runs it filters on its side. No icon = normal. A guide from public write-ups, not a test — UNVERIFIED per model.
 # Whatever the model: nothing sexual involving minors, no real person's likeness without consent.
-LIMITS_FEWER_RX = re.compile(r"uncensored|abliterat|dolphin|(^|/)hermes-?[34]|nousresearch/hermes|venice/|lumimaid|euryale|"
-                             r"mythomax|magnum|rocinante|cydonia|nemomix|unslop", re.I)
+LIMITS_FEWER_RX = re.compile(r"uncensored|abliterat|heretic|dolphin|(^|/)hermes-?[34]|nousresearch/hermes|venice/|lumimaid|"
+                             r"euryale|mythomax|magnum|rocinante|cydonia|nemomix|unslop|lustify|^chroma$|aion-labs-aion", re.I)
+# Policy (Scott 2026-11-24): every low- or no-censorship model carries the label "🔓 uncensored", and uncensored models
+# come FIRST — in every model list, in every 💡 suggestion, and as the default writer / picture model.
+UNCENSORED = "🔓 uncensored"
 STRICT_PROVIDERS = {"claude", "qwen", "kimi", "gemini"}           # first-party APIs with provider-side filters
-LIMITS_LEGEND = (" 🎨 = fewer limits (made to refuse less — stories, art prompts, mature themes) · 🔒 = strict "
-                 "(the company filters on its side). A guide, not a test.")
+LIMITS_LEGEND = (" 🔓 uncensored = low or no censorship (made to refuse less — stories, art, mature themes); these "
+                 "come first in every list · 🔒 = strict (the company filters on its side). A guide, not a test.")
 
 
 def limits_tag(provider_name: str, model_id: str) -> str:
-    """'🎨' fewer limits · '🔒' strict · '' normal."""
+    """'🔓 uncensored' · '🔒' strict · '' normal."""
     for e in ROSTER:
         if e["provider"] == provider_name and e.get("limits") and any(re.search(p, model_id or "") for p in e["match"]):
-            return "🎨" if e["limits"] == "fewer" else "🔒"
+            return UNCENSORED if e["limits"] == "fewer" else "🔒"
     if LIMITS_FEWER_RX.search(model_id or ""):
-        return "🎨"
+        return UNCENSORED
     if provider_name in STRICT_PROVIDERS or re.match(r"^(anthropic|openai|google)/", model_id or ""):
         return "🔒"
     return ""
