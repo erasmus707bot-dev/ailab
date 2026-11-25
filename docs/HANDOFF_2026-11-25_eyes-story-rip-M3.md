@@ -118,3 +118,7 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
 - 🔗 false alarm on the same run: "next morning in a diner" was flagged against ch1 "they are racing", as two half-flags
   ("Fact…" / "His idea…"). Answered ↔️ Keep both. `4f9f981`: checker told facts are the past and a chapter may move on;
   half-flags without a clash are dropped (live after the next Lab restart).
+- `30bf0b5` 👕 wardrobe: once per cast member the local eyes describe their anchor's clothes ($0, `.shelf/story/wardrobe.json`);
+  "wearing a orange outfit" in the brief becomes e.g. "wearing a teal T-shirt and orange trousers" for the picture words and the
+  👁 words. **Note for the story session:** your uncommitted `onlooker_pt()` read the outfit only from "wearing a … outfit";
+  I widened that one line to also read "wearing <garments>, with …" (left uncommitted, in your hunk). Live after a Lab restart.
