@@ -142,3 +142,9 @@ class Stage(Base):
         v = r.view()
         self.assertIn("elapsed_s", v)
         self.assertFalse(v["picture"])
+
+
+def test_writer_never_adds_clothing():
+    """2026-11-24 live: Scott asked for 'a woman by a palm tree', the writer added 'a flowing dress'."""
+    from ailab import picture
+    assert "Never add clothing" in picture.PROMPT_SYS

@@ -24,7 +24,8 @@ PROMPT_SYS = ("You help write prompts for a text-to-picture model. Scott's own w
               "wrote them — you never repeat, reword, soften, censor or remove them. Reply ONLY with extra detail to put "
               "after his words: style, colours, light, setting, framing, camera or medium — 20–60 words, plain "
               "description, no lists, no quotes, no warnings, no extra talk. Match his choices (style, shape). "
-              "Never contradict or tone down anything he asked for.")
+              "Never contradict or tone down anything he asked for. Never add clothing, covering, extra people or "
+              "body details he didn't ask for — what people wear, or don't, is only his to say.")
 WRITERS = [("venice", "venice-uncensored-1-2"), ("openrouter", "venice/uncensored")]   # then the run's own model
 VENICE_PHOTO, VENICE_ART = "venice/lustify-v8", "venice/chroma"
 REFUSAL_RX = re.compile(r"\b(i can'?t|i cannot|i won'?t|i'?m not able|sorry|as an ai)\b", re.I)
