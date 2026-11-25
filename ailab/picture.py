@@ -392,16 +392,16 @@ def run(run) -> None:
             args["pose_image"] = pose
         else:
             args.pop("pose_image", None)
-        if tag_prompt.wants(pmodel):                         # 🏷 Illustrious / Pony read comma tags, not sentences
-            if tagged is None:
+        if tag_prompt.wants(pmodel, run):                    # 🏷 Illustrious / Pony read comma tags (Hermes prompt_style)
+            if tagged is None:                               # same tags for Pony when Illustrious falls through
                 t_names = look + ([style] if style and not (look and looks.has_look_style(look)) else [])
                 t_look = [w for part in looks.parts(t_names) for w in part]
-                tagged = tag_prompt.write(run, writers(run), t_mine, t_look, t_add, stage)
+                tagged = (*tag_prompt.write(run, writers(run), pmodel, t_mine, t_look, t_add, stage), pmodel)
                 run._record({"action": "tags", "why": "🏷 tag prompt for the anime model — your words kept at the end"
                              + (" (simple rules — no writer helped)" if tagged[1] == "rules" else f" (tags by {tagged[1].split('/')[-1]})"),
-                             "result": {"tags": tagged[0], "by": tagged[1], "prompt": tag_prompt.build(pmodel, tagged[0], t_mine)}, "usd": 0.0})
+                             "result": {"tags": tagged[0], "by": tagged[1], "prompt": tagged[2]}, "usd": 0.0})
                 run._check_stop()
-            args["prompt"], args["negative_prompt"] = tag_prompt.build(pmodel, tagged[0], t_mine), tag_prompt.negative(pmodel, base_neg)
+            args["prompt"], args["negative_prompt"] = tagged[2], base_neg      # Hermes adds the model's quality tags + negative
         else:
             args["prompt"], args["negative_prompt"] = base_prompt, base_neg
         stage(run, "🎨", "Asking Hermes to make the picture")
@@ -525,7 +525,7 @@ def run(run) -> None:
             tries -= 1
             run._check_stop()
             counted = count_missed(pic["eyes"])
-            args["prompt"] = redo_prompt(sent, pic["eyes"], tag_prompt.wants(pmodel))
+            args["prompt"] = redo_prompt(sent, pic["eyes"], tag_prompt.wants(pmodel, run))
             run._record({"action": "count" if counted else "redo", "usd": 0.0,
                          "why": ("🔢 the count was off" if counted else f"👁 only {pic['eyes'].get('score')}% match")
                                 + " — one more try with a new seed" + ("" if args["prompt"] == sent else ", the misses spelled out")

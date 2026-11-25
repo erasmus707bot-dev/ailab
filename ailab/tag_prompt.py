@@ -1,109 +1,81 @@
-"""🏷 Tag prompts for the anime models (local pictures M3 tags, 2026-11-24 — Scott 1 · 1 "go").
+"""🏷 Tag prompts for the anime models — Lab side (thin client since eyes+story+rip follow-up 5, 2026-11-25).
 
-Illustrious XL and Pony V6 are trained on comma tags, not sentences. M3 proof: Illustrious got the sentence
-"a girl with a red umbrella at a rainy bus stop" and drew a closed umbrella, no rain, a park bench.
-For these two models only the picture prompt becomes:
-    <model's quality tags>, <tags for Scott's words + Look + writer detail>, <Scott's words exactly as typed>
-The tags come from the prompt writer (one short extra call); if no writer helps, simple rules make them.
-His own words always stay in the prompt, untouched. Every other model keeps the sentence prompt.
-2026-11-25 (Scott 1): quality tags + model negatives live in ONE place — Hermes forge/studios/comfy/models.py (checked
-against community guides 2026-11-24). Hermes prepends them on the card, so the Lab sends only the scene tags; before
-this both sides added them (Pony got the score chain twice, Illustrious "masterpiece, best quality" twice).
+Illustrious XL and Pony V6 read Danbooru comma tags, not sentences (M3 proof 2026-11-24: Illustrious got "a girl with
+a red umbrella at a rainy bus stop" and drew a closed umbrella, no rain, a park bench).
+Which model reads what — and the tag writer's instructions, the clean-up, the no-writer rules and the final build — now
+live in Hermes: forge/studios/comfy/prompt_dialect.py, tool `prompt_style` (models.py `dialect`). One place for every
+studio. The Lab keeps only the writer loop, because the writer call is the Lab's own (its key, spend and cap).
+The prompt is: <tags>, <Scott's words exactly as typed>. Hermes adds the quality tags + negative on the card.
+Hermes away or too old → the model is treated as a sentence model (his words go as they are), never a guess.
 """
 from __future__ import annotations
 
-import re
+import time
 
-MODELS = frozenset({"local/illustrious-xl-v0.1", "local/pony-v6-xl"})
-LIMIT = 1500
-MAX_TAGS = 40
-TAG_SYS = ("You turn a picture idea into Danbooru-style tags for an anime picture model. Reply ONLY with one line of "
-           "comma-separated lowercase tags, most important first, 12–30 tags: how many people (1girl, 1boy, solo, "
-           "no humans), who or what, what they are doing, what they hold (say its state: open umbrella, closed book), "
-           "clothing ONLY if he said it, the place, weather, time of day, light, framing. Cover every thing he "
-           "asked for — never drop, soften, censor or tone down any of it, and never add people, clothing or body "
-           "details he didn't ask for. Only things that can be SEEN — no mood or feeling words (calm, serene, quiet, "
-           "peaceful): the model paints them as words on signs. No sentences, no quality words (masterpiece, score_9), no quotes, no "
-           "warnings, no extra talk.")
-# 2026-11-24 live (Lab, Illustrious): the writer's tag "calm" came out as a bus stop sign reading "CALM".
-MOODS = frozenset("calm composed quiet serene peaceful tranquil lonely alone empty silent still melancholy melancholic sad "
-                  "happy joyful cheerful moody dreamy nostalgic cozy cosy gloomy somber sombre mysterious romantic tense "
-                  "eerie hopeful wistful gentle soft relaxed relaxing soothing atmospheric emotional".split())
-REFUSAL_RX = re.compile(r"\b(i can'?t|i cannot|i won'?t|i'?m not able|sorry|as an ai)\b", re.I)
-_SPLIT_RX = re.compile(r"\s*(?:[,.;:\n]|\s+-\s+|\band\b|\bwith\b|\bat\b|\bin\b|\bon\b|\bunder\b|\bnear\b|\bby\b)\s*", re.I)
-_LEAD_RX = re.compile(r"^(?:a|an|the|some|of)\s+", re.I)
+from .mcp_client import HermesRefused
+
+TTL_S = 600
+_STYLE: dict[str, tuple[float, dict]] = {}
 
 
-def wants(model: str) -> bool:
-    return model in MODELS
+def forget() -> None:
+    _STYLE.clear()
 
 
-def clean(text: str) -> list[str]:
-    """A writer's reply → a tidy tag list (no doubles, no quality words, no sentences)."""
-    t = re.sub(r"^\s*(tags?|prompt)\s*:\s*", "", (text or "").strip(), flags=re.I).strip().strip('"').strip()
-    out, seen = [], set()
-    for raw in re.split(r"[,\n]", t):
-        tag = re.sub(r"\s+", " ", raw).strip(" .-*•\"'").lower()
-        if not tag or len(tag) > 60 or len(tag.split()) > 6 or tag in seen:
-            continue
-        if tag.startswith(("score_", "source_")) or tag in ("masterpiece", "best quality", "good quality", "amazing quality", "high quality"):
-            continue
-        if tag in MOODS or (tag.endswith((" mood", " atmosphere", " feeling", " vibe")) and len(tag.split()) <= 3):
-            continue                                         # feelings get painted as sign text; the Look's own mood word stays
-        seen.add(tag)
-        out.append(tag)
-    return out[:MAX_TAGS]
+def style(run, model: str) -> dict:
+    """Hermes prompt_style for `model` (cached 10 min). Any failure → sentence."""
+    hit = _STYLE.get(model)
+    if hit and time.time() - hit[0] < TTL_S:
+        return hit[1]
+    try:
+        s = run.lab.mcp.call("prompt_style", {"model": model}) or {}
+    except (HermesRefused, OSError, ValueError, AttributeError):
+        s = {}
+    s = s if s.get("dialect") in ("tags", "sentence") else {"dialect": "sentence"}
+    _STYLE[model] = (time.time(), s)
+    return s
 
 
-def rules(mine: str, look_words: list[str], add: str = "") -> list[str]:
-    """No writer: cut his words and the detail at commas and small joining words; Look words go in as they are."""
-    out, seen = [], set()
-    for chunk in _SPLIT_RX.split(f"{mine}, {add}") + [w for lw in look_words for w in lw.split(",")]:
-        tag = _LEAD_RX.sub("", re.sub(r"\s+", " ", chunk or "").strip(" .").lower())
-        if tag and len(tag) <= 60 and tag not in seen:
-            seen.add(tag)
-            out.append(tag)
-    return out[:MAX_TAGS]
+def wants(model: str, run=None) -> bool:
+    """True when the model reads comma tags (asks Hermes; cached)."""
+    if not model:
+        return False
+    if run is None:
+        hit = _STYLE.get(model)
+        return bool(hit and hit[1].get("dialect") == "tags")
+    return style(run, model).get("dialect") == "tags"
 
 
-def build(model: str, tags: list[str], mine: str, limit: int = LIMIT) -> str:
-    """The tags, then Scott's words exactly (Hermes adds the quality tags). Only tags are dropped to fit `limit`."""
-    mine = (mine or "").strip()
-    tags = list(tags)
-    while True:
-        out = ", ".join(tags + ([mine] if mine else []))
-        if len(out) <= limit or not tags:
-            return out
-        tags.pop()
+def _shape(run, model: str, mine: str, look_words: list[str], add: str, reply: str | None) -> dict:
+    a = {"model": model, "mine": mine, "look": look_words[:20], "add": add}
+    if reply is not None:
+        a["reply"] = reply
+    return run.lab.mcp.call("prompt_style", a) or {}
 
 
-def negative(model: str, base: str) -> str:
-    """Hermes adds the model's own negative; the Lab's leave-out words go through unchanged."""
-    return base
-
-
-def write(run, writer_list, mine: str, look_words: list[str], add: str = "", stage=None) -> tuple[list[str], str]:
-    """(tags, who made them). Writers in order; a refusal, junk or an error moves on; rules when none helps."""
+def write(run, writer_list, model: str, mine: str, look_words: list[str], add: str = "", stage=None) -> tuple[list[str], str, str]:
+    """(tags, who made them, final prompt). Writers in order with Hermes's instructions; Hermes cleans each reply.
+    A refusal, junk or an error moves on; Hermes's simple rules when no writer helps."""
+    s = style(run, model)
+    system = s.get("system") or ""
     ask = mine + (f"\nLook: {', '.join(look_words)}" if look_words else "") + (f"\nDetail: {add}" if add else "")
-    for prov, model in writer_list:
+    for prov, wmodel in writer_list if system else []:
         try:
             if stage:
-                stage(run, "🏷", f"Turning your words into tags with {model.split('/')[-1]}")
-            r = run.lab.chat(run.project, prov, model,
-                             [{"role": "system", "content": TAG_SYS}, {"role": "user", "content": ask}], 200,
+                stage(run, "🏷", f"Turning your words into tags with {wmodel.split('/')[-1]}")
+            r = run.lab.chat(run.project, prov, wmodel,
+                             [{"role": "system", "content": system}, {"role": "user", "content": ask}], 200,
                              cap_usd=max(0.0, run.cap_usd - run.usd), task=f"lab-picture:{run.project['id']}")
             run.usd += float(r.usd or 0)
             run.tokens_in += int(getattr(r, "tokens_in", 0) or 0)
             run.tokens_out += int(getattr(r, "tokens_out", 0) or 0)
-            text = (r.text or "").strip()
-            tags = [] if REFUSAL_RX.search(text[:80]) else clean(text)
-            if len(tags) >= 4:
-                seen = set(tags)
-                for w in (x.strip().lower() for lw in look_words for x in lw.split(",")):   # Look words once each
-                    if w and w not in seen:
-                        seen.add(w)
-                        tags.append(w)
-                return tags[:MAX_TAGS], f"{prov}/{model}"
+            got = _shape(run, model, mine, look_words, add, (r.text or "").strip())
+            if got.get("by") == "writer" and got.get("tags"):
+                return list(got["tags"]), f"{prov}/{wmodel}", str(got.get("prompt") or "")
         except Exception:                                        # noqa: BLE001 — try the next writer
             continue
-    return rules(mine, look_words, add), "rules"
+    try:
+        got = _shape(run, model, mine, look_words, add, None)
+        return list(got.get("tags") or []), "rules", str(got.get("prompt") or mine)
+    except Exception:                                            # noqa: BLE001 — Hermes away: his words as they are
+        return [], "rules", mine

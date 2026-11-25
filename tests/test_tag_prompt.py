@@ -5,6 +5,7 @@ import unittest
 
 from ailab import agent, config, picture_route, tag_prompt as T
 from tests.test_agent import Brain
+from ailab.mcp_client import HermesRefused
 from tests.test_local_route import LocalMCP, Route
 
 ILL, PONY = "local/illustrious-xl-v0.1", "local/pony-v6-xl"
@@ -12,36 +13,25 @@ ALL = [{"id": i, "fits": True} for i in (ILL, PONY, "local/sdxl-base-1.0", "loca
 TAGS = "1girl, solo, holding umbrella, open umbrella, red umbrella, rain, bus stop, standing"
 
 
-class Builder(unittest.TestCase):
-    def test_wants_only_anime_models(self):
-        self.assertTrue(T.wants(ILL)); self.assertTrue(T.wants(PONY))
-        for m in ("local/sdxl-base-1.0", "local/flux2-klein-4b", "venice/lustify-v8", ""):
-            self.assertFalse(T.wants(m))
+class Client(unittest.TestCase):
+    """The rules themselves are tested in Hermes (forge/projects/tests/test_prompt_dialect.py)."""
+    def setUp(self):
+        T.forget()
 
-    def test_clean_drops_quality_doubles_sentences(self):
-        got = T.clean("Tags: 1girl, Rain, rain, masterpiece, score_9, source_anime, good quality, this is a very long sentence that is not a tag at all, \"bus stop\".")
-        self.assertEqual(got, ["1girl", "rain", "bus stop"])
+    def test_wants_asks_hermes_and_caches(self):
+        m = LocalMCP(models=ALL)
+        run = type("R", (), {"lab": type("L", (), {"mcp": m})()})()
+        self.assertTrue(T.wants(ILL, run)); self.assertTrue(T.wants(PONY, run))
+        self.assertFalse(T.wants("local/sdxl-base-1.0", run)); self.assertFalse(T.wants("venice/lustify-v8", run))
+        self.assertTrue(T.wants(ILL, run)); self.assertEqual(m.calls.count("prompt_style"), 4)   # cached
+        self.assertTrue(T.wants(ILL)); self.assertFalse(T.wants(""))
 
-    def test_clean_drops_mood_words(self):
-        got = T.clean("1girl, calm, Serene, quiet atmosphere, rain, composed, empty, bus stop, peaceful mood, empty street")
-        self.assertEqual(got, ["1girl", "rain", "bus stop", "empty street"])
-
-    def test_build_tags_then_words_exact_no_quality_tags(self):
-        p = T.build(PONY, ["1girl", "rain"], "A Girl with a RED umbrella")
-        self.assertEqual(p, "1girl, rain, A Girl with a RED umbrella")     # Hermes adds the score chain on the card
-        self.assertEqual(T.build(ILL, [], "x"), "x")
-
-    def test_build_cuts_tags_never_words(self):
-        mine = "w" * 200
-        p = T.build(ILL, [f"tag{i}" for i in range(40)], mine, limit=300)
-        self.assertLessEqual(len(p), 300); self.assertTrue(p.endswith(mine))
-
-    def test_rules(self):
-        got = T.rules("a girl with a red umbrella at a rainy bus stop", ["anime", "serene"])
-        self.assertEqual(got, ["girl", "red umbrella", "rainy bus stop", "anime", "serene"])
-
-    def test_negative_passes_through(self):
-        self.assertEqual(T.negative(PONY, "text, logo"), "text, logo"); self.assertEqual(T.negative(ILL, ""), "")
+    def test_hermes_away_means_sentence(self):
+        class Down:
+            def call(self, tool, args=None):
+                raise HermesRefused("rpc", "connection refused")
+        run = type("R", (), {"lab": type("L", (), {"mcp": Down()})()})()
+        self.assertFalse(T.wants(ILL, run))
 
 
 class InRun(Route):

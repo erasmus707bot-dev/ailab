@@ -63,6 +63,8 @@ class Base(unittest.TestCase):
         if not HAS_SRT:
             os.environ["AILAB_ALLOW_UNSANDBOXED"] = "1"
         self.project = store.project("scratch")
+        from ailab import tag_prompt                         # noqa: PLC0415 — prompt_style cache per test
+        tag_prompt.forget()
 
     def tearDown(self):
         os.environ.pop("AILAB_HOME", None)

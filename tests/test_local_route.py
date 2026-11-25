@@ -1,12 +1,32 @@
 """🏠 Drawn Looks → local SDXL on gandalf (2026-11-24): routed when up, Lustify otherwise, fallbacks, photo + switch-off."""
 from __future__ import annotations
 
+import unittest
+
 from ailab import agent, config, picture, picture_route
 from ailab.mcp_client import HermesRefused
 from tests.test_agent import Base, Brain
 from tests.test_picture import PNG, PicMCP
 
 LOCAL = {"id": "local/sdxl-base-1.0", "fits": True}
+
+
+TAG_MODELS = {"local/illustrious-xl-v0.1", "local/pony-v6-xl"}
+
+
+def hermes_dialect():
+    """Hermes forge/studios/comfy/prompt_dialect.py loaded by path (the Lab never imports Hermes at run time)."""
+    import importlib.util                                    # noqa: PLC0415
+    import os                                                # noqa: PLC0415
+    from pathlib import Path                                 # noqa: PLC0415
+    root = Path(os.environ.get("HERMES_ROOT") or Path(__file__).resolve().parents[2] / "hermes")
+    f = root / "forge" / "studios" / "comfy" / "prompt_dialect.py"
+    if not f.is_file():
+        raise unittest.SkipTest(f"Hermes prompt_dialect.py not found at {f}")
+    spec = importlib.util.spec_from_file_location("hermes_prompt_dialect", f)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class LocalMCP(PicMCP):
@@ -16,6 +36,14 @@ class LocalMCP(PicMCP):
 
     def call(self, tool, args=None):
         args = dict(args or {})                              # the picture run edits its args dict afterwards
+        if tool == "prompt_style":                           # 🏷 Hermes's own code (sibling repo), tags for the anime pair
+            self.calls.append(tool); self.args.append(args or {})
+            PD = hermes_dialect()
+            m = args.get("model", "")
+            kind = "tags" if m in TAG_MODELS else "sentence"
+            if "mine" not in args:
+                return {"ok": True, **({"dialect": "sentence"} if kind == "sentence" else {"dialect": "tags", "system": PD.TAG_SYS, "max_tags": PD.MAX_TAGS, "limit": PD.LIMIT})}
+            return {"ok": True, **PD.shape(m, args["mine"], args.get("look"), args.get("add", ""), args.get("reply"), kind=kind)}
         if tool == "image_models":
             self.calls.append(tool); self.args.append(args or {})
             return {"ok": True, "models": self.models}
