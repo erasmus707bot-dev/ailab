@@ -38,13 +38,15 @@ FIX_TEXT, FIX_BIBLE, KEEP_BOTH = "✏️ Fix the chapter (keep the bible)", "�
 SIZE = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (1080, 1080)}
 
 BIBLE_SYS = ("You write the story bible for Scott's story. {keep} Reply with JSON only: {{\"title\": str, \"tone\": str, \"when\": str, "
-             "\"people\": [{{\"name\": str, \"who\": str}}], \"places\": [str], \"rules\": [str]}}. Use the cast he gives "
+             "\"people\": [{{\"name\": str, \"who\": str}}], \"places\": [str], \"props\": [str], \"rules\": [str]}}. Use the cast he gives "
              "with their names and looks exactly; everyone is an adult. when = the time of day, light and weather the story "
-             "happens in (e.g. \"night, neon light, light rain\"). Short plain lines.")
+             "happens in (e.g. \"night, neon light, light rain\"). props = the key objects and vehicles that come back from shot "
+             "to shot, each with its look (e.g. \"two red motorbikes\", \"a small brown package\"); [] if none. Short plain lines.")
 SHOTS_SYS = ("You plan a {form} told in shots. {keep} Reply with JSON only: {{\"outline\": str, \"shots\": [{{\"who\": "
-             "[names], \"where\": str, \"action\": str, \"camera\": str, \"when\": str, \"seconds\": int, \"line\": str}}]}}. Exactly {n} "
+             "[names], \"where\": str, \"action\": str, \"camera\": str, \"when\": str, \"props\": [str], \"seconds\": int, \"line\": str}}]}}. Exactly {n} "
              "shots. One clear action per shot, shown not told. camera = framing + move (wide, close-up, slow push-in…). "
              "when = time of day + light for that shot — the bible's When unless the story moves on in time. "
+             "props = the bible's Props seen in that shot, written exactly as the bible has them. "
              "line = one short spoken narration sentence for that shot, or \"\". {extra} Never put text, captions, signs "
              "or writing in a shot. Stay true to the bible and its facts.")
 SHORT_EXTRA = ("Total 15–30 seconds. Shot 1 is the hook — the strongest, most striking picture, it grabs in the first 2 "
@@ -97,12 +99,13 @@ def clean_bible(b) -> dict:
     facts = [{"ch": int(f.get("ch") or 0), "fact": s(f.get("fact"))} for f in b.get("facts") or [] if isinstance(f, dict) and s(f.get("fact"))]
     return {"title": s(b.get("title"), 80), "tone": s(b.get("tone")), "when": s(b.get("when"), 120), "people": ppl[:12],
             "places": [s(x, 120) for x in b.get("places") or [] if s(x)][:20],
+            "props": [s(x, 120) for x in b.get("props") or [] if s(x)][:12],
             "rules": [s(x) for x in b.get("rules") or [] if s(x)][:20], "facts": facts[-80:],
             "updated": float(b.get("updated") or 0)}
 
 
 def save_bible(root, b: dict) -> dict:
-    b = clean_bible({**b, "updated": time.time()})
+    b = clean_bible({**bible(root), **b, "updated": time.time()})      # a field the editor didn't send (when, props) is kept
     _write(_dir(root) / "bible.json", b)
     return b
 
@@ -213,7 +216,7 @@ def clean_shots(raw, names: list[str], form: str) -> list[dict]:
             sec = int(float(s.get("seconds") or 4))
         except (TypeError, ValueError):
             sec = 4
-        out.append({"who": who, "where": str(s.get("where") or "").strip()[:160], "action": str(s["action"]).strip()[:300],
+        out.append({"who": who, "props": [str(x).strip()[:120] for x in (s.get("props") if isinstance(s.get("props"), list) else []) if str(x or "").strip()][:4], "where": str(s.get("where") or "").strip()[:160], "action": str(s["action"]).strip()[:300],
                     "camera": str(s.get("camera") or "").strip()[:120], "when": str(s.get("when") or "").strip()[:120],
                     "seconds": max(SHOT_MIN_S, min(SHOT_MAX_S, sec)),
                     "line": re.sub(r"\s+", " ", str(s.get("line") or "")).strip()[:300]})
@@ -242,8 +245,26 @@ def shot_prompt(shot: dict, b: dict, cast: dict[str, dict], looks: bool = True) 
         where = "in " + where
     when = shot.get("when") or b.get("when", "")                 # live 2026-11-25: a night market drifted to daylight
     action = shot["action"] if looks else unname(shot["action"], b, cast)
-    bits = [", ".join(who), action, where, when, shot["camera"]]
+    things = props_in(shot, b)                                    # live 2026-11-25: motorbikes became bicycles in shots 3–5
+    bits = [", ".join(who), action, "with " + " and ".join(things) if things else "", where, when, shot["camera"]]
     return ", ".join(x for x in bits if x)
+
+
+def props_in(shot: dict, b: dict) -> list[str]:
+    """🧳 The bible's props this shot shows, in the bible's own words: the ones the planner listed, plus any whose main word
+    (last word, plural or not) is in the action or place — "rides off on her motorbike" → "two red motorbikes"."""
+    props = b.get("props") or []
+    if not props:
+        return []
+    low = {p.lower(): p for p in props}
+    out = [low[x.lower()] for x in shot.get("props") or [] if x.lower() in low]
+    text = f"{shot.get('action', '')} {shot.get('where', '')}".lower()
+    for p in props:
+        noun = re.sub(r"[^a-z-]", "", p.lower().split()[-1]) if p.split() else ""
+        stem = noun[:-2] if noun.endswith(("ches", "shes", "xes", "sses", "zes")) else noun[:-1] if noun.endswith("s") and len(noun) > 3 else noun
+        if p not in out and stem and re.search(rf"\b{re.escape(stem)}(?:e?s)?\b", text):
+            out.append(p)
+    return out[:4]
 
 
 def unname(action: str, b: dict, cast: dict[str, dict]) -> str:
@@ -379,7 +400,8 @@ def anchors_for(shot: dict, cast: dict[str, dict]) -> list[str]:
 def bible_text(b: dict) -> str:
     lines = [f"Title: {b.get('title', '')}", f"Tone: {b.get('tone', '')}", f"When: {b.get('when', '')}"]
     lines += [f"Person: {p['name']} — {p['who']}" for p in b.get("people", [])]
-    lines += [f"Place: {x}" for x in b.get("places", [])] + [f"Rule: {x}" for x in b.get("rules", [])]
+    lines += [f"Place: {x}" for x in b.get("places", [])] + [f"Prop: {x}" for x in b.get("props", [])]
+    lines += [f"Rule: {x}" for x in b.get("rules", [])]
     lines += [f"Fact (ch {f['ch']}): {f['fact']}" for f in b.get("facts", [])]
     return "\n".join(lines)
 

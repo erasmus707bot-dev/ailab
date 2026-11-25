@@ -33,7 +33,7 @@ class StoryBrain:
         elif "story bible" in sys:
             t = json.dumps({"title": "Lighthouse Run", "tone": "tense", "when": "night, heavy rain", "people": [{"name": "Mara", "who": "copper hair"},
                                                                                    {"name": "Jun", "who": "black hair"}],
-                            "places": ["the pier"], "rules": ["storms every night"]})
+                            "places": ["the pier"], "props": ["a brass storm lamp"], "rules": ["storms every night"]})
         elif "You plan a" in sys:
             t = "Here you go:\n```json\n" + json.dumps(self.shots) + "\n```"
         elif "check a new chapter against the story bible" in sys:
@@ -240,6 +240,32 @@ class Story(Base):
         self.assertEqual(story.bible(r.root)["when"], "night, heavy rain")
         makes = [a for t, a in zip(m.calls, m.args) if t == "image_make"]
         self.assertTrue(all("night, heavy rain" in a["prompt"] for a in makes), [a["prompt"][:120] for a in makes])
+
+    def test_props_ride_in_the_shots_that_show_them(self):
+        b = {"props": ["two red motorbikes", "a small brown package"]}
+        by_word = {"who": [], "action": "Ben rides off on his motorbike", "where": "", "camera": "", "props": []}
+        listed = {"who": [], "action": "they wait", "where": "", "camera": "", "props": ["A small brown package", "a kite"]}
+        none = {"who": [], "action": "Aria laughs", "where": "", "camera": "", "props": []}
+        self.assertEqual(story.props_in(by_word, b), ["two red motorbikes"])
+        self.assertEqual(story.props_in(listed, b), ["a small brown package"])     # not in the bible → dropped
+        self.assertEqual(story.props_in(none, b), [])
+        self.assertIn("with two red motorbikes", story.shot_prompt(by_word, b, {}))
+        self.assertIn("with two red motorbikes", story.shot_prompt(by_word, b, {}, looks=False))   # 👁 checks it too
+        self.assertNotIn("with", story.shot_prompt(none, b, {}))
+
+    def test_bible_props_reach_the_lamp_shot(self):
+        m = StoryMCP()
+        r = self._run(m, req={"form": "short", "clips": "none", "narrate": False})
+        r.loop()
+        self.assertEqual(story.bible(r.root)["props"], ["a brass storm lamp"])
+        makes = [a["prompt"] for t, a in zip(m.calls, m.args) if t == "image_make"]
+        self.assertEqual(sum("a brass storm lamp" in x for x in makes), 1, [x[:120] for x in makes])   # only "Jun lights the lamp"
+
+    def test_editor_save_keeps_fields_it_did_not_send(self):
+        root = Path(self.tmp.name)
+        story.save_bible(root, {"title": "T", "when": "night", "props": ["a kite"]})
+        b = story.save_bible(root, {"title": "T2", "tone": "calm"})
+        self.assertEqual((b["title"], b["when"], b["props"]), ("T2", "night", ["a kite"]))
 
     def test_writing_on_a_still_is_caught_and_remade(self):
         m = StoryMCP(writing=[True])

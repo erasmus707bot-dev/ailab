@@ -1365,17 +1365,20 @@ function storyBox(p, hooks) {
     const b = x.bible, lines = a => (a || []).join("\n");
     const f = { title: h("input", { value: b.title || "", "aria-label": "Title" }), tone: h("input", { value: b.tone || "", "aria-label": "Tone" }),
       people: h("textarea", { rows: 3, "aria-label": "People — one per line: Name — who they are" }, lines((b.people || []).map(q => `${q.name} — ${q.who}`))),
-      places: h("textarea", { rows: 2, "aria-label": "Places, one per line" }, lines(b.places)), rules: h("textarea", { rows: 2, "aria-label": "Rules, one per line" }, lines(b.rules)),
+      when: h("input", { value: b.when || "", "aria-label": "When — time of day, light, weather" }),
+      places: h("textarea", { rows: 2, "aria-label": "Places, one per line" }, lines(b.places)),
+      props: h("textarea", { rows: 2, "aria-label": "Things that come back from shot to shot, one per line" }, lines(b.props)), rules: h("textarea", { rows: 2, "aria-label": "Rules, one per line" }, lines(b.rules)),
       facts: h("textarea", { rows: 4, "aria-label": "Facts so far, one per line" }, lines((b.facts || []).map(q => `${q.ch}: ${q.fact}`))) };
     const split = t => t.value.split("\n").map(s => s.trim()).filter(Boolean);
     const save = h("button", { class: "btn", type: "button", onclick: async () => {
-      const r = await api("/api/story/bible", { project: p.id, bible: { title: f.title.value, tone: f.tone.value,
+      const r = await api("/api/story/bible", { project: p.id, bible: { title: f.title.value, tone: f.tone.value, when: f.when.value,
         people: split(f.people).map(s => { const [n, ...w] = s.split(/\s+[—-]\s+/); return { name: n, who: w.join(" — ") }; }),
-        places: split(f.places), rules: split(f.rules), facts: split(f.facts).map(s => { const m = s.match(/^(\d+):\s*(.+)$/); return m ? { ch: +m[1], fact: m[2] } : { ch: 0, fact: s }; }) } });
+        places: split(f.places), props: split(f.props), rules: split(f.rules), facts: split(f.facts).map(s => { const m = s.match(/^(\d+):\s*(.+)$/); return m ? { ch: +m[1], fact: m[2] } : { ch: 0, fact: s }; }) } });
       note.textContent = r.ok ? "💾 Story bible saved — the next chapter follows it." : `${r.icon || "⚠️"} ${r.message}`; } }, "💾 Save the bible");
     const lab = (t, el) => h("label", { class: "chk", style: "display:block;margin:6px 0" }, t, h("br"), el);
     bibleFold.replaceChildren(h("summary", {}, `📚 Story bible${b.title ? ` — “${b.title}” · 🔗 ${(b.facts || []).length} facts` : " — written by the first chapter"}`),
-      lab("Title", f.title), lab("Tone", f.tone), lab("👥 People (Name — who)", f.people), lab("📍 Places", f.places), lab("📏 Rules", f.rules), lab("🔗 Facts so far (chapter: fact)", f.facts), save);
+      lab("Title", f.title), lab("Tone", f.tone), lab("🕒 When (time, light, weather)", f.when), lab("👥 People (Name — who)", f.people), lab("📍 Places", f.places),
+      lab("🧳 Things that come back (motorbikes, the package…)", f.props), lab("📏 Rules", f.rules), lab("🔗 Facts so far (chapter: fact)", f.facts), save);
     chapList.replaceChildren(...(x.chapters || []).slice().reverse().slice(0, 8).map(c => h("div", { class: "trow" },
       h("span", {}, `📖 Ch ${c.n} · ${(c.shots || []).length} shots`),
       c.film ? h("a", { class: "btn", href: `/preview/${p.id}/${encodeURI(c.film)}`, target: "_blank" }, "🎞 Film") : null,
