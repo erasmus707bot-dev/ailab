@@ -73,3 +73,17 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
     (negative prompt is sent; FLUX.2 Klein ignores it partly). 👁's "no writing" point didn't catch it.
   - Night market drifts to daylight in shots 4–6 — time of day isn't in the shot line. Fix idea: bible `time` field carried into every shot.
   - Same false-"done" pattern exists in plain 🎛 picture batches (`batch.pictures`) — not touched (another session's hunks in batch.py).
+
+## Live with a cast + chapters 2–3 — 2026-11-25 11:45–12:17 (eyes session, project image-testing, cast Aria & Ben)
+- Ch 1 ⚡ Short "Midnight Delivery": hermes-mcp was restarted at 11:50 (a bare restart line) → run failed at shot 4. Re-run
+  **carried on at shot 4, shots 1–3 kept** (restart-safe works). Result: 6 shots, 👁 avg 86%, **18 s film with narration, $0**.
+- By eye (`~/hermes-data/ailab/_pilot/story_check.jpg`): **Aria holds** (purple top + skirt, braids, red bandana) in all her
+  shots. **Ben holds** (teal shirt, orange trousers, orange cap). Misses: shot 5 adds a third person in Ben's colours holding the
+  package (meant to be Aria) — 👁 said 86% and missed it; shot 6 shows them running, bikes gone; rainy city reads as dusk/day.
+- Ch 2 📚 Long: 🔗 "no contradictions" (correct) → 8 shots, 👁 avg 80%, **35 s film with narration, $0**; bible facts 1 → 2.
+- Ch 3 planted contradiction ("Ben never went near any tunnel — he took the bridge") → **🔗 flagged, card with ✏️ / 📚 / ↔️,
+  nothing made before a tap.** But the stated reason was off-target ("the plan implies both characters are in the tunnel")
+  instead of "Ben says he never used the tunnel". Run stopped, nothing made.
+- 🐛 fixed (`49c6cb9`): 👁 graded camera moves ("missing: slow push-in, tracking shot") — a still can't show a move; moves are
+  now dropped from the points, framing (close-up, wide) still graded.
+- Owed: 👁 doesn't check *who* is in a two-person shot (shot 5) · checker reason wording · time of day in the shot line.
