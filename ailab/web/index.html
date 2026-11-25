@@ -227,6 +227,8 @@
     white-space: pre-wrap; word-break: break-word; max-height: 38vh; overflow: auto; }
   .diff .add { color: var(--ok); } .diff .del { color: var(--bad); } .diff .hunk { color: var(--dim); }
   .chg input { padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); max-width: 9rem; }
+  .chg .hd b, .chg .hd .note, .chg .note, .chg summary, .chg input, .chg .runbar .btn, #guardline { font-size: 23px; line-height: 1.4; }
+  .chg input, .chg .runbar .btn, .chg summary { min-height: 48px; } .chg summary { display: flex; align-items: center; cursor: pointer; } .chg input { max-width: 11rem; }
   .drawer { margin-top: 0; border-top: 1px solid var(--line); padding-top: 6px; }
   /* 2026-11-24 workflow build: picture first (Before beside Now), robot verdict, question cards, plan list */
   .result { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
