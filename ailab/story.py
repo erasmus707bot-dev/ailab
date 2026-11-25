@@ -458,6 +458,7 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                 except Exception as e:                           # noqa: BLE001 — one lost shot never ends the chapter
                     if _hard(e):
                         raise
+                run.state = "running"                            # picture.run marks it done — a restart now must say "interrupted", not "done"
                 if len(run.pictures) <= before:
                     s["error"] = run.why or "no picture came back"
                     break

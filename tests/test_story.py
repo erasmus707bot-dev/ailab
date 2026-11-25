@@ -201,6 +201,27 @@ class Story(Base):
         self.assertEqual(r2.batch["chapter"], 1, "the unfinished chapter is carried on")
         self.assertEqual(sum(1 for t in m2.calls if t == "image_make"), 1, "only the missing shot is made")
 
+    def test_run_stays_running_between_shots(self):
+        """Live 2026-11-25: a Lab restart between sheet pictures restored the cast run as "done" with nothing saved."""
+        from ailab import picture as P
+        seen, orig = [], P.run
+
+        def spy(run):
+            orig(run)
+            seen.append(run.state)
+        P.run = spy
+        self.addCleanup(lambda: setattr(P, "run", orig))
+        from ailab import story as S
+        states = []
+        orig_save = S.save_chapter
+        S.save_chapter = lambda root, n, d: (states.append(r.state), orig_save(root, n, d))
+        self.addCleanup(lambda: setattr(S, "save_chapter", orig_save))
+        r = self._run(StoryMCP(), req={"form": "short", "clips": "none", "narrate": False})
+        r.loop()
+        self.assertEqual(r.state, "done", r.why)
+        self.assertIn("done", seen)
+        self.assertNotIn("done", states[:-1], "never saved as done mid-chapter")
+
     def test_words_only_writes_prose(self):
         r = self._run(StoryMCP(), req={"form": "words"})
         r.loop()

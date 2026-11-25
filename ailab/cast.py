@@ -319,6 +319,7 @@ def run(run) -> None:
                 except Exception as e:                           # noqa: BLE001 — one view lost never ends the cast
                     if type(e).__name__ in ("Stopped", "SpendBlocked", "PrivacyRefused"):
                         raise
+                run.state = "running"                            # picture.run marks it done — a restart now must say "interrupted", not "done"
                 if len(run.pictures) <= before:
                     continue
                 pic = run.pictures[-1]
