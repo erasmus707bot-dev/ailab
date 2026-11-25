@@ -218,12 +218,25 @@ def shot_prompt(shot: dict, b: dict, cast: dict[str, dict], looks: bool = True) 
         p = next((p for p in b.get("people", []) if p["name"].lower() == w.lower()), None)
         look = (c or {}).get("brief", "") or (p or {}).get("who", "")
         look = look.split(": ", 1)[-1]
-        who.append(f"{w} ({look})" if look and looks else w)
+        who.append(f"{w} ({look})" if look and looks else w if looks else seen_as(look))
     where = shot["where"]
     if where and not where.lower().startswith(("in ", "at ", "on ", "by ", "inside ", "under ")):
         where = "in " + where
     bits = [", ".join(who), shot["action"], where, shot["camera"]]
     return ", ".join(x for x in bits if x)
+
+
+def seen_as(look: str) -> str:
+    """👁 can't know a name — "Aria" becomes what a picture shows: "a woman with copper red hair in a royal blue outfit"."""
+    who = re.search(r"\b(woman|man|person)\b", look or "")
+    hair = re.search(r"([a-z-]+(?: [a-z-]+)?) hair\b", look or "")
+    outfit = re.search(r"wearing an? (.+?) outfit", look or "")
+    out = "a " + (who.group(1) if who else "person")
+    if hair:
+        out += f" with {hair.group(1)} hair"
+    if outfit:
+        out += f" in a {outfit.group(1)} outfit"
+    return out
 
 
 def anchors_for(shot: dict, cast: dict[str, dict]) -> list[str]:

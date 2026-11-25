@@ -145,6 +145,9 @@ class Story(Base):
         self.assertIn("Mara.png", makes[0]["reference_images"][0])
         self.assertIn("Mara (tall adult)", makes[0]["prompt"])
         self.assertTrue(all("(" not in q for q in m.points), "👁 points carry no bracketed looks")
+        self.assertEqual(story.seen_as("a 38-year-old woman, short, pale skin, copper red hair in a buzz cut, wearing a royal blue outfit"),
+                         "a woman with copper red hair in a royal blue outfit")
+        self.assertEqual(story.seen_as(""), "a person")
         self.assertTrue(ch["film"] and (r.root / ch["film"]).is_file() and ch["voice"])
         self.assertTrue(r.videos and r.videos[-1]["path"] == ch["film"])
         self.assertEqual(len(story.bible(r.root)["facts"]), 2, "what changed went into the bible")
