@@ -50,6 +50,10 @@ SHOTS_SYS = ("You plan a {form} told in shots. {keep} Reply with JSON only: {{\"
 SHORT_EXTRA = ("Total 15–30 seconds. Shot 1 is the hook — the strongest, most striking picture, it grabs in the first 2 "
                "seconds. The last shot leads back into the first so it loops.")
 LONG_EXTRA = "This is chapter {ch}; carry on from the facts so far."
+# live 2026-11-25 ch3: "At the drop-off, Ben watches Aria hand the package to a hooded stranger" → shots 1–4 re-told the race,
+# only 5–6 reached his idea. A later chapter is HIS idea for it, not the bible's premise again.
+NEXT_EXTRA = ("Earlier chapters already happened (the facts say what changed) — do not re-tell them. Every shot of this "
+              "chapter shows his idea for it, starting where his idea starts.")
 PROSE_SYS = "You write fiction prose. {keep} Follow the bible and the outline. Plain, vivid, readable."
 FACTS_SYS = ("List what CHANGED in this chapter that later chapters must respect: who knows what, who is where, what is "
              "broken, worn, lost or gained, who is hurt or gone. JSON only: [\"one fact per line\"]. 3–10 short lines.")
@@ -437,8 +441,11 @@ def run(run) -> None:
     if not chap.get("shots") and not chap.get("prose"):
         picture.stage(run, "🗒", f"Planning chapter {ch_n}" + ("" if form == "words" else f" — {n} shots"))
         sys = SHOTS_SYS.format(keep=makers.KEEP_WORDS, form="short vertical video" if form == "short" else "story chapter",
-                               n=n, extra=SHORT_EXTRA if form == "short" else LONG_EXTRA.format(ch=ch_n))
-        user = f"Story bible:\n{bible_text(bib)}\n\nHis idea (his words):\n{idea}"
+                               n=n, extra=(SHORT_EXTRA if form == "short" else LONG_EXTRA.format(ch=ch_n))
+                               + (" " + NEXT_EXTRA if ch_n > 1 else ""))
+        user = (f"Story bible:\n{bible_text(bib)}\n\n"
+                + (f"His idea for chapter {ch_n} (his words) — this whole chapter is about this:\n{idea}" if ch_n > 1
+                   else f"His idea (his words):\n{idea}"))
         d, _, who = _write_json(run, sys, user, dict, 1600, f"Planning chapter {ch_n}")
         shots = clean_shots(d.get("shots"), names + [p["name"] for p in bib["people"]], form)
         if not shots:

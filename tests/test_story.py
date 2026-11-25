@@ -236,13 +236,15 @@ class Story(Base):
         story.save_bible(r.root, {"title": "Lighthouse Run", "people": [{"name": "Jun", "who": "x"}], "facts": [{"ch": 1, "fact": "Jun's left arm is broken"}]})
         story.save_chapter(r.root, 1, {"form": "long", "shots": [], "done": True})
         r.ask_first = True
-        seen = []
+        seen, plans = [], []
         from ailab import makers
         real_write = makers.write
 
         def spy(run, system, user, *a, **kw):
             if system == story.CHECK_SYS:
                 seen.append(user)
+            if system.startswith("You plan a"):
+                plans.append((system, user))
             return real_write(run, system, user, *a, **kw)
         makers.write = spy
         self.addCleanup(lambda: setattr(makers, "write", real_write))
@@ -257,6 +259,8 @@ class Story(Base):
         # 2026-11-25 live: the checker saw only the plan, not his words, and named the wrong clash
         self.assertTrue(seen and "His idea for this chapter:" in seen[0], seen)
         self.assertIn("names both sides", story.CHECK_SYS)
+        # 2026-11-25 live: chapter 3 re-told the race for 4 shots before reaching his idea
+        self.assertTrue(plans and "do not re-tell them" in plans[0][0] and "His idea for chapter 2" in plans[0][1], plans)
         r.answer(story.FIX_BIBLE)
         t.join(30)
         self.assertEqual(r.state, "done", r.why)
