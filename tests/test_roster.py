@@ -85,3 +85,13 @@ class UncensoredPolicy(unittest.TestCase):
         self.assertEqual(out[:2], ["b/model-uncensored", "d/x-abliterated"])
         tg = roster.tags("openrouter", [{"id": "b/model-uncensored"}])
         self.assertEqual(tg["b/model-uncensored"]["limits"], "🔓 uncensored")
+
+
+class VeniceRoster(unittest.TestCase):
+    def test_venice_uncensored_models_starred_and_labelled(self):
+        ids = ["venice-uncensored-1-2", "qwen-3-6-plus", "glm-5-3-flash-uncensored", "e2ee-gemma-4-26b-a4b-uncensored-p",
+               "venice-uncensored-role-play", "olafangensan-glm-4.7-flash-heretic", "abliteration-abliterated-model-large-flash"]
+        out, picks = roster.arrange("venice", ids, live=True)
+        self.assertEqual(set(picks), set(ids))
+        self.assertTrue(all(roster.limits_tag("venice", m) == roster.UNCENSORED for m in ids))
+        self.assertEqual(roster.limits_tag("venice", "qwen-3-6-plus"), roster.UNCENSORED)   # name has no hint; roster says so
