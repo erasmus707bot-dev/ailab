@@ -1,0 +1,117 @@
+{
+  "_about": "🎨 Picture Looks catalog (2026-11-24). Edit freely: n = name on the chip, p = words sent to the picture model (blank = the name). Override or add in <lab home>/looks.json with the same shape (a tab with the same id replaces this one). max = most picks in that tab.",
+  "max_total": 8,
+  "tabs": [
+    {"id": "medium", "label": "Medium", "icon": "🖌", "max": 1, "items": [
+      {"n": "Photo", "p": "photograph, photorealistic"},
+      {"n": "Oil painting", "p": "oil painting, visible brushstrokes"},
+      {"n": "Watercolor", "p": "watercolor painting, soft washes, paper texture"},
+      {"n": "Acrylic", "p": "acrylic painting"},
+      {"n": "Gouache", "p": "gouache painting, matte opaque colour"},
+      {"n": "Ink wash", "p": "ink wash painting, sumi-e"},
+      {"n": "Charcoal", "p": "charcoal drawing"},
+      {"n": "Pencil sketch", "p": "graphite pencil sketch"},
+      {"n": "Colored pencil", "p": "colored pencil drawing"},
+      {"n": "Soft pastel", "p": "soft pastel drawing"},
+      {"n": "Digital painting", "p": "digital painting"},
+      {"n": "3D render", "p": "3D render, octane render"},
+      {"n": "Pixel art", "p": "pixel art, 16-bit sprite style, crisp pixels"},
+      {"n": "Vector / flat", "p": "flat vector illustration, clean shapes"},
+      {"n": "Woodcut", "p": "woodcut print, carved lines"},
+      {"n": "Risograph / screen print", "p": "risograph screen print, halftone texture"},
+      {"n": "Collage", "p": "paper collage"},
+      {"n": "Mosaic", "p": "mosaic tiles"},
+      {"n": "Stained glass", "p": "stained glass, lead lines"},
+      {"n": "Claymation", "p": "claymation, plasticine figures"},
+      {"n": "Papercraft", "p": "layered papercraft"},
+      {"n": "Embroidery", "p": "embroidery, stitched thread"}
+    ]},
+    {"id": "style", "label": "Style", "icon": "🖼", "max": 3, "items": [
+      {"n": "Realism", "p": "realism"},
+      {"n": "Impressionism", "p": "impressionist style"},
+      {"n": "Expressionism", "p": "expressionist style"},
+      {"n": "Renaissance", "p": "Renaissance painting style"},
+      {"n": "Baroque", "p": "Baroque style"},
+      {"n": "Art Nouveau", "p": "Art Nouveau style, flowing ornamental lines"},
+      {"n": "Art Deco", "p": "Art Deco style, geometric elegance"},
+      {"n": "Surrealism", "p": "surrealist style"},
+      {"n": "Cubism", "p": "cubist style"},
+      {"n": "Pop art", "p": "pop art style, bold outlines"},
+      {"n": "Minimalism", "p": "minimalist style"},
+      {"n": "Ukiyo-e", "p": "ukiyo-e Japanese woodblock style"},
+      {"n": "Anime", "p": "anime style, cel shading"},
+      {"n": "Manga", "p": "manga style, ink linework"},
+      {"n": "Comic book", "p": "comic book style, inked outlines"},
+      {"n": "Cartoon", "p": "cartoon style"},
+      {"n": "Storybook", "p": "children's storybook illustration"},
+      {"n": "Concept art", "p": "concept art"},
+      {"n": "Fantasy illustration", "p": "fantasy illustration"},
+      {"n": "Cyberpunk", "p": "cyberpunk style"},
+      {"n": "Steampunk", "p": "steampunk style, brass and gears"},
+      {"n": "Vaporwave", "p": "vaporwave aesthetic"},
+      {"n": "Low-poly", "p": "low-poly style"},
+      {"n": "Graffiti", "p": "graffiti street art style"},
+      {"n": "Pin-up", "p": "vintage pin-up style"}
+    ]},
+    {"id": "theme", "label": "Theme", "icon": "🏷", "max": 3, "items": [
+      {"n": "Portrait"}, {"n": "Figure study"}, {"n": "Boudoir"}, {"n": "Glamour"}, {"n": "Fashion"},
+      {"n": "Landscape"}, {"n": "Seascape"}, {"n": "Cityscape"}, {"n": "Interior"}, {"n": "Still life"},
+      {"n": "Wildlife"}, {"n": "Fantasy", "p": "fantasy scene"}, {"n": "Sci-fi", "p": "science fiction scene"},
+      {"n": "Gothic / horror", "p": "gothic horror"}, {"n": "Western", "p": "old west"}, {"n": "Historical", "p": "historical scene"},
+      {"n": "Mythology", "p": "mythological scene"}, {"n": "Food", "p": "food"}, {"n": "Product", "p": "product shot"},
+      {"n": "Architecture"}
+    ]},
+    {"id": "mood", "label": "Mood", "icon": "💭", "max": 3, "items": [
+      {"n": "Serene", "p": "serene mood"}, {"n": "Joyful", "p": "joyful mood"}, {"n": "Romantic", "p": "romantic mood"},
+      {"n": "Sensual", "p": "sensual mood"}, {"n": "Moody", "p": "moody atmosphere"}, {"n": "Mysterious", "p": "mysterious mood"}, {"n": "Dramatic", "p": "dramatic mood"},
+      {"n": "Melancholy", "p": "melancholy mood"}, {"n": "Eerie", "p": "eerie mood"}, {"n": "Whimsical", "p": "whimsical mood"},
+      {"n": "Epic", "p": "epic scale"}, {"n": "Cozy", "p": "cozy mood"}, {"n": "Nostalgic", "p": "nostalgic mood"},
+      {"n": "Intense", "p": "intense mood"}, {"n": "Playful", "p": "playful mood"}
+    ]},
+    {"id": "light", "label": "Light", "icon": "💡", "max": 3, "items": [
+      {"n": "Golden hour", "p": "golden hour light"}, {"n": "Blue hour", "p": "blue hour light"},
+      {"n": "Soft diffused", "p": "soft diffused light"}, {"n": "Studio softbox", "p": "studio softbox lighting"},
+      {"n": "Window light", "p": "natural window light"}, {"n": "Rim light", "p": "rim lighting"}, {"n": "Backlit", "p": "backlit"},
+      {"n": "Chiaroscuro", "p": "chiaroscuro lighting"}, {"n": "Low-key", "p": "low-key lighting, deep shadows"},
+      {"n": "High-key", "p": "high-key lighting, bright and airy"}, {"n": "Candlelight", "p": "warm candlelight"},
+      {"n": "Neon light", "p": "neon lighting"}, {"n": "Moonlight", "p": "moonlight"}, {"n": "God rays", "p": "god rays, volumetric light"},
+      {"n": "Overcast", "p": "overcast light"}
+    ]},
+    {"id": "colour", "label": "Colour", "icon": "🎨", "max": 3, "items": [
+      {"n": "Warm", "p": "warm colour palette"}, {"n": "Cool", "p": "cool colour palette"}, {"n": "Pastel", "p": "pastel colours"},
+      {"n": "Muted / earthy", "p": "muted earthy colours"}, {"n": "Vibrant", "p": "vibrant saturated colours"},
+      {"n": "Monochrome", "p": "monochrome palette"}, {"n": "Black & white", "p": "black and white"}, {"n": "Sepia", "p": "sepia tone"},
+      {"n": "Teal & orange", "p": "teal and orange colour grade"}, {"n": "Jewel tones", "p": "rich jewel tones"},
+      {"n": "Neon colours", "p": "neon colours"}, {"n": "Duotone", "p": "duotone"}
+    ]},
+    {"id": "camera", "label": "Camera", "icon": "📷", "max": 3, "items": [
+      {"n": "Close-up", "p": "close-up"}, {"n": "Medium shot", "p": "medium shot"}, {"n": "Full body", "p": "full body shot"},
+      {"n": "Wide shot", "p": "wide shot"}, {"n": "Low angle", "p": "low angle"}, {"n": "High angle", "p": "high angle"},
+      {"n": "Bird's-eye", "p": "bird's-eye view"}, {"n": "Shallow depth of field", "p": "shallow depth of field, bokeh"},
+      {"n": "Macro", "p": "macro shot"}, {"n": "Wide-angle lens", "p": "wide-angle lens"}, {"n": "Telephoto", "p": "telephoto lens"},
+      {"n": "Long exposure", "p": "long exposure"}, {"n": "35mm film", "p": "35mm film photo"}, {"n": "Polaroid", "p": "polaroid photo"},
+      {"n": "Film grain", "p": "film grain"}
+    ]},
+    {"id": "era", "label": "Era", "icon": "⏳", "max": 3, "items": [
+      {"n": "Ancient", "p": "ancient world"}, {"n": "Medieval", "p": "medieval"}, {"n": "Victorian", "p": "Victorian era"},
+      {"n": "1920s"}, {"n": "1950s"}, {"n": "1970s"}, {"n": "1980s"}, {"n": "1990s"}, {"n": "Futuristic", "p": "futuristic"}
+    ]},
+    {"id": "finish", "label": "Finish", "icon": "✨", "max": 3, "items": [
+      {"n": "Highly detailed", "p": "highly detailed"}, {"n": "Loose painterly", "p": "loose painterly finish"},
+      {"n": "Clean lines", "p": "clean lines"}, {"n": "Textured canvas", "p": "textured canvas"}, {"n": "Soft focus", "p": "soft focus"},
+      {"n": "Sharp focus", "p": "sharp focus"}, {"n": "Grainy", "p": "grainy texture"}
+    ]}
+  ],
+  "clash": [
+    ["Photo", "Oil painting|Watercolor|Acrylic|Gouache|Ink wash|Charcoal|Pencil sketch|Colored pencil|Pastel|Pixel art|Vector / flat|Anime|Manga|Cartoon|Comic book|Storybook|Loose painterly|Textured canvas"],
+    ["Black & white", "Warm|Cool|Pastel|Vibrant|Teal & orange|Jewel tones|Neon colours|Sepia|Duotone"],
+    ["Monochrome", "Vibrant|Teal & orange|Jewel tones|Neon colours"],
+    ["High-key", "Low-key|Chiaroscuro"],
+    ["Sharp focus", "Soft focus"],
+    ["Clean lines", "Loose painterly"],
+    ["Pixel art", "Highly detailed|Realism|35mm film|Shallow depth of field"],
+    ["Serene", "Intense|Eerie"],
+    ["Joyful", "Melancholy|Eerie"],
+    ["Futuristic", "Ancient|Medieval|Victorian"]
+  ]
+}

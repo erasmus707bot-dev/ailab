@@ -16,14 +16,14 @@ import base64
 import re
 import time
 
-from . import creation, memory
+from . import creation, looks, memory
 from .mcp_client import HermesRefused
 
 SHAPES = {"square": "1:1", "wide": "16:9", "tall": "9:16"}
 PROMPT_SYS = ("You help write prompts for a text-to-picture model. Scott's own words go into the prompt exactly as he "
               "wrote them — you never repeat, reword, soften, censor or remove them. Reply ONLY with extra detail to put "
               "after his words: style, colours, light, setting, framing, camera or medium — 20–60 words, plain "
-              "description, no lists, no quotes, no warnings, no extra talk. Match his choices (style, shape). "
+              "description, no lists, no quotes, no warnings, no extra talk. Match his choices (style, shape, look). "
               "Never contradict or tone down anything he asked for. Never add clothing, covering, extra people or "
               "body details he didn't ask for — what people wear, or don't, is only his to say. Never ask for text, captions, "
               "labels, signs or watermarks in the picture unless he did.")
@@ -65,6 +65,14 @@ def _questions(run) -> list[dict]:
     return items
 
 
+def _items(run, look: list[str]) -> list[dict]:
+    """The ❓ questions; with a 🎨 Look that already names the medium or style, the Style question is skipped."""
+    items = _questions(run)
+    if look and looks.has_look_style(look):
+        items = [i for i in items if not i["q"].lower().startswith("style")]
+    return items
+
+
 def _parse(items: list[dict], ans: str) -> dict[str, str]:
     return {q.rstrip("?").strip().lower(): a for q, a in memory.split_answer(items, ans)}
 
@@ -90,13 +98,13 @@ def picture_words(task: str) -> str:
     if not idea:
         h = re.search(r"^#\s+(.+?)(?:\s+[—-]\s+Build Prompt.*)?$", t, re.M)
         idea = h.group(1).strip() if h else ""
-    keep = "\n".join(re.findall(r"^(?:Style|Shape|Change):.*$", t, re.M))
+    keep = "\n".join(re.findall(r"^(?:Style|Shape|Change|Look):.*$", t, re.M))
     return (idea + ("\n" + keep if keep else "")).strip() or t
 
 
 def own_words(words: str) -> str:
-    """Scott's words without the Style:/Shape: lines the Lab adds (those go to the writer as choices) or markdown marks."""
-    w = re.sub(r"^(Style|Shape):.*$\n?", "", words, flags=re.M)
+    """Scott's words without the Style:/Shape:/Look: lines the Lab adds (those go to the writer as choices) or markdown marks."""
+    w = re.sub(r"^(Style|Shape|Look):.*$\n?", "", words, flags=re.M)
     w = re.sub(r"[*`#]+", "", w)
     return re.sub(r"[ \t]+", " ", w).strip() or words.strip()
 
@@ -154,11 +162,12 @@ def run(run) -> None:
         run.why = "🔌 Pictures are made by Hermes (it holds the OpenRouter key) — switch the Lab to connected mode."
         return
     words = picture_words(run.task)
+    look, look_notes = looks.normalize(looks.from_task(words))          # 🎨 Look line (2026-11-24)
     choices = {}
     if getattr(run, "_picture_answer", None) is None and run.ask_first:
-        items = _questions(run)
+        items = _items(run, look)
         if items:
-            stage(run, "❓", "Two quick choices for you")
+            stage(run, "❓", "Two quick choices for you" if len(items) > 1 else "A quick choice for you")
             run.asked = True
             run.question = {"kind": "ask", "text": items[0]["q"], "choices": items[0]["choices"], "items": items}
             ans = run._wait()
@@ -167,7 +176,7 @@ def run(run) -> None:
             choices = _parse(items, ans)
             run._record({"action": "ask", "why": "❓ your choices", "result": {"answer": ans}, "usd": 0.0})
     elif getattr(run, "_picture_answer", None):
-        choices = _parse(_questions(run), run._picture_answer)
+        choices = _parse(_items(run, look), run._picture_answer)
     style, shape = choices.get("style", ""), choices.get("shape", "")
     inline = {k.lower(): v.strip() for k, v in re.findall(r"^(Style|Shape):\s*(.+)$", words, re.M)}   # 🔁 Make another / ✏️ Change it
     style, shape = style or inline.get("style", ""), shape or inline.get("shape", "")
@@ -175,11 +184,20 @@ def run(run) -> None:
     run._check_stop()
     prompt = write_prompt(run, words + extra)
     run._check_stop()
-    if style and style.lower() not in prompt.lower():       # 2026-11-24 live: the Style line was stripped and only reached
+    if look:                                                 # 🎨 words → medium/style → detail → mood/light/colour/camera
+        mine = own_words(words)
+        add = prompt[len(mine):].lstrip(" .") if prompt.startswith(mine) else ""
+        names = look + ([style] if style and not looks.has_look_style(look) else [])
+        prompt = looks.assemble(mine, names, add)
+        looks.remember_last(look)
+        clash = looks.clashes(look)
+        run._record({"action": "look", "why": f"🎨 Look: {looks.SEP.join(look)}",
+                     "result": {"look": look, "notes": look_notes, "clash": clash, "prompt_chars": len(prompt)}, "usd": 0.0})
+    elif style and style.lower() not in prompt.lower():     # 2026-11-24 live: the Style line was stripped and only reached
         m = own_words(words)                                # the model if the writer happened to say it (Lustify drew photos)
         prompt = (f"{m.rstrip('.')}. {style}. {prompt[len(m):].lstrip(' .')}" if prompt.startswith(m)
                   else f"{prompt.rstrip('.')}. {style}.").strip()
-    pmodel, forced = picture_model(run, style)
+    pmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
     args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}", "model": pmodel,
             "negative_prompt": NO_TEXT}
     asp = aspect_from(shape)
@@ -234,7 +252,8 @@ def run(run) -> None:
     usd = float(out.get("usd") or 0)
     run.usd += usd
     pic = {"path": rel, "prompt": prompt, "model": out.get("model", model), "usd": round(usd, 4),
-           "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape}
+           "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape,
+           "look": look}
     run.pictures.append(pic)
     run._record({"action": "picture", "path": rel, "why": "🎨 made the picture", "result": {k: v for k, v in pic.items() if k != "prompt"},
                  "usd": usd})

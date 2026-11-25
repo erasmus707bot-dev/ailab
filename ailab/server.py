@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review, ship, creation,
                robotcheck, roster, store)
+from . import looks
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -817,6 +818,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.memory_get, q)
             if u.path == "/api/creation_types":            # 🧩 chips above the task box (2026-11-24)
                 return self._run(lambda: (200, {"ok": True, "types": creation.public()}))
+            if u.path == "/api/looks":                     # 🎨 picture Looks catalog + saved + last (2026-11-24)
+                return self._run(lambda: (200, looks.public()))
             if u.path == "/api/roster":
                 return self._run(app.roster, q)
             if u.path == "/api/where":                     # 📍 where a project's files really are (2026-11-24)
@@ -914,6 +917,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_apply, b)
             if p == "/api/review/reject":
                 return self._run(app.review_reject, b)
+            if p == "/api/looks/save":
+                return self._run(lambda: (200, looks.save(b.get("name"), b.get("look") if isinstance(b.get("look"), list) else [])))
+            if p == "/api/looks/delete":
+                return self._run(lambda: (200, looks.delete(str(b.get("name") or ""))))
             if p == "/api/autosave":
                 return self._run(lambda: (200, store.autosave(str(b.get("project")), str(b.get("field") or "draft"),
                                                               str(b.get("text") or ""))))

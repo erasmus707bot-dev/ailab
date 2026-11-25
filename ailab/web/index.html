@@ -284,6 +284,23 @@
   .picchange input { flex: 1 1 14rem; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: inherit; padding: 8px 10px; }
   .docview { white-space: pre-wrap; max-height: 60vh; overflow: auto; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); font-size: 1rem; }
   /* 🧩 creation type chips (2026-11-24): tap any number; ⭐ = the Lab's guess from your words */
+  /* 🎨 picture Looks (2026-11-24) — one line under the idea box + a sheet */
+  .lookrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+  .lookrow .tlead { font-size: .9rem; color: var(--dim); margin-right: 2px; }
+  .lchip { min-height: 36px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: .92rem; cursor: pointer; }
+  .lookbtn { min-height: 44px; }
+  .lookwarn { color: var(--dim); }
+  dialog.lookdlg { width: min(680px, 96vw); max-height: 88vh; }
+  dialog.lookdlg > form { display: flex; flex-direction: column; gap: 10px; max-height: 84vh; overflow: auto; }
+  .lookhead { display: flex; justify-content: space-between; align-items: center; } .lookhead h3 { margin: 0; }
+  .lookdlg input[type=search], .lookdlg input[type=text], .lookdlg select { min-height: 44px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg, var(--panel)); color: var(--text); }
+  .looktabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  .looktab { flex: none; min-height: 40px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--text); font: inherit; font-size: .92rem; cursor: pointer; white-space: nowrap; }
+  .looktab.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .lookchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .lookchips .tchip.more2 { background: none; border-style: dashed; }
+  .lookpicked { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding-top: 8px; }
+  .looksaved select { flex: 1 1 200px; min-width: 0; } .looksaved input[type=text] { flex: 1 1 140px; min-width: 0; }
   .typerow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .typerow .tlead { font-size: .9rem; color: var(--dim); margin-right: 2px; }
   .tchip { min-height: 44px; min-width: 44px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
@@ -899,8 +916,8 @@ function startView() {
           h("a", { class: "btn", href: url, download: pc.path.split("/").pop() }, "⬇ Download"));
       })));
       if (!running && ag && ag.startWith) {                      /* 🔁 Make another · ✏️ Change it */
-        const last = pics[pics.length - 1], base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].trim();
-        const keep = (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : "");
+        const last = pics[pics.length - 1], base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].split("\nLook:")[0].trim();
+        const keep = (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : "") + ((last.look || []).length ? `\nLook: ${last.look.join(LOOK_SEP)}` : "");
         const ids = run.ctypes && run.ctypes.length ? run.ctypes : ["image"];
         const change = h("input", { type: "text", placeholder: "Say what to change — e.g. make it sunset, add a camel", "aria-label": "What to change in the picture" });
         const go = () => { if (change.value.trim()) ag.startWith(`${base}\nChange: ${change.value.trim()}${keep}`, ids, false); };
@@ -1162,8 +1179,8 @@ function changeBox(pid, run, startWith, pm) {
   const ids = run.ctypes && run.ctypes.length ? run.ctypes : null;
   const build = text => {
     if (run.picture) { const pics = run.pictures || [], last = pics[pics.length - 1] || {};
-      const base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].trim();
-      return `${base}\nChange: ${text}` + (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : ""); }
+      const base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].split("\nLook:")[0].trim();
+      return `${base}\nChange: ${text}` + (last.style ? `\nStyle: ${last.style}` : "") + (last.shape ? `\nShape: ${last.shape}` : "") + ((last.look || []).length ? `\nLook: ${last.look.join(LOOK_SEP)}` : ""); }
     const made = (run.made || []).map(m => m.path);
     return `Change what you just made${made.length ? ` (${made.join(", ")})` : ""}: ${text}\nRead those files first, change only what this asks, keep everything else the same, check it, then done.`;
   };
@@ -1446,6 +1463,118 @@ let agTimer = null;
 const ICON = { list: "📂", read: "📖", write: "📝", edit: "✏️", repo: "🔗", run: "▶️", hermes: "🔌", done: "✅", bad_reply: "↻", ask: "❓", plan: "🗺" };
 const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Working", done: "✅ Done", unproven: "⚠️ Not proven", stopped: "⏹ Stopped", capped: "🧢 Hit a limit", interrupted: "⏸ Paused — Lab restarted",
                 refused: "🔒 Refused", failed: "⚠️ Failed" };
+/* ---------- 🎨 picture Looks (2026-11-24, Scott: "checkboxes for style/theme/mood… must not take the whole screen") ----------
+   One line under the idea box: 🎨 Look: [Oil painting ✕] [Moody ✕] … [🎨 Change]. Change opens a sheet: tabs (Medium ·
+   Style · Theme · Mood · Light · Colour · Camera · Era · Finish), 8 chips + Show all, search across every tab, Saved Looks.
+   Limits: Medium 1 (a new one replaces it) · 3 per tab · 8 in all. Clashes are a soft note. The Look rides in the task as
+   one `Look: a · b · c` line, so 🔁 Make another and ✏️ Change it carry it like Style/Shape. Catalog: ailab/looks.json. */
+let LOOKS = null;
+async function looksLoad(force) { if (!LOOKS || force) { const r = await api("/api/looks"); if (r.ok) LOOKS = r; } return LOOKS; }
+const LOOK_SEP = " · ";
+function lookFromText(t) { const m = String(t || "").match(/^Look:\s*(.*)$/m); return m ? m[1].split(/\s*[·;|,]\s*/).map(s => s.trim()).filter(Boolean) : []; }
+function lookStrip(t) { return String(t || "").replace(/^Look:.*(?:\n|$)/gm, "").replace(/\n+$/, ""); }
+function lookIndex() { const ix = {}; (LOOKS ? LOOKS.tabs : []).forEach(t => (t.items || []).forEach(it => { ix[it.n.toLowerCase()] = { tab: t, it }; })); return ix; }
+function lookClashes(names) {
+  const low = new Set(names.map(n => n.toLowerCase())), out = [];
+  ((LOOKS && LOOKS.clash) || []).forEach(([a, bs]) => { if (low.has(a.toLowerCase())) bs.split("|").forEach(b => { if (low.has(b.toLowerCase())) out.push(`${a} + ${b}`); }); });
+  return out;
+}
+/* Returns { row, get(), set(names), text(task) → task with the Look line, show(on) } */
+function lookPicker(pid) {
+  const key = "look." + pid;
+  let cur = store.get(key, null), shown = false;
+  const row = h("div", { class: "lookrow", id: "aglook", role: "group", "aria-label": "Picture look", hidden: true });
+  const save = () => store.set(key, cur);
+  looksLoad().then(L => { if (cur == null) { cur = (L && L.last) || []; save(); } paint(); });
+  function paint() {
+    row.hidden = !shown;
+    if (!shown) return;
+    const c = cur || [], clash = LOOKS ? lookClashes(c) : [];
+    row.replaceChildren(h("span", { class: "tlead" }, "🎨 Look:"),
+      ...(c.length ? c.map(n => h("button", { class: "lchip", type: "button", title: `Take ${n} off`, "aria-label": `Take ${n} off`,
+        onclick: () => { cur = c.filter(x => x !== n); save(); paint(); } }, n, h("span", { "aria-hidden": "true" }, " ✕")))
+        : [h("span", { class: "note" }, "none yet")]),
+      h("button", { class: "btn lookbtn", type: "button", id: "aglookbtn", onclick: open }, c.length ? "🎨 Change" : "🎨 Pick a look"),
+      clash.length ? h("span", { class: "note lookwarn" }, `⚠️ ${clash.join(", ")} may fight each other`) : null);
+  }
+  async function open() {
+    await looksLoad(true);
+    if (!LOOKS) return;
+    const ix = lookIndex(), maxT = LOOKS.max_total || 8;
+    let picks = [...(cur || [])], tab = store.get("looktab", LOOKS.tabs[0].id), all = false, q = "";
+    const dlg = h("dialog", { class: "lookdlg", "aria-label": "Pick a look" });
+    const search = h("input", { type: "search", placeholder: "🔎 Search every tab — e.g. neon, film, gothic", "aria-label": "Search looks", maxlength: 40 });
+    const tabsEl = h("div", { class: "looktabs", role: "tablist" }), chipsEl = h("div", { class: "lookchips" });
+    const picked = h("div", { class: "lookpicked", "aria-live": "polite" }), note = h("div", { class: "note", role: "status" });
+    const savedSel = h("select", { "aria-label": "Saved looks" }), nameIn = h("input", { type: "text", placeholder: "Name this look", "aria-label": "Name for this look", maxlength: 40 });
+    const tabOf = n => (ix[n.toLowerCase()] || {}).tab;
+    function toggle(it, t) {
+      note.textContent = "";
+      const has = picks.some(p => p.toLowerCase() === it.n.toLowerCase());
+      if (has) { picks = picks.filter(p => p.toLowerCase() !== it.n.toLowerCase()); return paintDlg(); }
+      const max = t.max || 3, same = picks.filter(p => tabOf(p) && tabOf(p).id === t.id);
+      if (max === 1 && same.length) picks = picks.filter(p => !same.includes(p));          /* Medium: the new one replaces it */
+      else if (same.length >= max) { note.textContent = `✋ ${max} ${t.label} picks at most — take one off first.`; return paintDlg(); }
+      if (picks.length >= maxT) { note.textContent = `✋ ${maxT} picks at most — take one off first.`; return paintDlg(); }
+      picks.push(it.n); paintDlg();
+    }
+    const chip = (it, t, label) => { const on = picks.some(p => p.toLowerCase() === it.n.toLowerCase());
+      return h("button", { class: "tchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), title: it.p || it.n, onclick: () => toggle(it, t) },
+        (on ? "✓ " : "") + it.n + (label ? ` · ${t.label}` : "")); };
+    function paintDlg() {
+      const term = q.trim().toLowerCase();
+      tabsEl.replaceChildren(...LOOKS.tabs.map(t => { const n = picks.filter(p => tabOf(p) && tabOf(p).id === t.id).length;
+        return h("button", { class: "looktab" + (t.id === tab && !term ? " on" : ""), type: "button", role: "tab", "aria-selected": String(t.id === tab && !term),
+          onclick: () => { tab = t.id; store.set("looktab", tab); all = false; q = ""; search.value = ""; paintDlg(); } },
+          `${t.icon || ""} ${t.label}${n ? ` (${n})` : ""}`); }));
+      if (term) {
+        const hits = LOOKS.tabs.flatMap(t => (t.items || []).filter(it => (it.n + " " + (it.p || "")).toLowerCase().includes(term)).map(it => chip(it, t, true)));
+        chipsEl.replaceChildren(...(hits.length ? hits : [h("span", { class: "note" }, "Nothing matches — try another word.")]));
+      } else {
+        const t = LOOKS.tabs.find(x => x.id === tab) || LOOKS.tabs[0], items = t.items || [], few = innerWidth < 700 ? 6 : 8;
+        const list = all ? items : items.slice(0, few);
+        chipsEl.replaceChildren(...list.map(it => chip(it, t)),
+          items.length > few ? h("button", { class: "tchip more2", type: "button", onclick: () => { all = !all; paintDlg(); } }, all ? "▴ Fewer" : `▾ Show all ${items.length}`) : null,
+          h("span", { class: "note looklimit" }, t.max === 1 ? "Pick 1" : `Up to ${t.max || 3}`));
+      }
+      const clash = lookClashes(picks);
+      picked.replaceChildren(h("b", {}, `Your look (${picks.length}/${maxT}): `),
+        ...(picks.length ? picks.map(n => h("button", { class: "lchip", type: "button", "aria-label": `Take ${n} off`, onclick: () => { picks = picks.filter(x => x !== n); paintDlg(); } }, n, " ✕"))
+          : [h("span", { class: "note" }, "nothing picked — the picture follows your words only")]),
+        clash.length ? h("div", { class: "note lookwarn" }, `⚠️ ${clash.join(", ")} may fight each other (it still runs).`) : null);
+      const sv = LOOKS.saved || [];
+      savedSel.replaceChildren(h("option", { value: "" }, sv.length ? `⭐ Saved looks (${sv.length})` : "No saved looks yet"),
+        ...sv.map(s => h("option", { value: s.name }, `${s.name} — ${s.look.join(LOOK_SEP)}`)));
+    }
+    search.oninput = () => { q = search.value; paintDlg(); };
+    savedSel.onchange = () => { const s = (LOOKS.saved || []).find(x => x.name === savedSel.value); if (s) { picks = [...s.look]; nameIn.value = s.name; note.textContent = `⭐ Using “${s.name}”.`; paintDlg(); } };
+    const saveBtn = h("button", { class: "btn", type: "button", onclick: async () => {
+      const r = await api("/api/looks/save", { name: nameIn.value, look: picks });
+      if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message || "Couldn't save."}`; return; }
+      LOOKS.saved = r.saved; note.textContent = `💾 Saved “${nameIn.value.trim()}”.`; paintDlg(); } }, "💾 Save");
+    const delBtn = h("button", { class: "btn", type: "button", title: "Delete the saved look picked on the left", onclick: async () => {
+      if (!savedSel.value) { note.textContent = "Pick a saved look first."; return; }
+      const r = await api("/api/looks/delete", { name: savedSel.value }); if (r.ok) { LOOKS.saved = r.saved; note.textContent = "🗑 Deleted."; paintDlg(); } } }, "🗑");
+    const done = () => { cur = picks; save(); paint(); dlg.close(); };
+    dlg.append(h("form", { method: "dialog", onsubmit: e => { e.preventDefault(); done(); } },
+      h("div", { class: "lookhead" }, h("h3", {}, "🎨 Look"), h("button", { class: "btn", type: "button", "aria-label": "Close without changes", onclick: () => dlg.close() }, "✕")),
+      search, tabsEl, chipsEl, note, picked,
+      h("div", { class: "runbar looksaved" }, savedSel, delBtn, nameIn, saveBtn),
+      h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "submit" }, "✅ Use this look ⭐"),
+        h("button", { class: "btn", type: "button", onclick: () => { picks = []; note.textContent = ""; paintDlg(); } }, "Clear all"))));
+    dlg.addEventListener("close", () => dlg.remove());
+    dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
+    document.body.append(dlg); paintDlg(); dlg.showModal(); search.blur();
+  }
+  return {
+    row,
+    get: () => [...(cur || [])],
+    set(names) { cur = [...names]; save(); paint(); },
+    show(on) { if (shown !== !!on) { shown = !!on; paint(); } },
+    text(t) { return shown && (cur || []).length && !/^Look:/m.test(t) ? `${t.replace(/\s+$/, "")}\nLook: ${cur.join(LOOK_SEP)}` : t; },
+  };
+}
+
 function agentView(wb) {
   if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
   const p = curProject();
@@ -1521,6 +1650,7 @@ function agentView(wb) {
   const tstate = () => store.get(tkey, { ids: [], manual: false });
   function typePicked() { const st = tstate(); return st.manual ? st.ids : ctypeGuess(task.value); }
   const typeRow = h("div", { class: "typerow", id: "agtypes", role: "group", "aria-label": "What are you making?" });
+  const look = lookPicker(p.id);                         /* 🎨 shows only while 🖼 Image is picked */
   let typesOpen = false;                                   /* phones: all chips shown only after ▾ All types */
   function paintTypes() {
     const st = tstate(), on = typePicked();
@@ -1535,6 +1665,7 @@ function agentView(wb) {
         onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me")] : []),
       h("button", { class: "tchip more", type: "button", "aria-expanded": String(typesOpen),
         onclick: () => { typesOpen = !typesOpen; paintTypes(); } }, typesOpen ? "▴ Fewer" : on.length ? "▾ More" : "▾ Pick what you're making"));
+    look.show(on.includes("image"));
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
@@ -1652,7 +1783,7 @@ function agentView(wb) {
   startBtn.onclick = async () => {
     if (!task.value.trim()) { status.textContent = "✏️ Tell the agent what to do first."; return; }
     startBtn.disabled = true;
-    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: task.value, ask_first: askFirst.checked, ctypes: typePicked() });
+    const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: look.text(task.value), ask_first: askFirst.checked, ctypes: typePicked() });
     if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
     store.set("agrun." + p.id, r.run.id); paint(r.run);
   };
@@ -1663,16 +1794,17 @@ function agentView(wb) {
   poll();
   /* 🖼 Make another / Change it start a new run from the result pane with these words and chips */
   async function startWith(text, ids, ask) {
-    task.value = text; task.oninput();
+    const lk = lookFromText(text); if (lk.length) look.set(lk);      /* 🎨 the Look rides along; the box stays your words */
+    task.value = lookStrip(text); task.oninput();
     if (ids) store.set(tkey, { ids, manual: true });
     paintTypes();
     const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: text, ask_first: !!ask, ctypes: ids || typePicked() });
     if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
   }
-  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, final, steps, more };
+  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, final, steps, more };
   return [projectRow(), h("section", { class: "agent" },
-    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, hint, repoRow, goals,
+    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, look.row, hint, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, newBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     status, final, steps,
