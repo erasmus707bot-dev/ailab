@@ -26,8 +26,18 @@ Anime missed the prompt (closed umbrella, no rain, park bench). Scott 20:46 "1" 
 - Real card time: 34–39 s per picture (5 s steps).
 - Still not verified: the live writer's own tags (🏷 line in the Lab).
 
-## Gandalf
-1. `systemctl --user restart ailab`
-2. `bash ~/ailab/tools/m3_tag_proof.sh` (~4–5 min, $0) — then tell Claude it finished.
+## Live Lab check (21:13 + 21:18, Claude ran it in Scott's Chrome, project "image testing")
+- Run 1: route → Illustrious, 🏷 tags by venice-uncensored-1-2, 42 s, $0.0002 (writer calls). Girl, open red umbrella, rain, bus stop sign — but the sign read **"CALM"** (writer tag "calm" painted as text) + a stray second handle.
+- Fix `4acd5e9`: writer told "only things that can be seen", mood/feeling words filtered from writer tags; the Look's own mood word stays.
+- Run 2 after restart: no mood tags, **no sign text**. Girl, open red umbrella, rain, a red bus behind her (no bus stop sign this time). 44 s.
+- Fix (this commit): Look words were doubled in the tag list ("anime style, cel shading" twice) — now once each. Needs a Lab restart to load.
+- One picture each side — the "calm" → sign reading is likely, not proven.
 
-Continue: `continue local image service — M3 tags proof result, from the 2026-11-24 M3 tags handoff`
+## Still open
+- Quality/negative tags unchecked against the model cards. Writer doesn't say the umbrella's state ("open umbrella") though asked.
+- Argus touch check of ⚙️ "🖼 Pictures: which side first". Keep-model-loaded parked. Nothing pushed.
+
+## Gandalf
+`systemctl --user restart ailab` (loads the doubled-Look-word fix).
+
+Continue: `continue local image service — next step pick, from the 2026-11-24 M3 tags handoff`
