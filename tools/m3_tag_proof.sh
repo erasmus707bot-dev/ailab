@@ -3,16 +3,16 @@
 # Same idea + same seed, 3 prompts × 2 anime models on gandalf's card: sentence (before) · rules tags · writer-style tags.
 # The writer-style tags here are a fixed hand-written line (what the Lab's writer is asked to produce) — the live writer
 # is checked in the Lab itself (🏷 line on an Anime picture). $0, ~4–5 min.
-# Run on gandalf:  bash ~/ailab/tools/m3_tag_proof.sh   → ~/hermes-data/_scratch/local_m3_tags/<model>_<kind>.png + report.txt
+# Run on gandalf:  bash ~/ailab/tools/m3_tag_proof.sh [pony|illustrious]   (no arg = both) → ~/hermes-data/_scratch/local_m3_tags/<model>_<kind>.png + report.txt
 set -u
 OUT="$HOME/hermes-data/_scratch/local_m3_tags"; mkdir -p "$OUT"
 cd "$HOME/hermes" || exit 1
 systemctl --user is-active hermes-comfy.service >/dev/null || systemctl --user restart hermes-comfy.service
-PYTHONUNBUFFERED=1 PYTHONPATH="$HOME/hermes:$HOME/ailab" python3 - "$OUT" <<'PY' 2>&1 | tee "$OUT/report.txt"
+PYTHONUNBUFFERED=1 PYTHONPATH="$HOME/hermes:$HOME/ailab" python3 - "$OUT" "${1:-}" <<'PY' 2>&1 | tee "$OUT/report.txt"
 import base64, sys, time
 from forge.projects import mcp_server as M
 from ailab import looks, tag_prompt as T
-out = sys.argv[1]
+out, only = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "")
 ctx = M.ctx_for("builder", "ailab", category="ailab")
 def call(n, a):
     r = M.call_tool(n, a, ctx); sc = r.get("structuredContent") or {}
@@ -24,7 +24,7 @@ LW = [w for part in looks.parts(LOOK) for w in part]
 HAND = T.clean("1girl, solo, standing, holding umbrella, open umbrella, red umbrella, umbrella over head, rain, raining, "
                "wet ground, puddle, bus stop, bus stop sign, street, city, overcast, cloudy sky, full body") + [w.lower() for w in LW]
 print("seed", SEED, "· Look words:", LW)
-for model in ("local/illustrious-xl-v0.1", "local/pony-v6-xl"):
+for model in [m for m in ("local/illustrious-xl-v0.1", "local/pony-v6-xl") if only in m]:
     short = model.split("/")[-1].split("-")[0]
     for kind, prompt, neg in [("sentence", looks.assemble(MINE, LOOK), BASE_NEG),
                               ("rules", T.build(model, T.rules(MINE, LW), MINE), BASE_NEG),
@@ -42,6 +42,15 @@ for model in ("local/illustrious-xl-v0.1", "local/pony-v6-xl"):
         if j.get("state") == "done":
             f = f"{out}/{short}_{kind}.png"; open(f, "wb").write(base64.b64decode(j["result"]["b64"]))
             print(f"  OK ~{round(time.time()-t0)} s (5 s steps) · ${j['result']['usd']} · {f}")
+            try:                                             # what the card really got (Hermes adds the quality tags)
+                import json as _j
+                from PIL import Image as _I
+                g = _j.loads(_I.open(f).info.get("prompt") or "{}")
+                for k, v in g.items():
+                    if v.get("class_type") == "CLIPTextEncode":
+                        print(f"  card {'+' if k == '3' else '-'}: {v['inputs']['text'][:220]}")
+            except Exception as e:                           # noqa: BLE001
+                print("  (card prompt not readable:", e, ")")
         else:
             print("  FAIL", j.get("state"), (j.get("error") or {}).get("message"))
 print("\ndone — tell Claude it finished (it reads report.txt and the 6 pictures itself)")
