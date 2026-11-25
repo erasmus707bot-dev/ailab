@@ -46,8 +46,13 @@ Anime missed the prompt (closed umbrella, no rain, park bench). Scott 20:46 "1" 
 - Picture: girl, open red umbrella, rain, bus shelter, bus stop sign cut off at the right edge (short letters on it). 44 s, $0.0002 (writer).
 - A saved "Boudoir" Look chip was set in the Lab from another session; Claude removed it before running (the Look line in the task box was used).
 
+## Pony live + push + keep-loaded measurement (2026-11-25 04:27–04:30, Scott "1+2+3")
+- **Pony PASS:** card got the full score chain + `source_anime` once; negative `source_cartoon, source_furry, source_pony, worst quality…` (no score_ tags). 3 pictures, 34–39 s, $0. Sentence: good. Rules tags: a second umbrella floating above her (defect). Hand tags: rain, wet street, signs, but the girl is small and facing away ("full body, city" again).
+- **Pushed:** hermes origin + offsite 0 behind (Scott ran it). ailab first push → github erasmus707bot-dev/ailab, tracking origin/master.
+- **Keep-model-loaded DROPPED (measured):** ComfyUI journal, 3 Pony pictures back to back with the card freed between each: "Prompt executed in" 32–37 s, of which CLIP + SDXL staging ≈ 1 s (the checkpoint stays in the OS file cache — 16 GB RAM), sampling ≈ 29 s, VAE ≈ 2 s. Keeping the model loaded would save ~1–3 s a picture and make Iris wait up to 3 min. Not built. The real lever is sampling time (steps / a fast-sampling add-on) — not checked.
+
 ## Still open
 - Writer doesn't say the umbrella's state ("open umbrella") though asked.
-- Argus touch check of ⚙️ "🖼 Pictures: which side first". Keep-model-loaded parked. Nothing pushed.
+- Argus touch check of ⚙️ "🖼 Pictures: which side first".
 
 Continue: `continue local image service — next step pick, from the 2026-11-24 M3 tags handoff`
