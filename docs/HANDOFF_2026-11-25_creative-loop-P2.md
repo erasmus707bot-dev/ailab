@@ -8,7 +8,7 @@
 - `eb962d0d` forge/creative spine + 24 tests
 - `f1cd002c` wiring: `Library.log_event` (non-lifecycle only) · `recipes_search` adds side/runs/q/avg_usd/avg_s ·
   licence choke 1 = `review.publish` refuses non-portfolio assets · choke 2 = Site Studio `check()` reads `.creative/assets.json`
-- `0e193786` design doc (status line updated after, uncommitted 1-line)
+- `0e193786` + `1deadc6e` design doc (+ §9 status line)
 
 ## Built (`~/hermes/forge/creative/`)
 jobspec (DAG, cycle check) · license (`may_use`, fail-closed, derive=strictest, recreate) · estimate (unknown → $2 high) ·
