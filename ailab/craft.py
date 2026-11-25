@@ -315,9 +315,10 @@ def _change(words: str) -> str:
     return m.group(1).strip()[:160] if m else ""
 
 
-def observe(run, kind: str, e: dict | None, words: str = "") -> dict:
+def observe(run, kind: str, e: dict | None, words: str = "", compare: bool = True) -> dict:
     """One 👁 check → counts on the notes this run used, the running score with/without notes, miss counts per kind of
-    point; a measured need wakes its note; a 🔁 fix that raised the score keeps its wording. Never raises."""
+    point; a measured need wakes its note; a 🔁 fix that raised the score keeps its wording. Never raises.
+    compare=False (prompts built in code, e.g. batch): misses + fix wording count, the with/without score does not."""
     out = {"learned": [], "flagged": []}
     try:
         if not e or e.get("error") or e.get("score") is None or not settings(getattr(run, "cfg", None))["on"]:
@@ -330,8 +331,9 @@ def observe(run, kind: str, e: dict | None, words: str = "") -> dict:
             ids = set((d["runs"].get(rid) or {}).get("ids") or getattr(run, "craft_used", []) or [])
             base_all = _mean(d, kind)
             side = "on" if ids else "off"
-            st = d["stats"].setdefault(kind, {}).setdefault(side, {"n": 0, "sum": 0})
-            st["n"], st["sum"] = st["n"] + 1, st["sum"] + score
+            if compare:
+                st = d["stats"].setdefault(kind, {}).setdefault(side, {"n": 0, "sum": 0})
+                st["n"], st["sum"] = st["n"] + 1, st["sum"] + score
             missed = {p["kind"] for p in pts if p["ok"] is False}
             asked = {p["kind"] for p in pts}
             for n in d["notes"]:

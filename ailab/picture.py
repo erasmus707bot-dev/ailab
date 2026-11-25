@@ -144,11 +144,11 @@ def _craft_note(run, kind: str, words: str) -> str:
         return ""
 
 
-def _craft_seen(run, kind: str, e: dict, words: str) -> None:
+def _craft_seen(run, kind: str, e: dict, words: str, compare: bool = True) -> None:
     """📓 what 👁 saw goes back to the Craft Book (counts on the notes used; a measured need wakes its note)."""
     try:
         from . import craft
-        craft.observe(run, kind, e, words)
+        craft.observe(run, kind, e, words, compare)
     except Exception:                                            # noqa: BLE001
         pass
 

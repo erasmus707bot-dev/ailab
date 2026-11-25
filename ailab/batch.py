@@ -164,7 +164,14 @@ def norm(b, ctypes) -> dict | None:
             cn = max(cast.MIN_N, min(cast.MAX_N, int(b["cast"].get("n") or cast.DEFAULT_N)))
         except (TypeError, ValueError):
             return None
-        return {"kind": "cast", "n": cn, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
+        who = b["cast"].get("who") if b["cast"].get("who") in ("woman", "man") else ""
+        return {"kind": "cast", "n": cn, "who": who, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
+    if isinstance(b.get("rebuild"), dict):                     # 🎬 R3 Video Rebuild: its own run (rebuild.run)
+        from . import rebuild
+        rb = rebuild.norm(b["rebuild"])
+        if not rb:
+            return None
+        return {"kind": "rebuild", "rebuild": rb, "n": 1, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
     if isinstance(b.get("motion"), dict):                      # 🏃 Motion Presets: make the timeline (motion_make.run)
         from . import motion_make
         mk = motion_make.norm(b["motion"])
@@ -210,6 +217,8 @@ def price(kind: str, cfg: dict) -> float:
         return float(cfg.get("batch_picture_usd", PICTURE_USD)) * 1.5
     if kind == "cast":
         return float(cfg.get("batch_picture_usd", PICTURE_USD)) * CAST_PICTURES
+    if kind == "rebuild":                                      # per beat: a still + a $0 remake + the writer's share
+        return float(cfg.get("batch_picture_usd", PICTURE_USD)) * 2
     return float(cfg.get("batch_picture_usd", PICTURE_USD) if kind == "picture" else cfg.get("batch_doc_usd", DOC_USD))
 
 
@@ -231,6 +240,7 @@ def view(run) -> dict | None:
             "next_start": b["start"] + b["n"], "kept": kept(run.root),
             **({"briefs": b.get("briefs", []), "apart": b.get("apart", []), "saved": b.get("saved", [])} if b["kind"] == "cast" else {}),
             **({"story": b.get("story"), "chapter": b.get("chapter"), "shots": b.get("shots", [])} if b["kind"] == "story" else {}),
+            **({"rebuild": b.get("rebuild"), "rebuild_view": b.get("rebuild_view")} if b["kind"] == "rebuild" else {}),
             **({"motion": b.get("motion"), "plan": b.get("plan")} if b["kind"] == "motion" else {}),
             **({"fill": b.get("fill"), "draft": b.get("draft"), "pull": b.get("pull")} if b["kind"] == "motionfill" else {})}
 
@@ -239,6 +249,8 @@ def stage_prefix(run) -> str:
     b = getattr(run, "batch", None)
     if b and b.get("kind") == "story":
         return f"📖 shot {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" and b.get("shots") else ""
+    if b and b.get("kind") == "rebuild":
+        return f"🎬 shot {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" and b["n"] > 1 else ""
     if b and b.get("kind") == "motionfill":
         return ""
     if b and b.get("kind") == "motion":
@@ -320,6 +332,7 @@ def look_at(run) -> None:
         if e.get("error"):                                       # the vision model is off or broken: don't ask 15 more times
             eyes.record(run, "batch", e)
             break
+        picture._craft_seen(run, "picture", e, task_k, compare=False)   # 📓 misses teach; code-built words stay out of with/without
         run.save()
     scored = [it for it in b["items"] if (it.get("eyes") or {}).get("score") is not None]
     for it in b["items"]:

@@ -133,6 +133,26 @@ class Learn(Base):
         self.assertEqual((got["used"], got["helped"]), (1, 1))
         self.assertEqual(v["scores"]["picture"], {"with": 100, "with_n": 1, "without": 50, "without_n": 1})
 
+    def test_code_built_checks_teach_but_stay_out_of_the_comparison(self):
+        for i in range(5):
+            craft.observe(run(f"b{i}"), "picture", eyes(40, count=False), "3 foxes", compare=False)
+        v = craft.view()
+        self.assertEqual([n["cat"] for n in craft.notes("live")], ["count"])
+        self.assertFalse((v["scores"].get("picture") or {}).get("without_n"))
+
+    def test_batch_look_sends_each_check_to_the_craft_book(self):
+        from ailab import batch
+        seen = []
+        r = Run(steps=[], batch={"items": [{"kind": "picture", "path": "p.png", "k": 0}], "dial": 0}, task="a fox",
+                            pictures=[{"path": "p.png"}], root=Path(self.tmp.name), save=lambda: None)
+        (Path(self.tmp.name) / "p.png").write_bytes(b"x")
+        with mock.patch.object(batch.eyes, "on", return_value=True), \
+             mock.patch.object(batch.eyes, "check", return_value=eyes(80, show=True)), \
+             mock.patch.object(batch, "picture_task", return_value=("a fox", "")), \
+             mock.patch.object(batch.picture, "_craft_seen", side_effect=lambda *a, **k: seen.append((a[1:4], k))):
+            batch.look_at(r)
+        self.assertEqual(seen, [(("picture", eyes(80, show=True), "a fox"), {"compare": False})])
+
     def test_measured_need_wakes_a_note_live(self):
         out = {}
         for i in range(5):
