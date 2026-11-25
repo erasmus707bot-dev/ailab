@@ -105,3 +105,6 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
 - 👁 writing check: no readable words; neon signs carry letter-like shapes it lets pass (acceptable for now).
 - Seen, not fixed: **props drift** — the motorbikes turned into bicycles in shots 3–5 (the vehicle is in the idea, not in each
   shot line). Fix idea: bible `props` (key objects) carried into the shot line like `when`.
+- Re-test 13:02 (after Scott's 13:01 safe restart): planted "Ben never went near any tunnel" → card now reads **"Fact (ch 2):
+  Ben has taken a shortcut through a flooded tunnel — but his idea says Ben never went near any tunnel."** Right clash, but 4
+  flags for 2 facts → `99eef92` keeps one flag per fact, at most 3 (live after the next Lab restart). Run stopped, nothing made.
