@@ -192,6 +192,13 @@ def clean_shots(raw, names: list[str], form: str) -> list[dict]:
             continue
         who = s.get("who") if isinstance(s.get("who"), list) else [s.get("who")] if s.get("who") else []
         who = [names_l.get(str(w).strip().lower(), str(w).strip()) for w in who if str(w or "").strip()][:4]
+        # live 2026-11-25: "Ben looks back, seeing Aria with the package" came with who=[Ben] → no reference for Aria,
+        # no 👁 check of her look → the model drew a stranger in Ben's colours. A name in the action is in the shot.
+        seen_l = {w.lower() for w in who}
+        for low, name in names_l.items():
+            if low not in seen_l and len(who) < 4 and re.search(rf"\b{re.escape(low)}\b", str(s["action"]).lower()):
+                who.append(name)
+                seen_l.add(low)
         try:
             sec = int(float(s.get("seconds") or 4))
         except (TypeError, ValueError):

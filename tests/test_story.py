@@ -128,6 +128,15 @@ class Story(Base):
         b = story.bible(root)
         self.assertEqual((b["title"], len(b["people"]), b["facts"][0]["fact"]), ("T", 1, "f"))
 
+    def test_a_name_in_the_action_joins_the_shot(self):
+        """Live 2026-11-25: who=[Ben] for "Ben looks back, seeing Aria…" → Aria got no reference and a stranger was drawn."""
+        s = story.clean_shots([{"who": ["Ben"], "action": "Ben looks back, seeing Aria with the package", "where": "street"},
+                               {"who": ["aria"], "action": "Aria rides alone; Arianna's shop is closed", "where": "street"},
+                               {"who": [], "action": "Benjamin waves", "where": "x"}], ["Aria", "Ben"], "long")
+        self.assertEqual(s[0]["who"], ["Ben", "Aria"])
+        self.assertEqual(s[1]["who"], ["Aria"])                                   # "Arianna" is not "Aria"
+        self.assertEqual(s[2]["who"], [])                                         # "Benjamin" is not "Ben"
+
     # ---------- the run
     def test_short_story_end_to_end(self):
         m = StoryMCP()
