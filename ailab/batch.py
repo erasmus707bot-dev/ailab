@@ -186,7 +186,13 @@ def pictures(run) -> None:
             task_k, v, look = picture_task(base, b["dial"], k)
             run.task, run.state, run.why = task_k, "running", ""
             before = len(run.pictures)
-            picture.run(run)                      # raises Stopped / SpendBlocked → handled by Run.loop
+            try:
+                picture.run(run)                  # Stopped / SpendBlocked / PrivacyRefused → Run.loop handles them
+            except Exception as e:                # noqa: BLE001 — live 2026-11-24: hermes-mcp dropped one call
+                if type(e).__name__ in ("Stopped", "SpendBlocked", "PrivacyRefused"):   # (RemoteDisconnected) and
+                    raise                                                           # it ended the whole batch
+                run.state, run.why = "failed", f"⚠️ {type(e).__name__}: {str(e)[:200]}"
+                run._record({"action": "picture", "why": f"🎨 picture {k + 1}", "result": {"error": run.why}, "usd": 0.0})
             if len(run.pictures) > before:
                 pic = run.pictures[-1]
                 shown = v + (f" · 🎨 {looks.SEP.join(look)}" if look else "")

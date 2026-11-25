@@ -204,3 +204,26 @@ class ServerBatch(Base):
         a.lab.spend = None                                   # spent_today() fails → today unknown
         code, e = a.batch_estimate({"ctypes": ["image"], "n": 2})
         self.assertTrue(e["ok"] and e["fits"])
+
+
+class DropMCP(PicMCP):
+    """The 2nd image_make call drops (live 2026-11-24: RemoteDisconnected from hermes-mcp)."""
+    def call(self, tool, args=None):
+        if tool == "image_make" and self.calls.count("image_make") == 1:
+            self.calls.append(tool)
+            self.args.append(args or {})
+            raise ConnectionError("Remote end closed connection without response")
+        return super().call(tool, args)
+
+
+class OneDropDoesNotEndTheBatch(Base):
+    def test_dropped_call_costs_one_picture_only(self):
+        b = Brain(["detail words"])
+        b.mcp = DropMCP()
+        r = agent.Run(b, config.load({"mode": "connected"}), self.project, "openrouter", "m", WORDS, ctypes=["image"],
+                      batch={"n": 3, "dial": 90})
+        r.loop()
+        self.assertEqual(r.state, "done", r.why)
+        self.assertEqual(len(r.batch["items"]), 2)
+        self.assertEqual(r.batch["failed"], 1)
+        self.assertIn("1 didn't come back", r.why)
