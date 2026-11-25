@@ -371,6 +371,17 @@ class App:
         return 200, {"ok": True, "task": "", "run": None}
 
     # ---------- 🎭 M2 references ----------
+    LOOP_CALLS = {"job": "get", "jobs": "jobs", "estimate": "estimate", "trust": "trust", "plan": "plan", "run": "run",
+                  "rate": "rate", "spend_ok": "spend_ok", "author": "author"}
+
+    def loop_call(self, name: str, arg: dict) -> tuple[int, dict]:
+        """🔁 Creative Loop (Phase 3, 2026-11-25) — straight through to Hermes's creative_* tools."""
+        from .loop import Loop, LoopError                           # noqa: PLC0415
+        try:
+            return 200, getattr(Loop(self), self.LOOP_CALLS[name])(arg)
+        except LoopError as e:
+            return e.status, {"ok": False, "code": e.code, "icon": "🔁", "message": str(e)[:400]}
+
     def refs_get(self, q: dict) -> tuple[int, dict]:
         from . import refs
         return 200, {"ok": True, "refs": refs.get(preview.ensure_site(self._pid(q.get("project")))), "max": refs.MAX_REFS}
@@ -1271,6 +1282,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.shelf_source, q)
             if u.path == "/api/shelf":
                 return self._run(app.shelf_get, q)
+            if u.path == "/loop":                          # 🔁 Creative Loop page (2026-11-25)
+                return self._send(200, (WEB / "loop.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/api/loop/pic":                  # 🔁 a loop picture — only from Hermes pictures/ai-lab/
+                from . import loop as loopmod              # noqa: PLC0415
+                b_, ct_ = loopmod.picture(str((q.get("path") or [""])[0]))
+                return self._send(200, b_, ct_) if b_ else self._send(404, b"Not a loop picture.", "text/plain; charset=utf-8")
+            if u.path in ("/api/loop/job", "/api/loop/jobs", "/api/loop/estimate", "/api/loop/trust"):
+                return self._run(app.loop_call, u.path.rsplit("/", 1)[1], q)
             if u.path == "/api/refs":                      # 🎭 M2 the project's reference pictures (cast strip)
                 return self._run(app.refs_get, q)
             if u.path == "/api/breakdown/pic":             # 🎞 M4 a scene frame — only from Hermes's breakdowns folder
@@ -1374,6 +1393,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                                   "done": app.shelf_done}[p.rsplit("/", 1)[1]], b)
             if p == "/api/where/open":
                 return self._run(app.where_open, b)
+            if p in ("/api/loop/plan", "/api/loop/run", "/api/loop/rate", "/api/loop/spend_ok", "/api/loop/author"):
+                return self._run(app.loop_call, p.rsplit("/", 1)[1], b)
             if p == "/api/batch/estimate":                 # 🎛 Batch create (2026-11-24)
                 return self._run(app.batch_estimate, b)
             if p == "/api/batch/keep":

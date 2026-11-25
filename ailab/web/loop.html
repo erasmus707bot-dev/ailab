@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🔁 Loop — AI Lab</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<script>
+  try { var t = localStorage.getItem('ailab.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+  /* 🔁 Creative Loop (Phase 3, 2026-11-25). Same palette + rules as the Lab: 17 px floor, 44 px targets, no colour-only meaning. */
+  :root { --r: 14px; font-size: 17px; }
+  [data-theme="dark"] { --bg: #0d1520; --panel: #142133; --panel2: #1b2b40; --line: #2a3d57; --text: #e8dfc8; --dim: #a9a08c;
+    --accent: #c9a54a; --accent-ink: #1a1408; --calm: #26394f; --ok: #6f9c7a; --warn: #b89558; --bad: #b97a6c; }
+  [data-theme="light"] { --bg: #f5f2ec; --panel: #fbf9f4; --panel2: #ece6da; --line: #d6cdbb; --text: #1d2a3a; --dim: #5d6672;
+    --accent: #8a6a1f; --accent-ink: #fff8e6; --calm: #e3ebf2; --ok: #4f7a5a; --warn: #8a6a2c; --bad: #8f5446; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  textarea, input, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 44px; width: 100%; }
+  textarea::placeholder, input::placeholder { color: var(--dim); opacity: 1; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    background: var(--panel); border-bottom: 1px solid var(--line); min-height: 52px; }
+  header .title { font-weight: 600; flex: 1; }
+  .ib { background: none; border: 0; border-radius: 10px; min-width: 44px; height: 44px; font-size: 1.15rem; display: inline-flex;
+    align-items: center; justify-content: center; text-decoration: none; color: inherit; cursor: pointer; }
+  .ib:hover { background: var(--panel2); }
+  main { max-width: 760px; margin: 0 auto; padding: 12px; display: grid; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; }
+  h2 { font-size: 1.1rem; margin: 0; }
+  label { display: grid; gap: 4px; font-size: .95rem; color: var(--dim); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: 1 1 140px; }
+  .btn { min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; }
+  .btn.pri { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.on { outline: 2px solid var(--accent); }
+  .note { color: var(--dim); font-size: .95rem; }
+  .warn { background: var(--calm); border: 1px solid var(--warn); border-radius: 10px; padding: 8px 10px; }
+  .piece { border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 8px; background: var(--bg); }
+  .piece .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .tag { font-size: .9rem; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--panel2); }
+  .out img { max-width: 100%; border-radius: 10px; border: 1px solid var(--line); }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: .9rem; background: var(--panel2); padding: 8px; border-radius: 8px; margin: 0; }
+  details summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+  .jobs button { width: 100%; text-align: left; }
+  .rate { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rate .btn { flex: 1 1 90px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips .btn { min-height: 44px; font-size: .95rem; }
+</style>
+</head>
+<body>
+<header>
+  <a class="ib" href="/" title="Back to the Lab" aria-label="Back to the Lab">←</a>
+  <a class="ib" href="/" title="Home" aria-label="Home">⌂</a>
+  <span class="title">🔁 Loop</span>
+  <button class="ib" id="theme" type="button" title="Light / dark" aria-label="Light or dark mode">☀️</button>
+</header>
+<main>
+  <section class="card" aria-labelledby="mk">
+    <h2 id="mk">What should we make?</h2>
+    <label>Goal <textarea id="goal" rows="3" placeholder="e.g. Show a packet crossing PC → switch → router → ISP for the A+ networking card"></textarea></label>
+    <div class="row">
+      <label>Project <input id="project" value="proready"></label>
+      <label>Field <select id="field"><option value="aplus">A+</option><option value="linuxplus">Linux+</option>
+        <option value="securityplus">Security+</option><option value="">none</option></select></label>
+    </div>
+    <div class="row">
+      <label>Kind <select id="atype"><option>motion</option><option>diagram</option><option>image</option><option>video</option>
+        <option>effect</option><option>model3d</option><option>doc</option><option>site</option></select></label>
+      <label>Budget $ <input id="budget" type="number" min="0" step="0.05" value="0.50"></label>
+    </div>
+    <fieldset class="row" style="border:0;padding:0;margin:0">
+      <legend class="note">Pulled material</legend>
+      <label style="flex-direction:row;display:flex;gap:8px;align-items:center"><input type="radio" name="mode" value="A" checked style="width:auto;min-height:auto"> A — use it, tag 🔒 personal-use</label>
+      <label style="flex-direction:row;display:flex;gap:8px;align-items:center"><input type="radio" name="mode" value="B" style="width:auto;min-height:auto"> B — reference only, ♻️ recreate</label>
+    </fieldset>
+    <label id="refrow" hidden>Reference picture (in Hermes pictures, e.g. ai-lab/osi.png) <input id="reference" placeholder="ai-lab/…"></label>
+    <div class="row">
+      <label>Planner / writer <select id="prov"></select></label>
+      <label>Model <select id="model"><option value="">⏳</option></select></label>
+    </div>
+    <button class="btn pri" id="plan" type="button">🧭 Plan it</button>
+    <div id="planmsg" class="note" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card" id="jobcard" hidden aria-live="polite"></section>
+
+  <section class="card">
+    <h2>Recent jobs</h2>
+    <div class="jobs" id="jobs"><span class="note">⏳</span></div>
+  </section>
+
+  <section class="card">
+    <details><summary>🔐 Trusted tasks</summary>
+      <div id="trust" class="note">⏳</div>
+      <p class="note">All start off. Change them in Hermes Settings → Trusted tasks. ERASMUS arming and deletes can never be trusted.</p>
+    </details>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, "");
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : String(k));
+  return e;
+}
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  j.status = r.status; return j;
+}
+const store = { get(k, d) { try { const v = localStorage.getItem("ailab.loop." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+                set(k, v) { try { localStorage.setItem("ailab.loop." + k, JSON.stringify(v)); } catch (e) {} } };
+
+/* theme */
+function paintTheme() { $("theme").textContent = document.documentElement.dataset.theme === "dark" ? "☀️" : "🌙"; }
+$("theme").onclick = () => { const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = t; try { localStorage.setItem("ailab.theme", t); } catch (e) {} paintTheme(); };
+paintTheme();
+
+/* mode B shows the reference box */
+document.querySelectorAll("input[name=mode]").forEach(r => r.onchange = () => { $("refrow").hidden = mode() !== "B"; });
+const mode = () => document.querySelector("input[name=mode]:checked").value;
+
+/* planner model pickers (same lists as the Lab) */
+async function loadModels() {
+  const prov = $("prov").value; store.set("prov", prov);
+  $("model").innerHTML = ""; $("model").append(h("option", { value: "" }, "⏳"));
+  const r = await api(`/api/models?provider=${encodeURIComponent(prov)}&project=scratch`);
+  $("model").innerHTML = "";
+  if (!r.ok) { $("model").append(h("option", { value: "" }, r.message || "no models")); return; }
+  const want = store.get("model." + prov, "");
+  for (const m of r.models || []) $("model").append(h("option", { value: m, selected: m === want }, m));
+}
+$("model").onchange = () => store.set("model." + $("prov").value, $("model").value);
+$("prov").onchange = loadModels;
+api("/api/state").then(s => {
+  const want = store.get("prov", "");
+  for (const p of s.providers || []) $("prov").append(h("option", { value: p.id, selected: p.id === want }, `${p.icon} ${p.id}${p.off ? " · off" : ""}`));
+  loadModels();
+});
+
+/* plan */
+$("plan").onclick = async () => {
+  const goal = $("goal").value.trim();
+  if (!goal) { $("planmsg").textContent = "Say what you want made."; return; }
+  $("plan").disabled = true; $("planmsg").textContent = "🧭 Planning…";
+  const b = { goal, project: $("project").value.trim() || "proready", field: $("field").value, asset_type: $("atype").value,
+              license_mode: mode(), budget_usd: Number($("budget").value || 0.5),
+              planner_provider: $("prov").value, planner_model: $("model").value };
+  if (mode() === "B" && $("reference").value.trim()) b.reference = $("reference").value.trim();
+  const r = await api("/api/loop/plan", b);
+  $("plan").disabled = false;
+  if (!r.ok) { $("planmsg").textContent = `⚠️ ${r.message || "Couldn't plan it."}`; return; }
+  $("planmsg").textContent = `✅ ${r.job.plan_source || "planned"}`;
+  show(r.job); loadJobs();
+};
+
+/* job card */
+const SIDE = { hermes: "🛠 Hermes", lab: "🧪 Lab", proready: "📐 ProReady" };
+const STATE = { planned: "⏳ planned", running: "▶ running", done: "✅ done", failed: "❌ failed", waiting_scott: "✋ waits for you" };
+const LIC = { original: "✨ original", open: "🌐 open", personal_use: "🔒 personal-use", reference_only: "📎 reference-only" };
+const REASONS = ["off-topic", "ugly", "wrong facts", "too slow", "unreadable"];
+const payloads = {};
+let current = null, poll = null;
+
+function output(a) {
+  if (!a) return null;
+  const kids = [h("span", { class: "tag" }, LIC[a.license] || a.license || "?")];
+  if (a.kind === "image" && a.path) kids.push(h("img", { src: `/api/loop/pic?path=${encodeURIComponent(a.path)}`, alt: a.alt || "Made by the loop", loading: "lazy" }));
+  if (a.kind === "video" && a.path) kids.push(h("div", { class: "note" }, `🎞 ${a.path}`));
+  if (a.card || a.kind === "effect") kids.push(h("div", {}, `🗣 ${(a.card || {}).alt || ""}`),
+    h("details", {}, h("summary", {}, "{ } card JSON — rendered by the ProReady motion engine (Phase 6)"), h("pre", {}, JSON.stringify(a.card, null, 1))));
+  if (a.note) kids.push(h("div", { class: "warn" }, a.note));
+  return h("div", { class: "out" }, kids);
+}
+
+function rateBar(job, n, rated) {
+  const picked = new Set();
+  const chips = h("div", { class: "chips", role: "group", "aria-label": "Why (optional)" },
+    REASONS.map(x => h("button", { class: "btn", type: "button", "aria-pressed": "false",
+      onclick: e => { picked.has(x) ? picked.delete(x) : picked.add(x); e.target.classList.toggle("on"); e.target.setAttribute("aria-pressed", picked.has(x)); } }, x)));
+  const msg = h("span", { class: "note", role: "status" }, rated ? `Rated: ${rated}` : "");
+  const tap = async b => { const r = await api("/api/loop/rate", { job_id: job.id, piece: n, button: b, reasons: [...picked] });
+    msg.textContent = r.ok ? `✔ ${b} — the router learns from this` : `⚠️ ${r.message}`; };
+  return h("div", {}, h("div", { class: "rate", role: "group", "aria-label": "Rate this output" },
+      h("button", { class: "btn", type: "button", onclick: () => tap("keep") }, "✅ Keep"),
+      h("button", { class: "btn", type: "button", onclick: () => tap("redo") }, "🔁 Redo"),
+      h("button", { class: "btn", type: "button", onclick: () => tap("wrong") }, "❌ Wrong")),
+    h("details", {}, h("summary", {}, "Why? (optional)"), chips), msg);
+}
+
+function pieceView(job, p) {
+  const box = h("div", { class: "piece" },
+    h("div", { class: "top" }, h("b", {}, `${p.n}. ${p.do}`), h("span", { class: "tag" }, SIDE[p.side] || "—"),
+      h("span", { class: "tag" }, STATE[p.state] || p.state), h("span", { class: "tag" }, `$${Number(p.est_usd || 0).toFixed(2)}`)),
+    h("div", { class: "note" }, `${p.method || "no method"} — ${p.why || ""}${p.below_bar ? " · ⚠ below bar" : ""}${p.explore_with ? ` · 🧪 also tries ${p.explore_with}` : ""}`));
+  if (p.blocked) box.append(h("div", { class: "warn" }, `✋ ${p.blocked}`));
+  if (p.fail) box.append(h("div", { class: "warn" }, `❌ ${p.fail}`));
+  if (["proready.primitive", "lab.code_effect"].includes(p.method) && p.state !== "done") {
+    const pre = h("pre", { hidden: !payloads[p.n] }, payloads[p.n] ? JSON.stringify(payloads[p.n], null, 1) : "");
+    const m = h("span", { class: "note", role: "status" });
+    box.append(h("button", { class: "btn", type: "button", onclick: async e => {
+      e.target.disabled = true; m.textContent = "✍️ Writing…";
+      const r = await api("/api/loop/author", { job_id: job.id, piece: p.n, provider: $("prov").value, model: $("model").value });
+      e.target.disabled = false;
+      if (!r.ok) { m.textContent = `⚠️ ${r.message}`; return; }
+      payloads[p.n] = r.payload; pre.textContent = JSON.stringify(r.payload, null, 1); pre.hidden = false;
+      m.textContent = `✔ written ($${Number(r.usd || 0).toFixed(3)}) — ▶ Run sends it to Hermes`; } }, "✍️ Write it"), m, pre);
+  }
+  if (p.state === "waiting_scott" && /threshold/.test(p.blocked || "")) {
+    const pin = h("input", { type: "password", inputmode: "numeric", autocomplete: "off", placeholder: "Owner PIN", "aria-label": "Owner PIN" });
+    const m = h("span", { class: "note", role: "status" });
+    box.append(h("div", { class: "row" }, pin, h("button", { class: "btn pri", type: "button", onclick: async () => {
+      const r = await api("/api/loop/spend_ok", { job_id: job.id, piece: p.n, pin: pin.value }); pin.value = "";
+      m.textContent = r.ok ? "✔ Approved — tap ▶ Run" : `⚠️ ${r.message}`; if (r.ok) show(r.job); } }, "💲 Approve spend")), m);
+  }
+  if (p.state === "done" && p.asset) box.append(output(p.asset), rateBar(job, p.n, p.rating));
+  if (p.ab) box.append(h("details", { open: p.ab.state === "done" && !p.ab.rating },
+    h("summary", {}, `🧪 A/B — ${p.ab.method} (${STATE[p.ab.state] || p.ab.state})`),
+    p.ab.state === "done" ? [output(p.ab.asset), rateBar(job, p.ab.n, p.ab.rating)] : h("div", { class: "note" }, p.ab.blocked || "")));
+  return box;
+}
+
+function show(job) {
+  current = job;
+  const card = $("jobcard"); card.hidden = false;
+  const est = job.estimate ? `≈ $${Number(job.estimate.usd).toFixed(2)}` : "";
+  const runBtn = h("button", { class: "btn pri", type: "button", disabled: job.running, onclick: run }, job.running ? "▶ Running…" : "▶ Run");
+  card.replaceChildren(
+    h("h2", {}, `🔁 ${job.goal}`),
+    h("div", { class: "row note" }, h("span", {}, `${job.project}${job.field ? " · " + job.field : ""} · ${job.asset_type} · mode ${job.license_mode}`),
+      h("span", {}, `${STATE[job.state] || job.state} ${est}`)),
+    job.waiting && job.waiting.length ? h("div", { class: "warn" }, `✋ ${job.waiting.length} thing(s) wait for you`) : null,
+    (job.pieces || []).map(p => pieceView(job, p)),
+    h("div", { class: "row" }, runBtn, h("button", { class: "btn", type: "button", onclick: () => refresh(job.id) }, "↻ Refresh")));
+  clearTimeout(poll);
+  if (job.running) poll = setTimeout(() => refresh(job.id), 3000);
+}
+
+async function refresh(id) { const r = await api(`/api/loop/job?job_id=${encodeURIComponent(id)}`); if (r.ok) show(r.job); }
+async function run() {
+  if (!current) return;
+  const r = await api("/api/loop/run", { job_id: current.id, payloads });
+  if (!r.ok) { $("planmsg").textContent = `⚠️ ${r.message}`; return; }
+  setTimeout(() => refresh(current.id), 800);
+}
+
+async function loadJobs() {
+  const r = await api("/api/loop/jobs");
+  const box = $("jobs");
+  if (!r.ok) { box.replaceChildren(h("span", { class: "note" }, `⚠️ ${r.message}`)); return; }
+  box.replaceChildren(...(r.jobs.length ? r.jobs.map(j => h("button", { class: "btn", type: "button", onclick: () => refresh(j.id) },
+    `${STATE[j.state] || j.state} · ${j.goal.slice(0, 70)} · ${j.pieces} piece(s)`)) : [h("span", { class: "note" }, "Nothing yet — plan your first job above.")]));
+}
+api("/api/loop/trust").then(r => {
+  $("trust").replaceChildren(...(r.ok ? r.tasks.map(t => h("div", {}, `${t.on ? "🟢 on" : "⚪ off"} — ${t.task}`)) : [h("span", {}, `⚠️ ${r.message}`)]));
+});
+loadJobs();
+</script>
+</body>
+</html>
