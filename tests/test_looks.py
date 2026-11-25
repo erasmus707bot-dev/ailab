@@ -85,6 +85,13 @@ class Prompt(Base):
         p = looks.assemble("a cat", ["Golden hour"], "bathed in golden hour light")
         self.assertEqual(p.lower().count("golden hour light"), 1)
 
+    def test_negative_pushes_photo_away_for_drawn_looks(self):
+        self.assertTrue(looks.negative(["Watercolor"], "text").endswith(looks.NOT_PHOTO))
+        self.assertTrue(looks.negative(["Comic book", "Moonlight"], "text").endswith(looks.NOT_PHOTO))
+        self.assertEqual(looks.negative(["Photo", "Golden hour"], "text"), "text")
+        self.assertEqual(looks.negative(["Golden hour"], "text"), "text")
+        self.assertEqual(looks.negative([], "text"), "text")
+
     def test_photo_and_style_flags(self):
         self.assertTrue(looks.photo(["Photo"]))
         self.assertTrue(looks.has_look_style(["Anime"]))
@@ -127,7 +134,7 @@ class LookRun(Base):
         self.assertEqual(looks.saved()["last"], ["Watercolor", "Serene", "Golden hour"])
         self.assertEqual([s["action"] for s in r.steps], ["prompt", "look", "picture"])
         self.assertEqual(args["negative_prompt"], "text, words, letters, writing, caption, subtitles, labels, table, chart, document, "
-                         "watermark, signature, logo, username, frame, border")
+                         "watermark, signature, logo, username, frame, border, " + looks.NOT_PHOTO)
 
     def test_look_with_medium_skips_the_style_question(self):
         mcp = PicMCP()

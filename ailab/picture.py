@@ -199,7 +199,7 @@ def run(run) -> None:
                   else f"{prompt.rstrip('.')}. {style}.").strip()
     pmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
     args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}", "model": pmodel,
-            "negative_prompt": NO_TEXT}
+            "negative_prompt": looks.negative(look, NO_TEXT)}
     asp = aspect_from(shape)
     if asp:
         args["aspect_ratio"] = asp

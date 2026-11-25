@@ -161,6 +161,18 @@ def assemble(mine: str, names: list[str], add: str = "", limit: int = PROMPT_MAX
     return out
 
 
+NOT_PHOTO = "photograph, photo, photorealistic, realistic photo, 3d render"
+# 2026-11-24 M4 live: Lustify v8 (photo-trained) drew "watercolor" as a photo and "comic book" as a cinematic still.
+
+
+def negative(names: list[str], base: str, cat: dict | None = None) -> str:
+    """The no-text negative, plus NOT_PHOTO when the Look picks a non-photo medium or a drawn style."""
+    idx = _index(cat or catalog())
+    drawn = any(idx.get(n.lower(), ("",))[0] in ("medium", "style") and n.lower() not in ("photo", "realism", "3d render")
+                for n in names)
+    return f"{base}, {NOT_PHOTO}" if drawn and not photo(names) else base
+
+
 def photo(names: list[str]) -> bool:
     return any(n.lower() in ("photo", "35mm film", "polaroid") for n in names)
 
