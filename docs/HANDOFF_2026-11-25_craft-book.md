@@ -30,7 +30,7 @@ notes written by hand get one batch review. Lab tests **648 OK** on the working 
 - Batch pictures are checked by `batch.look_at` — not yet sent to `craft.observe`.
 - 🔁 Loop ratings (`creative_rate`, Hermes side) do not feed the Craft Book yet.
 - "helped" for notes without a miss type = score ≥ the kind's average before the note went live (min 70). Rough on purpose.
-- The 19 seeds: 6 are marked not measured (general practice or untested wording); the rest cite a live result.
+- The 19 seeds: 5 are marked not measured (general practice or untested wording); the rest cite a live result.
 
 ## UNVERIFIED — live, not run (shell can't reach the Lab or restart it)
 - Go-live, page in a real browser, Argus touch test of `/craft`.
