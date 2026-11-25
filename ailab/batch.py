@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import time
 
-from . import creation, makers, picture
+from . import creation, looks, makers, picture
 
 MAX_N = 24
 PICTURE_USD = 0.012       # Venice picture ($0.01) + the writer's few hundred tokens — shown as "about"
@@ -30,9 +30,15 @@ SETTINGS = ["outdoors in nature", "in a city street", "indoors, in a cozy room",
             "in a garden", "on a rooftop", "in a forest", "in a desert", "in a quiet village", "on a beach", "in a studio"]
 STYLES = ["oil painting", "watercolor", "anime", "pixel art", "3D render", "charcoal sketch", "comic book", "art nouveau",
           "ukiyo-e woodblock", "cyberpunk", "storybook illustration", "pop art"]
-SCENES = ["a dreamlike world", "a far-future city", "an ancient ruin", "underwater", "outer space", "a stormy sea",
+SCENES = ["a dreamlike world", "a far-future city", "an ancient ruin", "an underwater world", "deep space", "a stormy sea",
           "a snowy winter night", "a lantern-lit festival", "a giant library", "a floating island", "a jungle temple",
           "a steampunk workshop"]
+# 🔴 Wild pictures: the drawn style, light and mood go as a 🎨 Look line (catalog names, ailab/looks.json), so a
+# non-photo medium also pushes "photo" away — live 2026-11-24: as plain words Lustify v8 drew all 4 Wild ones as photos.
+WILD_LOOK = ["Charcoal", "Oil painting", "Anime", "Pixel art", "3D render", "Watercolor", "Comic book", "Art Nouveau",
+             "Ukiyo-e", "Cyberpunk", "Storybook", "Pop art"]
+WILD_LIGHT = ["Golden hour", "Moonlight", "Backlit", "Neon light", "Chiaroscuro", "God rays", "Blue hour", "Candlelight",
+              "Rim light", "Low-key", "High-key", "Overcast"]
 MOODS = ["serene", "joyful", "mysterious", "epic", "melancholy", "whimsical", "eerie", "romantic", "playful",
          "intense", "nostalgic", "cozy"]
 NUDGES = ["a slightly different angle", "a slightly different framing", "a little closer", "a little wider"]
@@ -82,17 +88,38 @@ def variation(dial: int, k: int, kind: str = "picture") -> str:
     if lv == "similar":
         return "" if dial < 17 or k == 0 else _pick(NUDGES, k, 1)
     parts = [_pick(POSES, k, 5)]
+    if lv == "wild":                                     # style/light/mood ride in the Look line (wild_look)
+        parts.append(f"set in {_pick(SCENES, k, 5)}" if dial >= 80 else _pick(SETTINGS, k, 5))
+        return ", ".join(parts) + " — keep the same main subject"
     if dial >= 45:
         parts.append(_pick(LIGHTS, k, 7))
     if dial >= 56:
         parts.append(_pick(SETTINGS, k, 5))
-    if lv == "wild":
-        parts.append(f"as {_pick(STYLES, k, 7)}")
-        if dial >= 80:
-            parts.append(f"set in {_pick(SCENES, k, 5)}")
-        if dial >= 90:
-            parts.append(f"a {_pick(MOODS, k, 7)} mood")
     return ", ".join(parts) + " — keep the same main subject"
+
+
+def wild_look(dial: int, k: int) -> list[str]:
+    """🔴 Wild pictures: a Look (catalog names) — drawn style always, light from 67, mood from 90."""
+    if level(dial) != "wild":
+        return []
+    names = [_pick(WILD_LOOK, k, 7), _pick(WILD_LIGHT, k, 5)]
+    if dial >= 90:
+        names.append(_pick(MOODS, k, 7).capitalize())
+    return names
+
+
+def picture_task(base: str, dial: int, k: int) -> tuple[str, str, list[str]]:
+    """(task for this one, variation words, Look names added). Scott's own Look line, if he set one, is kept as is
+    and Wild's drawn style goes in the words instead."""
+    v = variation(dial, k, "picture")
+    names = wild_look(dial, k)
+    if names and looks.from_task(base):
+        v = f"{v[: v.rfind(' — ')]}, as {names[0].lower()} — keep the same main subject" if " — " in v else v
+        names = []
+    t = with_variation(base, v)
+    if names:
+        t = t + "\n" + looks.line(names)
+    return t, v, names
 
 
 def with_variation(task: str, v: str) -> str:
@@ -156,14 +183,15 @@ def pictures(run) -> None:
         for i in range(b["n"]):
             b["now"] = i
             k = b["start"] + i
-            v = variation(b["dial"], k, "picture")
-            run.task, run.state, run.why = with_variation(base, v), "running", ""
+            task_k, v, look = picture_task(base, b["dial"], k)
+            run.task, run.state, run.why = task_k, "running", ""
             before = len(run.pictures)
             picture.run(run)                      # raises Stopped / SpendBlocked → handled by Run.loop
             if len(run.pictures) > before:
                 pic = run.pictures[-1]
-                pic.update(k=k, variation=v)
-                b["items"].append({"path": pic["path"], "k": k, "variation": v, "usd": pic.get("usd", 0), "kind": "picture"})
+                shown = v + (f" · 🎨 {looks.SEP.join(look)}" if look else "")
+                pic.update(k=k, variation=shown)
+                b["items"].append({"path": pic["path"], "k": k, "variation": shown, "usd": pic.get("usd", 0), "kind": "picture"})
             else:
                 b["failed"] += 1
                 if not run.connected or "cap" in (run.why or "").lower() or b["failed"] >= 3 and not b["items"]:

@@ -18,13 +18,27 @@ class Dial(Base):
         self.assertTrue(batch.variation(25, 3))                         # a small nudge at the top of Similar
 
     def test_more_changes_further_right_and_subject_kept(self):
-        mid, wild, top = batch.variation(40, 2), batch.variation(70, 2), batch.variation(100, 2)
-        self.assertLess(mid.count(","), wild.count(","))
-        self.assertLess(wild.count(","), top.count(","))
-        for v in (mid, wild, top):
-            self.assertIn("keep the same main subject", v)
-        self.assertIn(" as ", wild)                                     # wild changes the style
-        self.assertEqual(len({batch.variation(80, k) for k in range(12)}), 12)   # every one different
+        self.assertLess(batch.variation(40, 2).count(","), batch.variation(60, 2).count(","))
+        for d in (40, 60, 70, 100):
+            self.assertIn("keep the same main subject", batch.variation(d, 2))
+        self.assertEqual(batch.wild_look(60, 2), [])
+        self.assertEqual(len(batch.wild_look(70, 2)), 2)                 # drawn style + light
+        self.assertEqual(len(batch.wild_look(100, 2)), 3)                # + mood
+        self.assertEqual(len({batch.variation(80, k) + str(batch.wild_look(80, k)) for k in range(12)}), 12)
+
+    def test_wild_style_rides_in_a_look_line_with_catalog_names(self):
+        from ailab import looks
+        t, v, names = batch.picture_task(WORDS, 90, 2)
+        self.assertTrue(t.startswith(WORDS + "\nVariation: "))
+        self.assertEqual(looks.from_task(t), names)
+        kept, notes = looks.normalize(names)
+        self.assertEqual(kept, names)                                   # every name is in the catalog
+        self.assertNotIn("set in", batch.variation(70, 2))              # below 80: a setting, no scene on top
+        self.assertEqual(batch.variation(85, 2).count(","), 1)          # 80+: the scene REPLACES the setting
+        t2, v2, n2 = batch.picture_task(WORDS + "\nLook: Watercolor", 90, 2)   # his own Look wins
+        self.assertEqual(n2, [])
+        self.assertEqual(looks.from_task(t2), ["Watercolor"])
+        self.assertIn(", as ", v2)
 
     def test_docs_keep_the_topic(self):
         v = batch.variation(90, 1, "doc")
