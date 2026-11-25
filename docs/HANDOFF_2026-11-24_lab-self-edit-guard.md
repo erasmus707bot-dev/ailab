@@ -108,7 +108,7 @@ Seen first: both ✋ rows were already applied (Lab `/api/health` answers pid + 
 **Owed now:** Scott: type apply + ✅ on the waiting row · `sudo bash ~/hermes-forge/ailab-guard/install.sh` (17pt page) · commits once the other sessions land.
 
 ## Session 4 — 2026-11-25 04:30 — committed (Scott: "done. continue")
-Scott applied the waiting row (Rollback link 48 px is in index.html) and re-ran the installer (17pt page — not re-checked on Argus after this install).
+Scott applied the waiting row (Rollback link 48 px is in index.html) and re-ran the installer (17pt page — re-checked on Argus 04:35 as installed ✅: light default, smallest text 23 px, nothing under 44 px, no sideways scroll).
 Other sessions were still editing the same files (index.html 04:08, tag_prompt.py 04:12), so the guard work was committed **without their hunks**: HEAD copy + `patch_m4_guard.py` + `patch_m5_guard_ui.py` + the two Lab-made lines, staged with `git update-index --cacheinfo` (working tree untouched).
 - ailab `0e405b4` — 🛡 code + tests (config.py, review.py, server.py, index.html, guardlink.py, test_guardlink.py). test_guardlink 11 ✅; full suite on that tree: same failures as HEAD (+2 "No space left on device" in the test VM, not code).
 - ailab `50b61fc` — tools (guard_drill.sh, guard_drill_hermes.sh, patch_m4_guard.py, patch_m5_guard_ui.py).
@@ -116,7 +116,7 @@ Other sessions were still editing the same files (index.html 04:08, tag_prompt.p
 - Not pushed (ailab → GitHub origin; hermes is 153 ahead of its Dropbox mirror — Scott's call, NUC terminal).
 - Guard source `~/hermes-forge/ailab-guard/` is not in any git repo — only copy is that folder + /opt/ailab-guard.
 
-**Left:** Argus re-check of the 17pt 🛟 page as installed · "🛡 Apply all N together" touch test (needs 2+ rows) · Iris ☰ More 🛟 link (M5 plan, never built) · Lab row findings (type-apply box 42 px, 13.9 px text) · put the Guard source under git.
+**Left:** "🛡 Apply all N together" touch test (needs 2+ rows) · Iris ☰ More 🛟 link (M5 plan, never built) · Lab row findings (type-apply box 42 px, 13.9 px text) · put the Guard source under git.
 
 No night tail: M4 needs the guard installed + `check` all ✅ first.
 
