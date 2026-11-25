@@ -19,7 +19,8 @@ def test_library_all_projects_default():
 
 def test_less_on_screen():
     assert 'open: !!store.get("libopen", false)' in HTML               # per-project Library starts folded
-    assert 'optNow), ag.batchRow' in HTML                 # batch folds into Options
+    assert 'ag.typeRow, ag.batchRow, h("div", { class: "runbar" }, ag.startBtn' in HTML   # 🎛 batch back beside ▶ Start (Scott 2026-11-25)
+    assert 'optNow), ag.batchRow' not in HTML
     assert '"📜 Steps"' in HTML and '"🎯 More ways to start"' in HTML
     assert 'class: "cenline"' in HTML and "ℹ️ Why am I asked?" in HTML  # censor card = one line
     assert 'id="mode" title="Mode" hidden' in HTML

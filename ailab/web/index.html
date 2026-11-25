@@ -1806,12 +1806,12 @@ function startView() {
   const optSync = () => { const m = ag && ag.picker.querySelector('select[aria-label="Model"]'), o = m && m.selectedOptions[0];
     optNow.textContent = o && o.value && o.textContent !== "⏳" ? "· " + o.textContent : ""; };
   const options = ag ? h("details", { class: "optfold", id: "agoptions", open: !!store.get("wbopt", false), ontoggle: e => store.set("wbopt", e.target.open) },
-    h("summary", {}, h("span", { style: "white-space:nowrap" }, "⚙️ Options"), optNow), ag.batchRow, ag.picker, ag.askRow) : null;
+    h("summary", {}, h("span", { style: "white-space:nowrap" }, "⚙️ Options"), optNow), ag.picker, ag.askRow) : null;
   const impBtn = ag && ag.improve.querySelector("#agimpbtn");
   if (impBtn) { impBtn.classList.add("ib"); impBtn.textContent = "🪄"; impBtn.setAttribute("aria-label", "Improve my prompt"); }
   if (ag) { ag.picker.addEventListener("change", optSync); new MutationObserver(optSync).observe(ag.picker, { childList: true, subtree: true }); }
   const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Make", sec, panes),
-    ...(ag ? [ag.task, ag.typeRow, h("div", { class: "runbar" }, ag.startBtn, impBtn, ag.stopBtn, ag.held), ag.improve, ag.censor, ag.status, ag.liveRow, ag.final,
+    ...(ag ? [ag.task, ag.typeRow, ag.batchRow, h("div", { class: "runbar" }, ag.startBtn, impBtn, ag.stopBtn, ag.held), ag.improve, ag.censor, ag.status, ag.liveRow, ag.final,
       h("details", { class: "optfold", id: "agstepsfold", open: !!store.get("wbsteps", false), ontoggle: e => store.set("wbsteps", e.target.open) }, h("summary", {}, "📜 Steps"), ag.steps), options]
       : [offCard("agent", "🤖", "Agent")]),
     h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the two panes back to the standard size and order" }, "🧱 Reset pane layout")));
