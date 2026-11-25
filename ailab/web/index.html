@@ -239,6 +239,14 @@
   .chg .shots figure { margin: 0; } .chg .shots figcaption { font-size: 23px; font-weight: 600; }
   .chg .shots img { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
   .chg .shotnote { font-size: 23px; color: var(--dim); } .chg .hd > span { font-size: 23px; }
+  /* 👉 2026-11-25 "your turn" glow (Scott: things I need to click glow and pulse so my eyes are drawn to them).
+     .yours = the one thing to tap next. The ✋ chip and the AI's question button glow by themselves. */
+  @keyframes yoursPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(216,182,92,0), 0 0 8px 2px rgba(216,182,92,.45); }
+    50% { box-shadow: 0 0 0 9px rgba(216,182,92,.45), 0 0 30px 12px rgba(216,182,92,.9); } }
+  .yours, header #waiting:not([hidden]), dialog#askdlg .btn.pri { outline: 4px solid #e2c56e; outline-offset: 2px;
+    animation: yoursPulse 1.6s ease-in-out infinite; position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { .yours, header #waiting:not([hidden]), dialog#askdlg .btn.pri {
+    animation: none; box-shadow: 0 0 16px 5px rgba(216,182,92,.8); } }
 button[data-m] { min-height: 48px; font-size: 20px; }
 input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .drawer { margin-top: 0; border-top: 1px solid var(--line); padding-top: 6px; }
@@ -608,6 +616,7 @@ $("#home").onclick = goHome;
 /* the phone's / browser's own Back button walks the same trail */
 try { history.replaceState({ lab: 1 }, ""); history.pushState({ lab: 2 }, ""); } catch (e) {}
 addEventListener("popstate", () => {
+  if (/yours=/.test(location.hash || "")) { openYours(); return; }   /* 👉 a #yours= link opened in this tab — not a Back */
   if (trail.length) { try { history.pushState({ lab: 2 }, ""); } catch (e) {} goBack(); }
   else if (backUrl()) location.href = backUrl();
   else history.back();
@@ -672,6 +681,13 @@ function paintWaiting(n) {
   c.setAttribute("aria-label", n ? `${n} change${n === 1 ? "" : "s"} waiting for your OK` : "");
 }
 $("#waiting").onclick = () => { store.set("wbtab", "code"); if (view !== "start") { trail.push(view); view = "start"; } render(); };
+/* 👉 a link with #yours=… opens the ✋ list by itself (2026-11-25), so Scott lands on the glowing button */
+async function openYours() {                 /* opens the row's project (past the 🚪 start screen), then the ✋ list */
+  const m = /yours=\w+:([\w-]+)/.exec(location.hash || "");
+  if (m) { try { const r = await api("/api/review"); const it = (r.held || []).find(x => x.id === m[1]);
+    if (it && it.project) { store.set("project", it.project); trail = []; view = "start"; render(); } } catch (e) {} }
+  let tries = 0; const t = setInterval(() => { const w = $("#waiting");
+  if (w && !w.hidden) { clearInterval(t); w.click(); } else if (++tries > 40) clearInterval(t); }, 250); }
 function newProject() {
   const d = $("#newproj"); $("#pname").value = ""; $("#psens").checked = false;
   d.onclose = async () => {
@@ -1664,6 +1680,9 @@ function startView() {
     }).catch(() => { shotCache.delete(key); box.replaceChildren(h("div", { class: "shotnote" }, "📸 Pictures failed — reopen ✋ to try again.")); });
     return box;
   }
+  /* 👉 your-turn glow: one thing at a time. A link can point at a row: …8850/#yours=reject:<id> | apply:<id> | held */
+  function yours(on, ...els) { els.filter(Boolean).forEach(e => e.classList.toggle("yours", !!on)); }
+  function yoursWanted() { const m = /yours=(reject|apply|held)(?::([\w-]+))?/.exec(location.hash || ""); return m ? { what: m[1], id: m[2] || "" } : null; }
   function heldCard(x, cf, ...controls) {
     const p = x.plain || {};
     const who = x.guarded === "ailab" ? "🛡 the Lab itself" : x.guarded === "hermes" ? "🛡 Hermes" : "✋ a real file";
@@ -1684,15 +1703,23 @@ function startView() {
     const kept = store.get(keptKey, []), rows = [], codeRows = [];
     held.forEach(x => {
       const cf = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply" }), note = h("span", { class: "note" });
-      rows.push(heldCard(x, cf,
-        h("button", { class: "btn pri", onclick: async () => {
+      const want = yoursWanted(), mine = want && want.id === x.id;
+      let okB, noB;
+      const card = heldCard(x, cf,
+        okB = h("button", { class: "btn pri", onclick: async () => {
           if (x.guarded) note.textContent = "🧪 testing it in a safe copy first — can take a few minutes…";
           const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
           note.textContent = guardMsg(a) || (a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`); if (a.ok) setTimeout(loadHeld, 700);
         } }, "✅ Apply"),
-        h("button", { class: "btn", onclick: async () => {
+        noB = h("button", { class: "btn", onclick: async () => {
           const a = await api("/api/review/reject", { id: x.id }); note.textContent = a.ok ? "✗ rejected (kept, not deleted)" : `⚠️ ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
-        } }, "✗ Reject"), note));
+        } }, "✗ Reject"), note);
+      /* 👉 the glow walks him through it: a link to Reject → ✗ glows; otherwise the box glows, then ✅ once it says apply */
+      if (mine && want.what === "reject") yours(true, noB);
+      else if (!want || mine) { yours(true, cf); cf.addEventListener("input", () => { const ok = cf.value.trim().toLowerCase() === "apply"; yours(!ok, cf); yours(ok, okB); }); }
+      if (mine && !window.__yoursScrolled) { window.__yoursScrolled = 1;      /* once per open; again as the pictures load */
+        [300, 1500, 4000].forEach(ms => setTimeout(() => { const e = document.querySelector(".yours"); if (e) e.scrollIntoView({ block: "center", behavior: "smooth" }); }, ms)); }
+      rows.push(card);
     });
     if (curRun) curRun.steps.forEach(s => {
       if (!s.diff || s.undone || kept.includes(curRun.id + ":" + s.n)) return;
@@ -3564,6 +3591,7 @@ function render() {
   S = r; paintBar();
   /* 2026-11-25 (Scott, pick 2A): every open starts at 🚪 Continue / Pick / New — then a clean slate */
   view = "welcome"; render();
+  if (/yours=/.test(location.hash || "")) openYours();   /* 👉 a #yours= link: skip 🚪 and land on the glowing button */
 })();
 </script>
 </body>
