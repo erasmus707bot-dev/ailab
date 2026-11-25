@@ -27,8 +27,8 @@ print("seed", SEED, "· Look words:", LW)
 for model in ("local/illustrious-xl-v0.1", "local/pony-v6-xl"):
     short = model.split("/")[-1].split("-")[0]
     for kind, prompt, neg in [("sentence", looks.assemble(MINE, LOOK), BASE_NEG),
-                              ("rules", T.build(model, T.rules(MINE, LW), MINE), T.negative(model, BASE_NEG)),
-                              ("tags", T.build(model, HAND, MINE), T.negative(model, BASE_NEG))]:
+                              ("rules", T.build(model, T.rules(MINE, LW), MINE), BASE_NEG),
+                              ("tags", T.build(model, HAND, MINE), BASE_NEG)]:
         print(f"\n[{short} · {kind}] {prompt}")
         t0 = time.time()
         try:

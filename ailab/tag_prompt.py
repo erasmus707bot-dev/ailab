@@ -6,20 +6,15 @@ For these two models only the picture prompt becomes:
     <model's quality tags>, <tags for Scott's words + Look + writer detail>, <Scott's words exactly as typed>
 The tags come from the prompt writer (one short extra call); if no writer helps, simple rules make them.
 His own words always stay in the prompt, untouched. Every other model keeps the sentence prompt.
-PREFIX / NEG words are the usual ones for these models — from memory, UNVERIFIED against the model cards.
+2026-11-25 (Scott 1): quality tags + model negatives live in ONE place — Hermes forge/studios/comfy/models.py (checked
+against community guides 2026-11-24). Hermes prepends them on the card, so the Lab sends only the scene tags; before
+this both sides added them (Pony got the score chain twice, Illustrious "masterpiece, best quality" twice).
 """
 from __future__ import annotations
 
 import re
 
-PREFIX = {
-    "local/illustrious-xl-v0.1": "masterpiece, best quality, amazing quality",
-    "local/pony-v6-xl": "score_9, score_8_up, score_7_up, source_anime",
-}
-NEG = {
-    "local/illustrious-xl-v0.1": "worst quality, low quality, bad anatomy",
-    "local/pony-v6-xl": "score_4, score_5, score_6, worst quality, low quality",
-}
+MODELS = frozenset({"local/illustrious-xl-v0.1", "local/pony-v6-xl"})
 LIMIT = 1500
 MAX_TAGS = 40
 TAG_SYS = ("You turn a picture idea into Danbooru-style tags for an anime picture model. Reply ONLY with one line of "
@@ -40,7 +35,7 @@ _LEAD_RX = re.compile(r"^(?:a|an|the|some|of)\s+", re.I)
 
 
 def wants(model: str) -> bool:
-    return model in PREFIX
+    return model in MODELS
 
 
 def clean(text: str) -> list[str]:
@@ -51,7 +46,7 @@ def clean(text: str) -> list[str]:
         tag = re.sub(r"\s+", " ", raw).strip(" .-*•\"'").lower()
         if not tag or len(tag) > 60 or len(tag.split()) > 6 or tag in seen:
             continue
-        if tag.startswith("score_") or tag in ("masterpiece", "best quality", "amazing quality", "high quality"):
+        if tag.startswith(("score_", "source_")) or tag in ("masterpiece", "best quality", "good quality", "amazing quality", "high quality"):
             continue
         if tag in MOODS or (tag.endswith((" mood", " atmosphere", " feeling", " vibe")) and len(tag.split()) <= 3):
             continue                                         # feelings get painted as sign text; the Look's own mood word stays
@@ -72,18 +67,19 @@ def rules(mine: str, look_words: list[str], add: str = "") -> list[str]:
 
 
 def build(model: str, tags: list[str], mine: str, limit: int = LIMIT) -> str:
-    """Quality tags, the tags, then Scott's words exactly. Only tags are dropped (from the end) to fit `limit`."""
+    """The tags, then Scott's words exactly (Hermes adds the quality tags). Only tags are dropped to fit `limit`."""
     mine = (mine or "").strip()
     tags = list(tags)
     while True:
-        out = ", ".join([PREFIX[model]] + tags + ([mine] if mine else []))
+        out = ", ".join(tags + ([mine] if mine else []))
         if len(out) <= limit or not tags:
             return out
         tags.pop()
 
 
 def negative(model: str, base: str) -> str:
-    return f"{NEG[model]}, {base}" if base else NEG[model]
+    """Hermes adds the model's own negative; the Lab's leave-out words go through unchanged."""
+    return base
 
 
 def write(run, writer_list, mine: str, look_words: list[str], add: str = "", stage=None) -> tuple[list[str], str]:

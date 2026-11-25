@@ -19,18 +19,17 @@ class Builder(unittest.TestCase):
             self.assertFalse(T.wants(m))
 
     def test_clean_drops_quality_doubles_sentences(self):
-        got = T.clean("Tags: 1girl, Rain, rain, masterpiece, score_9, this is a very long sentence that is not a tag at all, \"bus stop\".")
+        got = T.clean("Tags: 1girl, Rain, rain, masterpiece, score_9, source_anime, good quality, this is a very long sentence that is not a tag at all, \"bus stop\".")
         self.assertEqual(got, ["1girl", "rain", "bus stop"])
 
     def test_clean_drops_mood_words(self):
         got = T.clean("1girl, calm, Serene, quiet atmosphere, rain, composed, empty, bus stop, peaceful mood, empty street")
         self.assertEqual(got, ["1girl", "rain", "bus stop", "empty street"])
 
-    def test_build_prefix_tags_then_words_exact(self):
+    def test_build_tags_then_words_exact_no_quality_tags(self):
         p = T.build(PONY, ["1girl", "rain"], "A Girl with a RED umbrella")
-        self.assertTrue(p.startswith("score_9, score_8_up, score_7_up, source_anime, 1girl, rain, "))
-        self.assertTrue(p.endswith("A Girl with a RED umbrella"))
-        self.assertTrue(T.build(ILL, [], "x").startswith("masterpiece"))
+        self.assertEqual(p, "1girl, rain, A Girl with a RED umbrella")     # Hermes adds the score chain on the card
+        self.assertEqual(T.build(ILL, [], "x"), "x")
 
     def test_build_cuts_tags_never_words(self):
         mine = "w" * 200
@@ -41,9 +40,8 @@ class Builder(unittest.TestCase):
         got = T.rules("a girl with a red umbrella at a rainy bus stop", ["anime", "serene"])
         self.assertEqual(got, ["girl", "red umbrella", "rainy bus stop", "anime", "serene"])
 
-    def test_negative(self):
-        self.assertTrue(T.negative(PONY, "text").startswith("score_4"))
-        self.assertTrue(T.negative(ILL, "text").endswith(", text"))
+    def test_negative_passes_through(self):
+        self.assertEqual(T.negative(PONY, "text, logo"), "text, logo"); self.assertEqual(T.negative(ILL, ""), "")
 
 
 class InRun(Route):
@@ -62,9 +60,8 @@ class InRun(Route):
         self.assertEqual(r.state, "done", r.why)
         a = self.makes(m)[0]
         self.assertEqual(a["model"], ILL)
-        self.assertTrue(a["prompt"].startswith("masterpiece, best quality, amazing quality, 1girl, solo, holding umbrella, open umbrella"))
+        self.assertTrue(a["prompt"].startswith("1girl, solo, holding umbrella, open umbrella"))
         self.assertTrue(a["prompt"].endswith("a girl with a red umbrella at a rainy bus stop"))
-        self.assertTrue(a["negative_prompt"].startswith("worst quality"))
         self.assertIn("photograph", a["negative_prompt"])
         self.assertTrue(any(s.get("action") == "tags" for s in r.steps))
 
@@ -85,7 +82,7 @@ class InRun(Route):
         r, _ = self.go2(m, "a girl with a red umbrella\nLook: Anime", ["soft light", "Sorry, I can't help with that."])
         self.assertEqual(r.state, "done", r.why)
         p = self.makes(m)[0]["prompt"]
-        self.assertTrue(p.startswith("masterpiece, best quality, amazing quality, girl, red umbrella"))
+        self.assertTrue(p.startswith("girl, red umbrella"))
         self.assertTrue(p.endswith("a girl with a red umbrella"))
 
     def test_fallback_to_venice_gets_sentence_back(self):
@@ -93,21 +90,21 @@ class InRun(Route):
         r, _ = self.go2(m, "a fox in snow\nLook: Anime", ["soft light", TAGS])
         a = self.makes(m)
         self.assertEqual([x["model"] for x in a], [ILL, "venice/lustify-v8"])
-        self.assertFalse(a[1]["prompt"].startswith("masterpiece")); self.assertNotIn("worst quality", a[1]["negative_prompt"])
         self.assertTrue(a[1]["prompt"].startswith("a fox in snow"))
 
     def test_pony_when_illustrious_missing(self):
         m = LocalMCP(models=[x for x in ALL if x["id"] != ILL])
         self.go2(m, "a fox in snow\nLook: Manga", ["soft light", TAGS])
         a = self.makes(m)[0]
-        self.assertEqual(a["model"], PONY); self.assertTrue(a["prompt"].startswith("score_9"))
+        self.assertEqual(a["model"], PONY); self.assertTrue(a["prompt"].startswith("1girl, solo"))
+        self.assertNotIn("score_", a["prompt"])
 
     def test_watercolor_untouched(self):
         m = LocalMCP(models=ALL)
         r, b = self.go2(m, "a fox in snow\nLook: Watercolor", ["soft light", TAGS])
         a = self.makes(m)[0]
         self.assertEqual(a["model"], "local/sdxl-base-1.0")
-        self.assertTrue(a["prompt"].startswith("a fox in snow")); self.assertNotIn("masterpiece", a["prompt"])
+        self.assertTrue(a["prompt"].startswith("a fox in snow")); self.assertNotIn("1girl", a["prompt"])
         self.assertEqual(len(b.calls), 1)                      # no extra writer call
 
 
