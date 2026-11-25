@@ -4,7 +4,7 @@ Commits: ailab `afde7a6` · hermes `f1b55deb` (session init § Craft tail). Not 
 
 Scott 2026-11-25: "teach my system as you build with it so that it gets better … anything done these past few days or in
 the future must be built into the ai lab system." Gate: he picked **1** — measured notes go live by themselves (with undo);
-notes written by hand get one batch review. Lab tests **671 OK** (was 648; +22 craft, 1 flag list updated).
+notes written by hand get one batch review. Lab tests **648 OK** on the working tree (626 before; +22 craft, 1 flag list updated).
 
 ## What it is
 - `ailab/craft.py` — notes `{kind, when, do, why}` in `~/.config/ailab/craft/notes.json`, change log + ↶ undo, sensitive gate.
