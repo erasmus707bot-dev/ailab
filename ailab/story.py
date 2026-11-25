@@ -261,6 +261,57 @@ def unname(action: str, b: dict, cast: dict[str, dict]) -> str:
     return out
 
 
+WEAR = re.compile(r"\bwear(?:s|ing)\s+(.+?)(?:[.;]|,\s*(?:and\s+)?(?:she|he|they|her|his|standing|looking|with (?:her|his) "
+                  r"(?:arms|hands))|$)", re.I)
+
+
+def wears_from(caption: str) -> str:
+    """"A man stands… He wears a teal T-shirt and orange trousers, with white sneakers." → "a teal T-shirt and orange
+    trousers, with white sneakers"."""
+    m = WEAR.search(str(caption or ""))
+    return re.sub(r"\s+", " ", m.group(1)).strip(" ,")[:120] if m else ""
+
+
+def dress(brief: str, wears: str) -> str:
+    """The cast brief with its one-colour outfit swapped for the garments the anchor really shows."""
+    if not wears:
+        return brief
+    out, n = re.subn(r"wearing an? [^,]+? outfit", f"wearing {wears}", brief or "")
+    return out if n else f"{brief}, wearing {wears}"
+
+
+def wardrobe(run, root, cast: dict[str, dict]) -> None:
+    """👕 live 2026-11-25 ch4: Ben's brief said "a orange outfit", his anchor shows a teal shirt + orange trousers → shots swapped
+    the colours. Once per character, the local eyes describe the anchor's clothes ($0); saved in .shelf/story/wardrobe.json,
+    then the brief (picture words and 👁 words) names each garment."""
+    f = _dir(root) / "wardrobe.json"
+    try:
+        saved = json.loads(f.read_text())
+    except (OSError, ValueError):
+        saved = {}
+    changed = False
+    for c in cast.values():
+        cid = c.get("id") or c.get("name")
+        if cid not in saved and c.get("anchor_path"):
+            try:
+                raw = Path(c["anchor_path"]).read_bytes()
+            except OSError:
+                continue
+            from . import eyes                                   # noqa: PLC0415
+            e = eyes.ask(run, raw, [], label=f"{c.get('name', 'the character')}'s clothes")
+            if e.get("error"):
+                continue                                         # vision off → keep the brief as it is, try next time
+            saved[cid] = wears_from(e.get("caption", ""))
+            changed = True
+        if saved.get(cid):
+            c["brief"] = dress(c.get("brief", ""), saved[cid])
+    if changed:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(saved, indent=1))
+        run._record({"action": "story", "why": "👕 clothes from each anchor: " + " · ".join(f"{c['name']}: {saved.get(c.get('id') or c.get('name'), '') or '(not seen)'}"
+                                                                                          for c in cast.values()), "result": {"wardrobe": saved}, "usd": 0.0})
+
+
 def seen_as(look: str) -> str:
     """👁 can't know a name — "Aria" becomes what a picture shows: "a woman with copper red hair in a royal blue outfit"."""
     who = re.search(r"\b(woman|man|person)\b", look or "")
@@ -271,6 +322,10 @@ def seen_as(look: str) -> str:
         out += f" with {hair.group(1)} hair"
     if outfit:
         out += f" in a {outfit.group(1)} outfit"
+    else:
+        worn = re.search(r"wearing (.+?)(?:,\s*with\b|$)", look or "")
+        if worn:
+            out += f" wearing {worn.group(1).strip(' ,')}"
     return out
 
 
@@ -416,6 +471,7 @@ def run(run) -> None:
     form = st["form"]
     run._picture_answer = ""                                     # stills never stop to ask (choices come from the bible)
     cast = load_cast(run)
+    wardrobe(run, root, cast)                                    # 👕 what each one wears in their own anchor, garment by garment
     names = [c["name"] for c in cast.values()]
 
     # 1 · 📚 bible

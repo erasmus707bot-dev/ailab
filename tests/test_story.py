@@ -128,6 +128,40 @@ class Story(Base):
         self.assertEqual(story._json("no json here", list), [])
         self.assertEqual(story._json('x {"a": "b}"} y', dict), {"a": "b}"})
 
+    def test_wardrobe_names_each_garment_once_and_is_saved(self):
+        """Live 2026-11-25 ch4: brief "a orange outfit", anchor = teal shirt + orange trousers → shots swapped colours."""
+        self.assertEqual(story.wears_from("A man stands against a grey wall. He wears a teal T-shirt and orange trousers, with white "
+                                          "sneakers. The light is soft."), "a teal T-shirt and orange trousers, with white sneakers")
+        self.assertEqual(story.wears_from("A woman wearing a purple crop top and a purple wrap skirt, standing barefoot."),
+                         "a purple crop top and a purple wrap skirt")
+        self.assertEqual(story.wears_from("A fox in snow."), "")
+        brief = "Ben: a 42-year-old man, teal-dyed hair, wearing a orange outfit, with a baseball cap"
+        dressed = story.dress(brief, "a teal T-shirt and orange trousers")
+        self.assertEqual(dressed, "Ben: a 42-year-old man, teal-dyed hair, wearing a teal T-shirt and orange trousers, with a baseball cap")
+        self.assertEqual(story.seen_as(dressed.split(": ", 1)[1]), "a man with teal-dyed hair wearing a teal T-shirt and orange trousers")
+        self.assertEqual(story.dress(brief, ""), brief)
+        root = Path(self.tmp.name) / "w"
+        (root / ".shelf" / "story").mkdir(parents=True)
+        anchor = root / "anchor.png"
+        anchor.write_bytes(b"\x89PNGanchor")
+        asked = []
+
+        class Run:
+            def _record(self, st): asked.append(st["why"])
+        from ailab import eyes
+        real = eyes.ask
+        eyes.ask = lambda run, raw, pts, label="": (asked.append(label) or {"caption": "He wears a teal T-shirt and orange trousers."})
+        self.addCleanup(lambda: setattr(eyes, "ask", real))
+        cast = {"ben": {"id": "c-ben", "name": "Ben", "brief": brief, "anchor_path": str(anchor)}}
+        story.wardrobe(Run(), root, cast)
+        self.assertIn("wearing a teal T-shirt and orange trousers", cast["ben"]["brief"])
+        self.assertTrue(any("👕 clothes from each anchor: Ben: a teal T-shirt and orange trousers" in a for a in asked))
+        n = len(asked)
+        cast2 = {"ben": {"id": "c-ben", "name": "Ben", "brief": brief, "anchor_path": str(anchor)}}
+        story.wardrobe(Run(), root, cast2)                                  # saved: no second look
+        self.assertEqual(len(asked), n)
+        self.assertIn("teal T-shirt", cast2["ben"]["brief"])
+
     def test_one_flag_per_fact(self):
         """Live 2026-11-25: 2 facts × 2 phrasings = 4 flags on one card."""
         t = json.dumps(["Fact (ch 2): Ben took the tunnel — but his idea says he never went near a tunnel.",
