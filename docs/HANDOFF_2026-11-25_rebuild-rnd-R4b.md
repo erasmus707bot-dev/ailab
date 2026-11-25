@@ -31,16 +31,7 @@ Pass: 👁 ≥ 70 %, no ⚠️ identity, the standing onlooker no longer grey-ha
 - **Not live yet:** the Lab (started 14:21) runs the old check; this shell can't restart it.
 - ⚠️ Not mine: `tests/test_eyes.py::test_switch_and_standalone_turn_it_off` red since `e5db841` (eyes.settings now has `retry`).
 
-## Push + Argus (14:48–15:00)
-- Push: **blocked here** (Cowork allows no git push). Scott: `cd ~/ailab && git push origin master`.
-- Argus, partial: Rebuild card at 494 CSS px — no sideways scroll, every control ≥ 44 px, real taps on 👀 Stage + 🎬 summary OK.
-  **Found + fixed** (`index.html` base `select` rule): 9 unclassed dropdowns showed cream text on the browser's light-grey box.
-  ⚖️ Review opens by JS click (2 videos, rows, no errors); the **real-touch** pass is not done.
-- ⚠️ Rig trap: `webeval` ran in a different phone Chrome tab than the one on screen (2 tabs open), so a rect-based tap hit
-  **▶ Rebuild it** on the visible tab — it only re-joined the kept stills ($0, film `…-145750.mp4`). Tap from the `frame`
-  image when 2+ tabs are open. Then another session took the phone (/models) — stopped there.
-
 ## Owed
-Shot-7 retry (above) · push ailab · Argus real-touch pass of ⚖️ Review (open, play/seek sync, ▶ Jump — not 🔁 Retry) · rung 2 needs a Twister clip (none on gandalf).
+Shot-7 retry (above) · push ailab · Argus touch test of 🎬 Rebuild + ⚖️ Review · rung 2 (next clip).
 
 Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 R4b handoff`

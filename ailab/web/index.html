@@ -26,7 +26,6 @@
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45; }
   body { display: flex; flex-direction: column; min-height: 100dvh; }
   button, select, input, textarea { font: inherit; color: inherit; }
-  select { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; }   /* Argus 2026-11-25: unclassed selects got the UA light box + inherited cream text — unreadable */
   /* 2026-11-24: fields with no own style showed the browser's white with pale text — unreadable */
   textarea, input[type=text], input[type=search], input[type=password], input[type=number], input:not([type]) {
     background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
@@ -700,7 +699,34 @@ function paintWaiting(n) {
 }
 $("#waiting").onclick = () => { store.set("wbtab", "code"); if (view !== "start") { trail.push(view); view = "start"; } render(); };
 /* 👉 a link with #yours=… opens the ✋ list by itself (2026-11-25), so Scott lands on the glowing button */
+/* 👉 #yours=rebuild:<project>:<shot> (2026-11-25, Scott: "walk me through with my glowing circle") — opens the project,
+   then glows one thing at a time: 🎬 Rebuild fold → ⚖️ the rebuild → 🔁 Retry on that shot. A bar says the step; ✕ stops. */
+function rebuildWalk(m) {
+  const pid = m[1], shot = +m[2] || 1;
+  store.set("project", pid); trail = []; view = "start"; render();
+  const bar = h("div", { class: "rbwalk", role: "status", "aria-live": "polite", style: "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);max-width:min(94vw,680px);z-index:2147483000;display:flex;gap:.7rem;align-items:center;padding:.75rem 1rem;background:#0d1520;color:#e8dfc8;border:3px solid #e2c56e;border-radius:14px;font:600 19px/1.4 system-ui,sans-serif" });
+  const txt = h("span", {}), x = h("button", { type: "button", "aria-label": "Stop the walk-through", style: "min-width:44px;min-height:44px;border-radius:10px;border:1px solid #e2c56e;background:transparent;color:#e8dfc8;font-size:20px" }, "✕");
+  bar.append(txt, x); document.body.append(bar);
+  let cur = null, done = false, tries = 0;
+  const glow = e => { if (cur && cur !== e) cur.classList.remove("yours"); if (e && e !== cur) { e.classList.add("yours"); e.scrollIntoView({ block: "center", behavior: "smooth" }); } cur = e; };
+  const stop = () => { clearInterval(t); glow(null); bar.remove(); history.replaceState(history.state, "", location.pathname + location.search); };
+  x.onclick = stop;
+  const t = setInterval(() => {
+    if (done) return;
+    const fold = $("#wbrebuild");
+    const row = [...document.querySelectorAll(".rbbox .trow")].find(r => r.textContent.startsWith(`Shot ${shot} ·`));
+    const retry = row && [...row.querySelectorAll("button")].find(b => b.textContent.includes("Retry"));
+    const pick = fold && fold.open && [...fold.querySelectorAll(".rbbox button")].find(b => b.textContent.startsWith("⚖️"));
+    if (retry) { txt.textContent = `👉 Step 3 of 3 — tap 🔁 Retry this shot on shot ${shot} ($0)`; glow(retry);
+      if (!retry.__w) { retry.__w = 1; retry.addEventListener("click", () => { done = true; glow(null); txt.textContent = "✅ Done — shot " + shot + " is being re-made. Watch 🤖 Make, then ⚖️ again to look."; setTimeout(stop, 9000); }); } }
+    else if (pick) { txt.textContent = "👉 Step 2 of 3 — tap the ⚖️ rebuild to open it"; glow(pick); }
+    else if (fold) { txt.textContent = "👉 Step 1 of 3 — tap 🎬 Rebuild a video with my cast"; glow(fold.querySelector("summary")); }
+    else { txt.textContent = "⏳ Opening the project…"; if (++tries > 120) { txt.textContent = "⚠️ Couldn't find 🎬 Rebuild in this project — open the project's workbench and try the link again."; glow(null); } }
+  }, 400);
+}
 async function openYours() {                 /* opens the row's project (past the 🚪 start screen), then the ✋ list */
+  const rb = /yours=rebuild:([\w-]+):(\d+)/.exec(location.hash || "");
+  if (rb) { rebuildWalk(rb); return; }
   const m = /yours=\w+:([\w-]+)/.exec(location.hash || "");
   if (m) { try { const r = await api("/api/review"); const it = (r.held || []).find(x => x.id === m[1]);
     if (it && it.project) { store.set("project", it.project); trail = []; view = "start"; render(); } } catch (e) {} }
