@@ -236,9 +236,11 @@ def run(run) -> None:
                   else f"{prompt.rstrip('.')}. {style}.").strip()
     vmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
     plan = picture_route.plan(run, look, style, vmodel, forced)
+    speed = picture_route.speed(run)                         # ⚡ fast / 🎨 full for local SDXL (2026-11-25)
     if plan["models"][0].startswith("local/"):
-        run._record({"action": "route", "why": f"🏠 {picture_route.WORDS[plan['kind']]} → {plan['models'][0].split('/')[-1]} on gandalf ($0)",
-                     "result": {"models": plan["models"], "first": plan["first"]}, "usd": 0.0})
+        run._record({"action": "route", "why": f"🏠 {picture_route.WORDS[plan['kind']]} → {plan['models'][0].split('/')[-1]} on gandalf ($0)"
+                     + (" · ⚡ fast" if speed == "fast" else " · 🎨 full"),
+                     "result": {"models": plan["models"], "first": plan["first"], "speed": speed}, "usd": 0.0})
     args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}",
             "negative_prompt": looks.negative(look, NO_TEXT)}
     asp = aspect_from(shape)
@@ -248,6 +250,10 @@ def run(run) -> None:
     base_prompt, base_neg, tagged = args["prompt"], args["negative_prompt"], None
     while queue:
         pmodel = args["model"] = queue.pop(0)
+        if pmodel.startswith("local/"):
+            args["speed"] = speed
+        else:
+            args.pop("speed", None)
         if tag_prompt.wants(pmodel):                         # 🏷 Illustrious / Pony read comma tags, not sentences
             if tagged is None:
                 t_names = look + ([style] if style and not (look and looks.has_look_style(look)) else [])
@@ -293,6 +299,7 @@ def run(run) -> None:
                      "picture model (it has content filters)", "result": {"note": venice_off.message, "fix": venice_off.fix}, "usd": 0.0})
         stage(run, "🔑", "Venice key not added yet — using the default picture model (filtered)")
         args.pop("model", None)
+        args.pop("speed", None)
         args["prompt"], args["negative_prompt"] = base_prompt, base_neg
         pmodel = ""
         try:

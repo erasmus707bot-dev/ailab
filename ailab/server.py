@@ -961,7 +961,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             if u.path == "/api/picture_first":             # 🏠/🌐 picture route (local pictures M3, 2026-11-24)
                 from . import picture_route                # noqa: PLC0415
                 return self._run(lambda: (200, {"ok": True, "first": picture_route.first(),
-                                                "cfg": str(app.cfg.get("picture_first") or "")}))
+                                                "cfg": str(app.cfg.get("picture_first") or ""),
+                                                "speed": picture_route.speed(),
+                                                "cfg_speed": str(app.cfg.get("picture_speed") or "")}))
             if u.path == "/api/creation_types":            # 🧩 chips above the task box (2026-11-24)
                 return self._run(lambda: (200, {"ok": True, "types": creation.public()}))
             if u.path == "/api/looks":                     # 🎨 picture Looks catalog + saved + last (2026-11-24)
@@ -1035,9 +1037,11 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(lambda: (200, videomod.set_path(b)))
             if p == "/api/picture_first":                  # 🏠/🌐 {"first": "local"|"venice"}
                 from . import picture_route                # noqa: PLC0415
-                r = picture_route.set_first(str(b.get("first") or ""))
+                r = (picture_route.set_speed(str(b.get("speed") or "")) if "speed" in b    # ⚡/🎨 {"speed"} (2026-11-25)
+                     else picture_route.set_first(str(b.get("first") or "")))
                 if r["ok"]:
                     r["cfg"] = str(app.cfg.get("picture_first") or "")
+                    r["cfg_speed"] = str(app.cfg.get("picture_speed") or "")
                 return self._run(lambda: (200 if r["ok"] else 400, r))
             if p == "/api/agent/start":
                 return self._run(app.agent_start, b)

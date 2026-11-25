@@ -10,6 +10,8 @@ Only local models Hermes lists as fitting the card are used (cached 60 s). Venic
 picture_first overrides. A local refusal or failed card job drops the rest of the local list (the card is busy or
 off) and goes to the other side once. A forced cfg picture_model always wins. cfg local_drawn=false keeps drawn
 Looks off the card (2026-11-24 switch, kept).
+⚡ fast (default) or 🎨 full for the local SDXL models (2026-11-25, Scott 1) — same file, {"speed": …}; cfg
+picture_speed overrides. Sent to Hermes image_make as speed; Hermes falls back to full if the speed LoRA is missing.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ ROUTES = {
 WORDS = {"photo": "photo", "anime": "anime / manga", "drawn": "drawn style", "plain": "picture"}
 ANIME = ("anime", "manga")
 FIRSTS = ("local", "venice")
+SPEEDS = ("fast", "full")
 _ROWS = {"at": 0.0, "rows": None, "src": None}
 
 
@@ -46,24 +49,50 @@ def _file():
     return config.home() / "picture_route.json"
 
 
+def _saved() -> dict:
+    try:
+        v = json.loads(_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def _save(key: str, value: str) -> None:
+    d = _saved()
+    d[key] = value
+    p = _file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(d) + "\n", encoding="utf-8")
+
+
 def first(run=None) -> str:
     c = str(((run.cfg if run is not None else {}) or {}).get("picture_first") or "")
     if c in FIRSTS:
         return c
-    try:
-        v = json.loads(_file().read_text(encoding="utf-8")).get("first")
-    except (OSError, ValueError, AttributeError):
-        v = None
+    v = _saved().get("first")
     return v if v in FIRSTS else "local"
 
 
 def set_first(value: str) -> dict:
     if value not in FIRSTS:
         return {"ok": False, "code": "bad_value", "message": "first is local or venice"}
-    p = _file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"first": value}) + "\n", encoding="utf-8")
-    return {"ok": True, "first": value}
+    _save("first", value)
+    return {"ok": True, "first": value, "speed": speed()}
+
+
+def speed(run=None) -> str:
+    c = str(((run.cfg if run is not None else {}) or {}).get("picture_speed") or "")
+    if c in SPEEDS:
+        return c
+    v = _saved().get("speed")
+    return v if v in SPEEDS else "fast"
+
+
+def set_speed(value: str) -> dict:
+    if value not in SPEEDS:
+        return {"ok": False, "code": "bad_value", "message": "speed is fast or full"}
+    _save("speed", value)
+    return {"ok": True, "first": first(), "speed": value}
 
 
 def rows(run) -> list[dict]:

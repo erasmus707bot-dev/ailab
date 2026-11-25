@@ -632,13 +632,24 @@ function pictureRouteBox() {
     msg.textContent = "Saving…"; paint(await api("/api/picture_first", { first: v }));
   } }, label);
   const bl = mk("local", "🏠 Local first"), bv = mk("venice", "🌐 Venice first");
+  /* ⚡ speed (2026-11-25, Scott 1): fast = Hyper 8-step add-on, measured ~15 s vs ~30 s, same look. Local SDXL models only. */
+  const smsg = h("p", { class: "note", role: "status" }, "");
+  const sk = (v, label) => h("button", { class: "btn", type: "button", "data-s": v, "aria-pressed": "false", onclick: async () => {
+    smsg.textContent = "Saving…"; paint(await api("/api/picture_first", { speed: v }));
+  } }, label);
+  const bf = sk("fast", "⚡ Fast (~15 s)"), bq = sk("full", "🎨 Full (~30 s)");
   paint = (r) => {
     if (!r.ok) { msg.textContent = "⚠️ " + (r.message || r.code || "Couldn't load the picture route"); return; }
     [bl, bv].forEach(b => { const on = b.dataset.v === r.first; b.className = on ? "btn pri" : "btn"; b.setAttribute("aria-pressed", String(on)); });
     msg.textContent = r.cfg ? `The Lab's config file says “${r.cfg}” — that wins over this switch.`
       : r.first === "local" ? "Now: 🏠 local first, 🌐 Venice if the card can't." : "Now: 🌐 Venice first, 🏠 local if Venice can't.";
+    [bf, bq].forEach(b => { const on = b.dataset.s === r.speed; b.className = on ? "btn pri" : "btn"; b.setAttribute("aria-pressed", String(on)); });
+    smsg.textContent = r.cfg_speed ? `The Lab's config file says “${r.cfg_speed}” — that wins over this switch.`
+      : r.speed === "fast" ? "Now: ⚡ fast on gandalf's photo, anime and drawn models (FLUX.2 Klein is already fast)."
+      : "Now: 🎨 full settings — slower, the most steps.";
   };
-  box.append(h("div", { class: "acts" }, bl, " ", bv), msg);
+  box.append(h("div", { class: "acts" }, bl, " ", bv), msg,
+    h("h3", {}, "⚡ Local picture speed"), h("div", { class: "acts" }, bf, " ", bq), smsg);
   api("/api/picture_first").then(paint);
   return box;
 }

@@ -137,6 +137,29 @@ class RouteM3(Route):
         picture_route.set_first("local")
         self.assertEqual(picture_route.first(), "local")
 
+    # ⚡ speed (2026-11-25)
+    def _made(self, m):
+        return [a for t, a in zip(m.calls, m.args) if t == "image_make"]
+
+    def test_local_picture_sends_fast_by_default(self):
+        m = LocalMCP(models=ALL); r = self.go(m, "a fox in snow\nLook: Anime")
+        self.assertEqual(self._made(m)[0]["speed"], "fast")
+        self.assertTrue(any("⚡ fast" in s.get("why", "") for s in r.steps), [s.get("why") for s in r.steps])
+
+    def test_cfg_full_and_venice_gets_no_speed(self):
+        m = LocalMCP(models=ALL); self.go(m, "a fox in snow\nLook: Anime", cfg={"picture_speed": "full"})
+        self.assertEqual(self._made(m)[0]["speed"], "full")
+        m = LocalMCP(models=ALL); self.go(m, "a fox in snow\nLook: Anime", cfg={"picture_first": "venice"})
+        self.assertNotIn("speed", self._made(m)[0])
+
+    def test_speed_setting_file_keeps_first(self):
+        picture_route.set_first("venice")
+        self.assertEqual(picture_route.set_speed("full")["speed"], "full")
+        self.assertEqual((picture_route.first(), picture_route.speed()), ("venice", "full"))
+        self.assertFalse(picture_route.set_speed("turbo")["ok"])
+        picture_route.set_speed("fast"); picture_route.set_first("local")
+        self.assertEqual((picture_route.first(), picture_route.speed()), ("local", "fast"))
+
 
 from tests.test_server import Srv   # noqa: E402
 
@@ -150,3 +173,7 @@ class PictureFirstApi(Srv):
         self.assertEqual(self.req("/api/picture_first")[1]["first"], "venice")
         code, j, _ = self.req("/api/picture_first", {"first": "cloud"})
         self.assertEqual((code, j["ok"]), (400, False))
+        self.assertEqual(self.req("/api/picture_first")[1]["speed"], "fast")
+        code, j, _ = self.req("/api/picture_first", {"speed": "full"})
+        self.assertEqual((code, j["speed"], j["first"]), (200, "full", "venice"))
+        self.assertEqual(self.req("/api/picture_first", {"speed": "turbo"})[0], 400)
