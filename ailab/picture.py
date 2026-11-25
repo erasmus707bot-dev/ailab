@@ -25,7 +25,8 @@ PROMPT_SYS = ("You help write prompts for a text-to-picture model. Scott's own w
               "after his words: style, colours, light, setting, framing, camera or medium — 20–60 words, plain "
               "description, no lists, no quotes, no warnings, no extra talk. Match his choices (style, shape). "
               "Never contradict or tone down anything he asked for. Never add clothing, covering, extra people or "
-              "body details he didn't ask for — what people wear, or don't, is only his to say.")
+              "body details he didn't ask for — what people wear, or don't, is only his to say. Never ask for text, captions, "
+              "labels, signs or watermarks in the picture unless he did.")
 WRITERS = [("venice", "venice-uncensored-1-2"), ("openrouter", "venice/uncensored")]   # then the run's own model
 VENICE_PHOTO, VENICE_ART = "venice/lustify-v8", "venice/chroma"
 REFUSAL_RX = re.compile(r"\b(i can'?t|i cannot|i won'?t|i'?m not able|sorry|as an ai)\b", re.I)
@@ -70,9 +71,31 @@ def aspect_from(choice: str) -> str:
     return next((v for k, v in SHAPES.items() if k in c), "")
 
 
+NO_TEXT = ("text, words, letters, writing, caption, subtitles, labels, table, chart, document, watermark, signature, "
+           "logo, username, frame, border")                      # 2026-11-24: Scott — "my work needs to not have these"
+
+
+def picture_words(task: str) -> str:
+    """2026-11-24 live: a 🖼 run started from a build prompt sent all 2,617 characters (rules, module table) to the
+    picture model, which drew them as text. From a build prompt keep only Scott's idea line (or the title), plus any
+    Style:/Shape: lines; a plain task is unchanged."""
+    t = task or ""
+    if not (t.startswith("Follow this build prompt") or "Idea (Scott's words)" in t or re.search(r"^#\s.*Build Prompt", t, re.M)):
+        return t
+    m = re.search(r"Idea \(Scott'?s words\)\W*\s*(.+)", t)
+    idea = m.group(1).strip() if m else ""
+    if not idea:
+        h = re.search(r"^#\s+(.+?)(?:\s+[—-]\s+Build Prompt.*)?$", t, re.M)
+        idea = h.group(1).strip() if h else ""
+    keep = "\n".join(re.findall(r"^(?:Style|Shape|Change):.*$", t, re.M))
+    return (idea + ("\n" + keep if keep else "")).strip() or t
+
+
 def own_words(words: str) -> str:
-    """Scott's words without the Style:/Shape: lines the Lab adds (those go to the writer as choices)."""
-    return re.sub(r"^(Style|Shape):.*$\n?", "", words, flags=re.M).strip() or words.strip()
+    """Scott's words without the Style:/Shape: lines the Lab adds (those go to the writer as choices) or markdown marks."""
+    w = re.sub(r"^(Style|Shape):.*$\n?", "", words, flags=re.M)
+    w = re.sub(r"[*`#]+", "", w)
+    return re.sub(r"[ \t]+", " ", w).strip() or words.strip()
 
 
 def writers(run) -> list[tuple[str, str]]:
@@ -127,7 +150,7 @@ def run(run) -> None:
         run.state = "failed"
         run.why = "🔌 Pictures are made by Hermes (it holds the OpenRouter key) — switch the Lab to connected mode."
         return
-    words = run.task
+    words = picture_words(run.task)
     choices = {}
     if getattr(run, "_picture_answer", None) is None and run.ask_first:
         items = _questions(run)
@@ -150,7 +173,8 @@ def run(run) -> None:
     prompt = write_prompt(run, words + extra)
     run._check_stop()
     pmodel, forced = picture_model(run, style)
-    args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}", "model": pmodel}
+    args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}", "model": pmodel,
+            "negative_prompt": NO_TEXT}
     asp = aspect_from(shape)
     if asp:
         args["aspect_ratio"] = asp

@@ -148,3 +148,25 @@ def test_writer_never_adds_clothing():
     """2026-11-24 live: Scott asked for 'a woman by a palm tree', the writer added 'a flowing dress'."""
     from ailab import picture
     assert "Never add clothing" in picture.PROMPT_SYS
+
+
+BP = ("Follow this build prompt. Do Module 0 first and stop at its gate.\n\n# a woman by a tree at an oasis — Build Prompt (2026-11-24)\n\n"
+      "**For:** build session · **Repo:** `~/`\n**Idea (Scott's words):** a woman by a tree at an oasis\n\n---\n\n## 0. Working rules\n"
+      "- **Do the work, report short.**\n| Module | Gate |\n|---|---|\n| 0 | audit |\n")
+
+
+def test_build_prompt_picture_uses_only_the_idea_line():
+    """2026-11-24 live: the whole build prompt (2,617 chars) went to the picture model and was drawn as text."""
+    from ailab import picture
+    assert picture.picture_words(BP) == "a woman by a tree at an oasis"
+    assert picture.picture_words(BP + "Style: Photo-real\n") == "a woman by a tree at an oasis\nStyle: Photo-real"
+    no_idea = BP.replace("**Idea (Scott's words):** a woman by a tree at an oasis\n", "")
+    assert picture.picture_words(no_idea) == "a woman by a tree at an oasis"
+    assert picture.picture_words("a cat on a roof\nShape: Wide") == "a cat on a roof\nShape: Wide"
+
+
+def test_own_words_drops_markdown_marks_and_no_text_list():
+    from ailab import picture
+    assert picture.own_words("**a cat** on a `roof`") == "a cat on a roof"
+    assert "watermark" in picture.NO_TEXT and "caption" in picture.NO_TEXT and "text" in picture.NO_TEXT
+    assert "Never ask for text" in picture.PROMPT_SYS
