@@ -123,7 +123,10 @@ Both made by the Lab (deepseek-v4.1-flash, Scratch), diffs read, **not applied �
 - **"🛡 Apply all 2 together" touch-tested on Argus ✅ (display only, not tapped):** 2 rows + the all-row show, no sideways scroll, no console errors; "🛟 Rollback page" link now 48 px. Sizes before the fix: all-row box 262×46, "Apply all" 200×44, per-row box 42, ✅/✗ 44.
 - The Lab's layout changed under this test (remodel: 🤖 Make | 👀 Stage; waiting list opens from the "✋ 2" button in the top bar).
 
-**Left:** apply the 2 rows · Argus re-check of the ✋ rows after the CSS is live (the all-row box/button are outside `.chg` — may still be 44–46 px) · Iris rebuild + touch test of the 🛟 tile · commit both (ailab index.html: HEAD + guard hunk only while other sessions' edits are open; hermes companion-app/www/index.html).
+**Applied by Scott 04:38–04:42, committed:** ailab `0ace9f2` (✋ row CSS — HEAD + this hunk only) · hermes `cc5a1e04` (Iris 🛟 tile). Guard copies "before a Lab change" 04:38:30 (ailab) and 04:42:21 (hermes); both watches were running at 04:43, held list empty.
+- **Bug seen (Scott's screenshots), NOT fixed:** after "🛡 Apply all 2 together" the note stayed on "🧪 testing all of them together in a safe copy…" forever. The Lab change went in and the Lab restarted itself at 04:38:31 (that is the apply working), which cut the reply, so the page never heard the result. The Hermes row was still waiting afterwards and Scott applied it by its own ✅ at 04:42 — so in a mixed Lab + Hermes group, the Lab's own restart appears to stop the rest of the group. Fix needed in the Lab: write/restart the Lab LAST in a group (or finish every write before any restart), and have the page poll `/api/health` until `started` changes, then reload the ✋ list.
+
+**Left:** fix the apply-all bug above · Argus re-check of ✋ rows with the new CSS (needs a waiting row; the all-row box/button sit outside `.chg`) · Iris rebuild + touch test of the 🛟 tile · pushes (Scott).
 
 No night tail: M4 needs the guard installed + `check` all ✅ first.
 
