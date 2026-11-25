@@ -15,6 +15,7 @@ def test_player_exists_with_toggles():
 def test_videos_play_through_then_advance():
     assert "body.onended = () => { if (on && vids" in HTML
     assert "(k === \"vid\" && vids)" in HTML                # off = slideshow skips videos
+    assert "b.onplaying = () => clearTimeout(timer)" in HTML and "}, 15000);" in HTML   # stuck video is skipped
 
 
 def test_both_libraries_use_it():

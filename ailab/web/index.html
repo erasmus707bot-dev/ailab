@@ -1251,7 +1251,10 @@ function libPlayer(o) {   /* o: { list() → items, cur() → item, open(item), 
     if (bk === "vid") {
       body.onended = () => { if (on && vids && body.isConnected) step(1, true); };
       body.onerror = () => { if (on && body.isConnected) step(1, true); };
-      if (on && vids) { body.muted = false; body.play().catch(() => { body.muted = true; body.play().catch(() => later()); }); return; }
+      if (on && vids) {   /* a video that won't start in 15 s (slow phone / network, Argus 2026-11-25) is skipped, never a stuck slideshow */
+        const b = body; b.onplaying = () => clearTimeout(timer);
+        timer = setTimeout(() => { if (on && b.isConnected && !o.box.hidden && b.currentTime < 0.1) step(1, true); }, 15000);
+        b.muted = false; b.play().catch(() => { b.muted = true; b.play().catch(() => later()); }); return; }
     }
     if (on && (bk !== "vid" || !vids)) later();
   }
