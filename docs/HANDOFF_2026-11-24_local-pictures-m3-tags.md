@@ -1,0 +1,25 @@
+# HANDOFF 2026-11-24 — Local pictures M3 tags (anime models get tag prompts)
+
+M3 proof PASSED 20:45 (3/3, $0, checked by eye): Photo → Juggernaut XL, Anime → Illustrious XL, Watercolor → SDXL base.
+Anime missed the prompt (closed umbrella, no rain, park bench). Scott 20:46 "1" (tag prompts), 20:48 "1. go" (writer + rules fallback).
+
+## Built (ailab)
+- `ailab/tag_prompt.py` — for `local/illustrious-xl-v0.1` and `local/pony-v6-xl` only: prompt = model quality tags + tags + Scott's words exactly (at the end). Tags by the prompt writer (one extra short call, same writer order); refusal/junk/error → simple rules. Model negatives added in front of the usual one.
+- `ailab/picture.py` — per-model switch inside the try-each-model loop; every other model (and the Venice / default fallbacks) gets the sentence prompt back. New run step `tags` ("🏷 tag prompt …") shows tags, who made them, the full prompt.
+- `tools/m3_tag_proof.sh` — same idea, seed 20261124, sentence · rules tags · hand-written writer-style tags × Illustrious + Pony → 6 pictures, real timings (5 s steps).
+
+## Tests
+`tests/test_tag_prompt.py` +11. Full suite 448: all pass (2 fail in the Cowork VM only — its /sessions disk is full; both pass with `HOME=/tmp/h`).
+
+## Not verified
+- **Whether tags fix the miss** — needs the proof run on gandalf.
+- **Live writer tags** — the proof uses a fixed tag line; the real writer shows on the 🏷 line of an Anime picture in the Lab.
+- Quality/negative tags (`masterpiece…`, `score_9…`) are from memory, not checked against the model cards.
+- Writer call cost not measured (shows in the run's cost line).
+- Still owed from M3: Argus touch check of ⚙️ "🖼 Pictures: which side first". Keep-model-loaded parked. Nothing pushed.
+
+## Gandalf
+1. `systemctl --user restart ailab`
+2. `bash ~/ailab/tools/m3_tag_proof.sh` (~4–5 min, $0) — then tell Claude it finished.
+
+Continue: `continue local image service — M3 tags proof result, from the 2026-11-24 M3 tags handoff`
