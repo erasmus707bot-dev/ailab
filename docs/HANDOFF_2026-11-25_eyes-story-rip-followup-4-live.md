@@ -39,3 +39,9 @@ Continue: `continue AI Lab eyes + story + rip follow-ups — option 2`
   (`~/hermes-data/ailab/_pilot/props_shot3_old.jpg`). Shot 2 (bike named) kept it.
 - After `systemctl --user restart ailab`: in `fast pictures check` → 📖 Story, untick 🆕 New story → ▶ Make the story — the
   unfinished chapter carries on from shot 4 on the new code (shots 4 + 6 are the ones the old code left bare).
+
+## 15:21–15:26 — ✅ props fix live (after Scott's restart)
+- ▶ in `fast pictures check` (🆕 off) carried chapter 1 on from **shot 3** (shot 3 wasn't saved before the restart).
+- Shot 3 "swerving through the crowd": **one rider on one red motorbike through the crowd, both tries** (old code: on foot).
+  Shot 4 "catching up to Alex": two couriers, each on a red bike. No more pack of bikes in one-rider shots.
+  Side by side: `~/hermes-data/ailab/_pilot/props_new.jpg` vs `props_shot3_old.jpg`. Run left to finish shots 5–6 ($0).
