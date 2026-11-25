@@ -53,8 +53,10 @@ LONG_EXTRA = "This is chapter {ch}; carry on from the facts so far."
 PROSE_SYS = "You write fiction prose. {keep} Follow the bible and the outline. Plain, vivid, readable."
 FACTS_SYS = ("List what CHANGED in this chapter that later chapters must respect: who knows what, who is where, what is "
              "broken, worn, lost or gained, who is hurt or gone. JSON only: [\"one fact per line\"]. 3–10 short lines.")
-CHECK_SYS = ("You check a new chapter plan against the story bible's facts. List only real contradictions (the plan "
-             "breaks a fact). JSON only: [\"plain one-line flag\"], or [] if none.")
+CHECK_SYS = ("You check a new chapter against the story bible's facts — his idea for the chapter and the plan made from it. "
+             "List only real contradictions: something his idea or the plan says that a listed fact rules out. Things the facts "
+             "don't cover are not contradictions. Each flag names both sides in one plain line, like: \"Fact (ch 2): Ben took the "
+             "flooded tunnel — but his idea says Ben never went near a tunnel.\" JSON only: [\"flag\", ...], or [] if none.")
 
 
 # ---------------------------------------------------------------- files
@@ -435,7 +437,7 @@ def run(run) -> None:
         # 🔗 continuity check before anything is made
         if bib["facts"]:
             picture.stage(run, "🔗", "Checking the plan against the story so far")
-            text, _ = makers.write(run, CHECK_SYS, f"Facts:\n{bible_text({'facts': bib['facts']})}\n\nNew plan:\n"
+            text, _ = makers.write(run, CHECK_SYS, f"Facts:\n{bible_text({'facts': bib['facts']})}\n\nHis idea for this chapter: {idea}\n\nNew plan:\n"
                                    + chap["outline"] + "\n" + "\n".join(f"{s['k'] + 1}. {', '.join(s['who'])} — {s['action']} ({s['where']})"
                                                                         for s in shots), 500, "Continuity check", "lab-story")
             flags = check_flags(text)

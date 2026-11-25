@@ -28,7 +28,7 @@ class StoryBrain:
     def chat(self, project, prov, model, msgs, max_tokens=1024, cap_usd=None, task=""):
         sys = msgs[0]["content"]
         self.calls.append(sys[:40])
-        if "check a new chapter plan" in sys:
+        if "check a new chapter against the story bible" in sys:
             t = json.dumps(self.flags.pop(0) if self.flags else [])
         elif "story bible" in sys:
             t = json.dumps({"title": "Lighthouse Run", "tone": "tense", "when": "night, heavy rain", "people": [{"name": "Mara", "who": "copper hair"},
@@ -36,7 +36,7 @@ class StoryBrain:
                             "places": ["the pier"], "rules": ["storms every night"]})
         elif "You plan a" in sys:
             t = "Here you go:\n```json\n" + json.dumps(self.shots) + "\n```"
-        elif "check a new chapter plan" in sys:
+        elif "check a new chapter against the story bible" in sys:
             t = json.dumps(self.flags.pop(0) if self.flags else [])
         elif "CHANGED" in sys:
             t = '["Jun\'s left arm is broken", "the lamp is lit"]'
@@ -225,6 +225,16 @@ class Story(Base):
         story.save_bible(r.root, {"title": "Lighthouse Run", "people": [{"name": "Jun", "who": "x"}], "facts": [{"ch": 1, "fact": "Jun's left arm is broken"}]})
         story.save_chapter(r.root, 1, {"form": "long", "shots": [], "done": True})
         r.ask_first = True
+        seen = []
+        from ailab import makers
+        real_write = makers.write
+
+        def spy(run, system, user, *a, **kw):
+            if system == story.CHECK_SYS:
+                seen.append(user)
+            return real_write(run, system, user, *a, **kw)
+        makers.write = spy
+        self.addCleanup(lambda: setattr(makers, "write", real_write))
         import threading
         t = threading.Thread(target=r.loop)
         t.start()
@@ -233,6 +243,9 @@ class Story(Base):
                 break
             t.join(0.05)
         self.assertTrue(r.question and "broken left arm" in r.question["text"], r.question)
+        # 2026-11-25 live: the checker saw only the plan, not his words, and named the wrong clash
+        self.assertTrue(seen and "His idea for this chapter:" in seen[0], seen)
+        self.assertIn("names both sides", story.CHECK_SYS)
         r.answer(story.FIX_BIBLE)
         t.join(30)
         self.assertEqual(r.state, "done", r.why)
