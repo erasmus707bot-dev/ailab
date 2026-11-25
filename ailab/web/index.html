@@ -1108,10 +1108,12 @@ function startView() {
     const kept = store.get(keptKey, []), rows = [], codeRows = [];
     held.forEach(x => {
       const cf = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply" }), note = h("span", { class: "note" });
-      rows.push(chgCard("✋", x.target, `${x.new ? "new file" : "change"} to real code · from ${x.project}${x.note ? " · " + x.note : ""} · not written yet`, x.diff || x.preview, true, cf,
+      const gd = x.guarded ? ` · 🛡 ${x.guarded === "ailab" ? "the Lab itself" : "Hermes"} — tested first, a copy is saved, it undoes itself if it breaks` : "";
+      rows.push(chgCard(x.guarded ? "🛡" : "✋", x.target, `${x.new ? "new file" : "change"} to real code · from ${x.project}${x.note ? " · " + x.note : ""} · not written yet${gd}`, x.diff || x.preview, true, cf,
         h("button", { class: "btn pri", onclick: async () => {
+          if (x.guarded) note.textContent = "🧪 testing it in a safe copy first — can take a few minutes…";
           const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
-          note.textContent = a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
+          note.textContent = guardMsg(a) || (a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`); if (a.ok) setTimeout(loadHeld, 700);
         } }, "✅ Apply"),
         h("button", { class: "btn", onclick: async () => {
           const a = await api("/api/review/reject", { id: x.id }); note.textContent = a.ok ? "✗ rejected (kept, not deleted)" : `⚠️ ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
@@ -1130,17 +1132,37 @@ function startView() {
         pv ? h("button", { class: "btn", onclick: () => pv.pick(s.path) }, "📝 Open") : null, note));
     });
     changes.innerHTML = "";
+    const gHeld = held.filter(x => x.guarded);
+    let allRow = null;
+    if (gHeld.length > 1) {
+      const cfa = h("input", { type: "text", "aria-label": "Type apply", placeholder: "type apply" }), na = h("span", { class: "note" });
+      allRow = h("div", { class: "runbar" }, cfa, h("button", { class: "btn pri", onclick: async () => {
+        na.textContent = "🧪 testing all of them together in a safe copy — can take a few minutes…";
+        const a = await api("/api/review/apply_group", { items: gHeld.map(x => ({ id: x.id, sha: x.sha })), confirm: cfa.value });
+        na.textContent = guardMsg(a) || `${a.icon || "⚠️"} ${a.message}`; if (a.ok) setTimeout(loadHeld, 700);
+      } }, `🛡 Apply all ${gHeld.length} together`), na);
+    }
     if (rows.length) changes.append(h("h2", {}, `✋ ${rows.length} waiting for your OK`),
-      h("p", { class: "panesub" }, "Read what changed, then Apply (type apply) or Reject. Nothing touches your real code until you do."), ...rows);
+      h("p", { class: "panesub" }, "Read what changed, then Apply (type apply) or Reject. Nothing touches your real code until you do."), ...[guardLine, allRow].filter(Boolean), ...rows);
+    else if (guardLine) changes.append(guardLine);
     /* code is folded away — the picture above is the review; file-by-file Keep / Undo stays here for when it's wanted */
     if (codeRows.length) changes.append(h("details", { class: "codefold", open: !!store.get("wbcodefold", false), ontoggle: e => store.set("wbcodefold", e.target.open) },
       h("summary", {}, `🧾 Show the code changes (${codeRows.length})`), ...codeRows));
     waitNone.hidden = rows.length + codeRows.length > 0;
     paintWaiting(rows.length + codeRows.length);
   }
+  function guardMsg(a) { return a.ok && (a.guarded || []).length ? `✅ written · 🛡 copy saved · 👀 watching ${(a.done || [])[0]?.watching_minutes || 5} min · 🔄 restarting — it goes back by itself if it breaks` : null; }
+  var guardLine = h("p", { class: "panesub", id: "guardline" });
+  async function loadGuard() {
+    const g = await api("/api/guard");
+    const link = g.public_url ? h("a", { href: g.public_url, target: "_blank", rel: "noopener", class: "chip", style: "display:inline-flex;align-items:center;min-height:48px" }, "🛟 Rollback page") : null;
+    if (!g.ok || !g.up) { guardLine.replaceChildren("🛡 The Guard isn't answering — changes to the Lab and Hermes are blocked until it is. ", link || ""); return; }
+    const w = (g.targets || []).filter(t => t.watch).map(t => `👀 watching ${t.label} — ${Math.max(0, Math.round((t.watch.until * 1000 - Date.now()) / 60000))} min left`);
+    guardLine.replaceChildren(w.length ? w.join(" · ") + " · " : "🛡 Guard on · ", link || "");
+  }
   async function loadHeld() {
     const r = await api(`/api/review?project=${encodeURIComponent(p.id)}`);
-    held = r.ok ? (r.held || []) : []; paintChanges();
+    held = r.ok ? (r.held || []) : []; paintChanges(); loadGuard();
   }
   function onRun(run) {
     curRun = run;
@@ -2403,8 +2425,9 @@ function reviewView() {
         style: "padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);max-width:9rem" });
       const note = h("span", { class: "note" });
       const ok = h("button", { class: "btn pri", onclick: async () => {
+        if (x.guarded) note.textContent = "🧪 testing it in a safe copy first — can take a few minutes…";
         const a = await api("/api/review/apply", { id: x.id, sha: x.sha, confirm: cf.value });
-        note.textContent = a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`;
+        note.textContent = (a.ok && (a.guarded || []).length) ? "✅ written · 🛡 copy saved · 👀 watching · 🔄 restarting" : a.ok ? `✅ written${a.backup ? " (old copy kept)" : ""}` : `${a.icon || "⚠️"} ${a.message}`;
         if (a.ok) setTimeout(load, 900);
       } }, "✅ Apply");
       const no = h("button", { class: "btn", onclick: async () => {
@@ -2413,7 +2436,7 @@ function reviewView() {
       } }, "✗ Reject");
       heldBox.append(h("div", { class: "step held" },
         h("div", { class: "hd" }, h("span", { "aria-hidden": "true" }, "✋"), h("b", {}, x.target)),
-        h("div", { class: "why" }, `From the agent in ${x.project} · ${x.bytes} bytes · outside the project folder`),
+        h("div", { class: "why" }, `From the agent in ${x.project} · ${x.bytes} bytes · outside the project folder${x.guarded ? " · 🛡 guarded (tested, copied, undoes itself if it breaks)" : ""}`),
         h("details", {}, h("summary", {}, "what would be written"), h("pre", {}, x.preview)),
         h("div", { class: "runbar" }, cf, ok, no, note)));
     });

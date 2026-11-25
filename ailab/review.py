@@ -20,7 +20,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import agent, config, preview, store
+from . import agent, config, guardlink, preview, store
 from .secretscan import SECRET_RX, has_secret  # noqa: F401 — SECRET_RX kept importable
 
 TEXT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".svg", ".md", ".txt", ".xml", ".webmanifest"}
@@ -164,8 +164,10 @@ def held(state: str | None = "waiting") -> list[dict]:
             cur = t.read_text(errors="replace") if t.is_file() and t.stat().st_size <= 400_000 else None
         except OSError:
             cur = None
+        g = guardlink.program_of(config.load(), t)
         rows.append({**r, "sha": hashlib.sha256(text.encode()).hexdigest(), "preview": text[:4000],
-                     "target": str(t), "new": cur is None, "diff": agent.make_diff(t.name, cur, text)})
+                     "target": str(t), "new": cur is None, "diff": agent.make_diff(t.name, cur, text),
+                     "guarded": g[0] if g else ""})
     return rows
 
 
@@ -181,6 +183,8 @@ def _safe_target(t: Path) -> Path:
         parts = t.relative_to(home).parts
     except ValueError:
         raise ReviewError("Only files inside your home folder can be applied.", "outside_home", "🚧") from None
+    if guardlink.is_guard_path(t):
+        raise ReviewError("The 🛡 Guard's own files are never written from the Lab.", "guard", "🛡")
     if not parts or any(p.startswith(".") for p in parts):
         raise ReviewError("Dot-folders and dotfiles (settings, keys) are never written from here.", "dotfile", "🚧")
     probe = home
@@ -203,6 +207,8 @@ def apply(aid: str, sha: str, confirm: str) -> dict:
     if hashlib.sha256(text.encode()).hexdigest() != sha:
         raise ReviewError("It changed since you looked — reload and check it again.", "stale", "🔁")
     t = _safe_target(target(item))
+    if guardlink.program_of(config.load(), t):                     # 🛡 the Lab or Hermes → only through the Guard
+        return apply_group([{"id": aid, "sha": sha}], confirm)
     backup = ""
     if t.exists():
         b = config.home() / "approvals" / "backups" / f"{aid}-{t.name}"
@@ -218,6 +224,74 @@ def apply(aid: str, sha: str, confirm: str) -> dict:
                           "readback", "⚠️")
     agent.set_approval_state(aid, "applied", target=str(t), backup=backup)
     return {"ok": True, "id": aid, "state": "applied", "target": str(t), "backup": backup}
+
+
+def apply_group(picks: list[dict], confirm: str, runner=None) -> dict:
+    """🛡 Apply changes to the Lab or Hermes together: prove → Guard copy → watch → write → restart (guardlink)."""
+    if str(confirm or "").strip().lower() != APPLY_WORD:
+        raise ReviewError(f'Type "{APPLY_WORD}" to write the files.', "confirm", "✋")
+    cfg = config.load()
+    waiting = {r["id"]: r for r in agent.approvals("waiting")}
+    groups: dict[str, dict] = {}
+    plain: list[dict] = []
+    for pk in picks[:40]:
+        aid, sha = str(pk.get("id") or ""), str(pk.get("sha") or "")
+        item = waiting.get(aid)
+        if not item:
+            raise ReviewError("One of those isn't waiting any more — reload.", "state", "📋")
+        text = _content(aid).read_text()
+        if hashlib.sha256(text.encode()).hexdigest() != sha:
+            raise ReviewError("One changed since you looked — reload and check it again.", "stale", "🔁")
+        t = _safe_target(target(item))
+        g = guardlink.program_of(cfg, t)
+        if not g:
+            plain.append(pk)
+            continue
+        name, root = g
+        grp = groups.setdefault(name, {"root": root, "items": []})
+        grp["items"].append({"id": aid, "target": t, "rel": str(t.relative_to(root)), "text": text})
+    done = []
+    for name, grp in groups.items():
+        changes = {x["rel"]: x["text"] for x in grp["items"]}
+        try:
+            checks = guardlink.prove(cfg, name, grp["root"], changes, runner=runner)
+        except guardlink.ProofFailed as e:
+            raise ReviewError(f"🧪 Not written — {e}", "proof", "🧪") from e
+        except Exception as e:  # noqa: BLE001 — e.g. no sandbox: new code never runs unsandboxed
+            raise ReviewError(f"🧪 The tests couldn't run ({e}) — not written.", "proof", "🧪") from e
+        why = f"before a Lab change: {', '.join(sorted(changes))[:200]}"
+        try:
+            sid = guardlink.snap(cfg, name, why)
+            guardlink.watch(cfg, name, sid, why)
+        except guardlink.GuardDown as e:
+            raise ReviewError(str(e), "guard_down", "🛡") from e
+        written = []
+        try:
+            for x in grp["items"]:
+                t = x["target"]
+                t.parent.mkdir(parents=True, exist_ok=True)
+                tmp = t.with_name(f".{t.name}.ailab-{x['id']}")
+                tmp.write_text(x["text"])
+                os.replace(tmp, t)
+                if t.read_text() != x["text"]:
+                    raise OSError(f"{t.name} doesn't read back the same")
+                written.append(x)
+        except OSError as e:
+            try:
+                guardlink.restore(cfg, name, sid)
+                why2 = "the Guard put everything back"
+            except guardlink.GuardDown:
+                why2 = "and the Guard couldn't put it back — open 🛟"
+            raise ReviewError(f"Writing stopped half-way ({e}); {why2}.", "write", "⚠️") from e
+        for x in written:
+            agent.set_approval_state(x["id"], "applied", target=str(x["target"]), backup=f"guard:{name}:{sid}")
+        guardlink.restart_later(cfg, name)
+        done.append({"program": name, "files": [x["rel"] for x in written], "guard_copy": sid, "checks": checks,
+                     "watching_minutes": cfg.get("guard_watch_minutes") or 5})
+    for pk in plain:
+        done.append({"program": "", **apply(str(pk["id"]), str(pk["sha"]), confirm)})
+    return {"ok": True, "state": "applied", "done": done,
+            "guarded": [d["program"] for d in done if d.get("program")]}
 
 
 def reject(aid: str) -> dict:

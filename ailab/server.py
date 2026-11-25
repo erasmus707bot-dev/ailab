@@ -6,6 +6,7 @@ Flags gate every working endpoint: with `router` off, chat and model lookup answ
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -16,7 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review, ship, creation,
-               robotcheck, roster, store)
+               robotcheck, roster, store, guardlink)
 from . import looks
 from . import video as videomod             # 🛤 video paths (2026-11-24)
 from .keys import KeyMissing
@@ -26,6 +27,7 @@ from .providers import NAMES
 from .spend import SpendBlocked
 from .transport import HttpError
 
+_STARTED = int(time.time())                # when this server process started (proves a restart)
 WEB = Path(__file__).resolve().parent / "web"
 MAX_BODY = 1_000_000
 MAX_CAPTURE_BODY = 12_000_000
@@ -734,6 +736,13 @@ class App:
     def review_apply(self, b: dict) -> tuple[int, dict]:
         return 200, review.apply(str(b.get("id") or ""), str(b.get("sha") or ""), str(b.get("confirm") or ""))
 
+    def review_apply_group(self, b: dict) -> tuple[int, dict]:
+        return 200, review.apply_group(list(b.get("items") or []), str(b.get("confirm") or ""))
+
+    def guard_state(self, q: dict) -> tuple[int, dict]:
+        s = guardlink.state(self.cfg)
+        return 200, {**s, "public_url": self.cfg.get("guard_public_url") or ""}
+
     def review_reject(self, b: dict) -> tuple[int, dict]:
         return 200, review.reject(str(b.get("id") or ""))
 
@@ -981,6 +990,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.ship_options, q)
             if u.path == "/api/compare":
                 return self._run(app.compare_get, q)
+            if u.path == "/api/health":                          # 🛡 the Guard watches this
+                return self._run(lambda: (200, {"ok": True, "app": "ailab", "pid": os.getpid(), "started": _STARTED}))
+            if u.path == "/api/guard":
+                return self._run(app.guard_state, q)
             if u.path == "/api/agent/approvals":
                 return self._run(app.agent_approvals, q)
             if u.path == "/api/agent/shot":
@@ -1066,6 +1079,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_send, b)
             if p == "/api/review/apply":
                 return self._run(app.review_apply, b)
+            if p == "/api/review/apply_group":
+                return self._run(app.review_apply_group, b)
             if p == "/api/review/reject":
                 return self._run(app.review_reject, b)
             if p == "/api/looks/save":

@@ -36,7 +36,12 @@ DEFAULTS: dict = {
               "memory": False, "prompt": False},       # 🧠 Memory, 📝 Prompt builder (2026-11-24)
     # 🪞 Show & change (2026-11-23): a running app's pages, Now beside New. Loopback apps only; "repo" must be a linked folder.
     "live_apps": {"hermes": {"url": "http://127.0.0.1:8780", "repo": "hermes", "web": "dist/hermes-local/hermes_local/web"}},
-    "live_ports": [8860, 8861],          # Now, New — unused in ~/hermes (grep 2026-11-23); UNVERIFIED on the live box
+    "live_ports": [8862, 8863],          # Now, New — moved off 8860/8861 2026-11-24 (🛡 Guard owns 8860)
+    # 🛡 Guard (2026-11-24): the Lab may change these programs only through the walled-off Guard (root, 8860).
+    "guard_url": "http://127.0.0.1:8860",
+    "guard_public_url": "https://gandalf-nuc11phi7.tail5f20a0.ts.net:8860/",
+    "guard_watch_minutes": 5,
+    "guarded": {"ailab": str(REPO), "hermes": str(Path.home() / "hermes")},
     "agent_step_cap": 20,                 # steps per agent run (12 until 2026-11-22; game-code work needs read → edit → test rounds)
     "live_step_cap": 60,                  # 🪞 Show & change runs (2026-11-24: 12 capped both Inkling-pilot lanes on a 1-spot edit)
     "agent_max_tokens": 4096,             # per model reply — Hermes answers up to 4096 at once
@@ -91,6 +96,9 @@ def load(overrides: dict | None = None) -> dict:
     cfg["prices_per_mtok"] = {**DEFAULTS["prices_per_mtok"], **(cfg.get("prices_per_mtok") or {})}   # config.json adds/overrides, never wipes
     cfg["flags"] = {**DEFAULTS["flags"], **{k: bool(v) for k, v in (cfg.get("flags") or {}).items()
                                            if k in DEFAULTS["flags"]}}
+    repos = dict(cfg.get("repos") or {})                   # 2026-11-24: the Lab can read + propose to itself
+    repos.setdefault("ailab", str(REPO))
+    cfg["repos"] = repos
     if cfg["mode"] not in ("standalone", "connected"):
         raise ValueError("mode must be 'standalone' or 'connected'")
     return cfg
