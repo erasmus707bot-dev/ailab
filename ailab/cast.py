@@ -40,6 +40,8 @@ MUST_DIFFER = ("hair_colour", "outfit_colour")       # never shared — the two 
 MIN_DIFF = 5                                         # of the 7 axes, per pair
 WHO = ["woman", "man"]
 NAMES = ["Mara", "Jun", "Tess", "Kofi", "Ines", "Rafe", "Lena", "Omar", "Suki", "Dax", "Nell", "Arlo"]
+NAMES_BY = {"woman": ["Mara", "Tess", "Ines", "Lena", "Suki", "Nell", "Vera", "Rosa", "Kaia", "Dina", "Zoe", "Hana"],
+            "man": ["Jun", "Kofi", "Rafe", "Omar", "Dax", "Arlo", "Teo", "Bram", "Ilan", "Cole", "Nico", "Sami"]}
 PICTURE_WORDS = ("full body, standing, facing the camera, arms relaxed, plain light-grey background, even soft light, "
                  "realistic photo")
 APART_PTS = [
@@ -51,15 +53,19 @@ APART_PTS = [
 
 
 # ---------- briefs ----------
-def design(n: int = DEFAULT_N, seed: int | None = None) -> list[dict]:
-    """N briefs whose traits differ on purpose: every axis drawn without repeats across the cast."""
+def design(n: int = DEFAULT_N, seed: int | None = None, who_all: str = "") -> list[dict]:
+    """N briefs whose traits differ on purpose: every axis drawn without repeats across the cast.
+    who_all "woman" / "man" = everyone is that (Scott 2026-11-25 test: "make them two women"); else a mix."""
     n = max(MIN_N, min(MAX_N, int(n or DEFAULT_N)))
     rnd = random.Random(seed)
     cols = {ax: rnd.sample(POOLS[ax], n) for ax in AXES}
-    names = rnd.sample(NAMES, n)
-    who = [WHO[(i + rnd.randrange(2)) % 2] for i in range(n)]
-    if n >= 2 and len(set(who)) == 1:
-        who[-1] = WHO[1 - WHO.index(who[0])]
+    if who_all in WHO:
+        who, names = [who_all] * n, rnd.sample(NAMES_BY[who_all], n)
+    else:
+        names = rnd.sample(NAMES, n)
+        who = [WHO[(i + rnd.randrange(2)) % 2] for i in range(n)]
+        if n >= 2 and len(set(who)) == 1:
+            who[-1] = WHO[1 - WHO.index(who[0])]
     return [{"name": names[i], "who": who[i], "age": rnd.randint(22, 45),
              "traits": {ax: cols[ax][i] for ax in AXES}} for i in range(n)]
 
@@ -229,10 +235,21 @@ def _b64(path: Path) -> str:
     return base64.b64encode(small(path.read_bytes())).decode()
 
 
+ANCHOR_RETRIES = 2
+
+
+def anchor_points(b: dict) -> list[dict]:
+    """👁 yes/no points for an anchor: the two traits a picture model mixes up most (hair vs outfit colour)."""
+    t = b["traits"]
+    return [{"q": f"Is the person's hair {t['hair_colour']}?", "want": True, "what": f"{t['hair_colour']} hair", "kind": "brief"},
+            {"q": f"Is the person's outfit mostly {t['outfit_colour']}?", "want": True, "what": f"a {t['outfit_colour']} outfit", "kind": "brief"},
+            {"q": "Is there exactly one person in the picture?", "want": True, "what": "one person", "kind": "count"}]
+
+
 # ---------- 🎲 the design run ----------
 def _names_from_writer(run, briefs: list[dict]) -> list[dict]:
     from . import makers
-    want = "\n".join(f"{i + 1}. {brief_text(b).split(': ', 1)[1]}" for i, b in enumerate(briefs))
+    want = "\n".join(f"{i + 1}. {brief_text(b).split(': ', 1)[1]}" for i, b in enumerate(briefs))   # names fit who they are
     text, _ = makers.write(run, "You name invented characters. Reply with one short, distinct first name per line, "
                                 "numbered, nothing else. Each name must start with a different letter.",
                            want, 60, "Naming the cast", "lab-cast")
@@ -272,8 +289,8 @@ def run(run) -> None:
     b["seed"] = seed
     folder = f"pictures/cast-{time.strftime('%Y%m%d-%H%M%S')}"
     picture.stage(run, "🎲", f"Designing a cast of {b['n']} — different on purpose")
-    briefs = b.get("briefs") or design(b["n"], seed)
-    if not b.get("briefs"):
+    briefs = b.get("briefs") or design(b["n"], seed, b.get("who", ""))
+    if not b.get("briefs") and not b.get("who"):                  # a set who (e.g. two women) keeps its fitting names
         try:
             briefs = _names_from_writer(run, briefs)
         except Exception as e:                                   # noqa: BLE001 — names are a nicety
@@ -297,8 +314,23 @@ def run(run) -> None:
         if pic.get("error"):
             run.state, run.why = "failed", f"🎨 {br['name']}'s picture didn't come back: {pic['error']}"
             return
+        tries, it = 0, {}
+        while eyes.on(run):                                      # 👁 does the anchor match its own brief? (live: Ben's teal
+            e = eyes.ask(run, (run.root / pic["path"]).read_bytes(), anchor_points(br), f"{br['name']}'s picture")  # hair went on his shirt)
+            it = {"eyes": {x: e.get(x) for x in ("score", "missing", "error") if e.get(x) is not None}}
+            if e.get("error") or not e.get("missing") or tries >= ANCHOR_RETRIES:
+                break
+            tries += 1
+            run._record({"action": "eyes", "why": f"🎭 {br['name']}'s picture is off its brief ({', '.join(e['missing'])}) — remaking it",
+                         "result": it["eyes"], "usd": 0.0})
+            b["items"].append({"path": pic["path"], "k": i, "variation": f"🎭 {br['name']} — anchor (off brief, remade)",
+                               "usd": pic.get("usd", 0), "kind": "picture", **it})
+            again = _anchor(run, br, folder + f"/retry{tries}")
+            if again.get("error"):
+                break
+            pic = again
         anchors[i] = pic
-        b["items"].append({"path": pic["path"], "k": i, "variation": f"🎭 {br['name']} — anchor", "usd": pic.get("usd", 0), "kind": "picture"})
+        b["items"].append({"path": pic["path"], "k": i, "variation": f"🎭 {br['name']} — anchor", "usd": pic.get("usd", 0), "kind": "picture", **it})
         run.save()
 
     # 2 · 👁 can you tell them apart? closest pair first, redesign the second person of a failing pair

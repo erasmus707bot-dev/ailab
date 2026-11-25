@@ -154,6 +154,32 @@ class DesignRun(CastBase):
         self.assertEqual(v["kind"], "cast")
         self.assertEqual(len(v["saved"]), 2)
 
+    def test_anchor_off_its_brief_is_remade(self):
+        """Live 2026-11-25: Ben's teal hair went onto his shirt; every sheet view then failed same-face."""
+        self._local_up()
+
+        class OffBrief(CastMCP):
+            n = 0
+
+            def call(s, tool, args=None):
+                args = args or {}
+                if tool == "vision_check" and "hair" in str(args.get("points", [""])[0]):
+                    OffBrief.n += 1
+                    s.fail_next = OffBrief.n == 1           # the very first anchor check fails, the rest pass
+                if tool == "job_wait" and args.get("key") == "vis:1" and getattr(s, "fail_next", False):
+                    s.fail_next, s.same = False, False
+                    r = super().call(tool, args)
+                    s.same = True
+                    return r
+                return super().call(tool, args)
+        m = OffBrief()
+        r = self._run(m, task="Design a cast of 2 people", batch_req={"cast": {"n": 2}})
+        r.loop()
+        self.assertEqual(r.state, "done", r.why)
+        self.assertTrue(any("off its brief" in (st.get("why") or "") for st in r.steps))
+        self.assertEqual(sum(1 for it in r.batch["items"] if "off brief, remade" in it["variation"]), 1)
+        self.assertEqual(len(cast.anchor_points(r.batch["briefs"][0])), 3)
+
     def test_a_pair_that_never_passes_is_reported_not_hidden(self):
         self._local_up()
         m = CastMCP(apart=[False, False, False])
@@ -201,3 +227,14 @@ class SendSize(Base):
         self.assertEqual(max(w, h), cast.SEND_PX)
         self.assertEqual(cast.small(b"tiny"), b"tiny")
         self.assertEqual(len(cast._fit(["x" * 2_000_000] * 5)), 2, "views that don't fit beside the anchor are dropped")
+
+
+class Women(Base):
+    def test_all_women_cast_is_still_distinct(self):
+        for seed in range(30):
+            bs = cast.design(2, seed, "woman")
+            self.assertEqual({b["who"] for b in bs}, {"woman"})
+            self.assertTrue(all(b["name"] in cast.NAMES_BY["woman"] for b in bs))
+            self.assertEqual(cast.validate(bs), [])
+        self.assertEqual(batch.norm({"cast": {"n": 2, "who": "woman"}}, ["image"])["who"], "woman")
+        self.assertEqual(batch.norm({"cast": {"n": 2, "who": "robot"}}, ["image"])["who"], "")
