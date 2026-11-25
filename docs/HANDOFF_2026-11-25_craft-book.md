@@ -73,3 +73,9 @@ Continue phrase: `continue AI Lab Craft Book from the 2026-11-25 handoff — liv
 - Argus touch test of /craft: page was 1226 px wide on a 393 px phone (a long `.tag` with nowrap widened the grid) —
   fixed (grid minmax(0,1fr) + tags wrap). After: 393/393, 23 px text, 0 targets <44 px, theme tap ✓ both ways,
   details tap ✓, swipe scrolls ✓, no late shift (13857→13857 px), no console errors. Screenshot failed (rig/CDP).
+
+## Count fix — live proof (14:30, after Scott's restart) · ailab step-line wording fix
+- 5 ducks · 4 apples · 3 girls (no row — scene stayed natural) · 6 cups: all **100% on the first try**, and checked by eye:
+  every count right. Ducks went 4/5 → 5/5 with the code layout. Grid: hermes-data/_tmp/count_grid_2026-11-25.jpg.
+- The retry never fired live (nothing missed) — proven by tests only.
+- Step line now says "the exact number, none extra" for people (it said "in a row").
