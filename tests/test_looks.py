@@ -200,7 +200,7 @@ class Page(Base):
 
 
 def _page():
-    assert "function lookPicker(pid)" in HTML and 'id: "aglook"' in HTML
+    assert "lookFill(row," in HTML and "function lookPicker(pid)" in HTML and 'id: "aglook"' in HTML
     assert "look.show(on.includes(\"image\"))" in HTML                       # only while 🖼 Image is picked
     assert "task: look.text(task.value)" in HTML                              # ▶ Start adds the Look line
     assert "const lk = lookFromText(text); if (lk.length) look.set(lk)" in HTML   # Make another / Change it bring it back

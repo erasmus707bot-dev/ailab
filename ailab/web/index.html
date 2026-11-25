@@ -1471,6 +1471,7 @@ const STATE = { waiting: "⏳ Waiting", skipped: "⏭ Skipped", running: "⏳ Wo
 let LOOKS = null;
 async function looksLoad(force) { if (!LOOKS || force) { const r = await api("/api/looks"); if (r.ok) LOOKS = r; } return LOOKS; }
 const LOOK_SEP = " · ";
+const lookFill = (el, ...k) => el.replaceChildren(...k.flat().filter(x => x != null));   /* replaceChildren prints null as text */
 function lookFromText(t) { const m = String(t || "").match(/^Look:\s*(.*)$/m); return m ? m[1].split(/\s*[·;|,]\s*/).map(s => s.trim()).filter(Boolean) : []; }
 function lookStrip(t) { return String(t || "").replace(/^Look:.*(?:\n|$)/gm, "").replace(/\n+$/, ""); }
 function lookIndex() { const ix = {}; (LOOKS ? LOOKS.tabs : []).forEach(t => (t.items || []).forEach(it => { ix[it.n.toLowerCase()] = { tab: t, it }; })); return ix; }
@@ -1490,7 +1491,7 @@ function lookPicker(pid) {
     row.hidden = !shown;
     if (!shown) return;
     const c = cur || [], clash = LOOKS ? lookClashes(c) : [];
-    row.replaceChildren(h("span", { class: "tlead" }, "🎨 Look:"),
+    lookFill(row, h("span", { class: "tlead" }, "🎨 Look:"),
       ...(c.length ? c.map(n => h("button", { class: "lchip", type: "button", title: `Take ${n} off`, "aria-label": `Take ${n} off`,
         onclick: () => { cur = c.filter(x => x !== n); save(); paint(); } }, n, h("span", { "aria-hidden": "true" }, " ✕")))
         : [h("span", { class: "note" }, "none yet")]),
@@ -1533,12 +1534,12 @@ function lookPicker(pid) {
       } else {
         const t = LOOKS.tabs.find(x => x.id === tab) || LOOKS.tabs[0], items = t.items || [], few = innerWidth < 700 ? 6 : 8;
         const list = all ? items : items.slice(0, few);
-        chipsEl.replaceChildren(...list.map(it => chip(it, t)),
+        lookFill(chipsEl, ...list.map(it => chip(it, t)),
           items.length > few ? h("button", { class: "tchip more2", type: "button", onclick: () => { all = !all; paintDlg(); } }, all ? "▴ Fewer" : `▾ Show all ${items.length}`) : null,
           h("span", { class: "note looklimit" }, t.max === 1 ? "Pick 1" : `Up to ${t.max || 3}`));
       }
       const clash = lookClashes(picks);
-      picked.replaceChildren(h("b", {}, `Your look (${picks.length}/${maxT}): `),
+      lookFill(picked, h("b", {}, `Your look (${picks.length}/${maxT}): `),
         ...(picks.length ? picks.map(n => h("button", { class: "lchip", type: "button", "aria-label": `Take ${n} off`, onclick: () => { picks = picks.filter(x => x !== n); paintDlg(); } }, n, " ✕"))
           : [h("span", { class: "note" }, "nothing picked — the picture follows your words only")]),
         clash.length ? h("div", { class: "note lookwarn" }, `⚠️ ${clash.join(", ")} may fight each other (it still runs).`) : null);
