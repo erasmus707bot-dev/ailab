@@ -1,0 +1,24 @@
+# AI Lab — always on, so it can be used online over Scott's tailnet (2026-11-24), like Hermes and ERASMUS.
+# Binds 127.0.0.1:8850 only; `tailscale serve --https=8850` (hermes tailscale-serve-assert.sh) puts TLS + the
+# Tailscale sign-in in front. gate.py lets in only gandalf itself or Scott's Tailscale login.
+# A run caught by a restart comes back PAUSED (Scott's rule) — nothing spends while he is away.
+# Install:  mkdir -p ~/.config/systemd/user && cp ~/ailab/tools/ailab.service ~/.config/systemd/user/ \
+#           && systemctl --user daemon-reload && systemctl --user enable --now ailab.service
+[Unit]
+Description=AI Lab (127.0.0.1:8850, online through tailscale serve)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ailab
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m ailab serve --port 8850
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/.config/ailab/serve.log
+StandardError=append:%h/.config/ailab/serve.log
+
+[Install]
+WantedBy=default.target

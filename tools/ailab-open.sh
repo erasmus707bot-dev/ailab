@@ -10,6 +10,15 @@ URL="http://127.0.0.1:${PORT}/"
 LOG="${HOME}/.config/ailab/serve.log"
 cd "$(dirname "$(readlink -f "$0")")/.." || exit 1
 up() { curl -fsS -m 2 "${URL}api/state" >/dev/null 2>&1; }
+# 2026-11-24: when the always-on service is installed, the icon restarts THAT (never a second copy beside it).
+if systemctl --user is-enabled ailab.service >/dev/null 2>&1; then
+  echo "--- $(date '+%F %T') launcher: restart ailab.service" >>"$LOG"
+  systemctl --user restart ailab.service
+  for _ in $(seq 1 30); do up && break; sleep 0.3; done
+  if up; then xdg-open "$URL" >/dev/null 2>&1 & exit 0; fi
+  notify-send "🧪 AI Lab" "The Lab service didn't come up — see ${LOG}" 2>/dev/null || echo "AI Lab didn't start — see ${LOG}" >&2
+  exit 1
+fi
 if up && [ -z "${AILAB_NO_RESTART:-}" ]; then
   echo "--- $(date '+%F %T') launcher restart" >>"$LOG"
   pkill -u "$(id -u)" -f "python3 -m ailab serve" 2>/dev/null
