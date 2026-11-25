@@ -37,6 +37,23 @@ WAIT_S = 20
 MAX_WAIT_TOTAL_S = 240
 
 
+def claim(root, rel: str) -> str:
+    """2026-11-24 parallel runs: reserve a file name no other run has (atomic create). Same second + same words in
+    two runs → name.png, name-2.png … — never an overwrite."""
+    import os
+    base, ext = os.path.splitext(rel)
+    for i in range(1, 1000):
+        cand = rel if i == 1 else f"{base}-{i}{ext}"
+        path = os.path.join(str(root), cand)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+            return cand
+        except FileExistsError:
+            continue
+    raise OSError(f"no free name for {rel}")
+
+
 def stage(run, icon: str, text: str) -> None:
     run.stage = {"icon": icon, "text": text, "at": time.time()}
     run.last_progress = time.time()
@@ -299,7 +316,7 @@ def run(run) -> None:
     stage(run, "💾", "Saving the picture")
     ext = ".jpg" if "jpeg" in (out.get("media_type") or "") else ".png"
     slug = re.sub(r"[^a-z0-9]+", "-", words.lower()).strip("-")[:40] or "picture"
-    rel = f"pictures/{time.strftime('%Y%m%d-%H%M%S')}-{slug}{ext}"
+    rel = claim(run.root, f"pictures/{time.strftime('%Y%m%d-%H%M%S')}-{slug}{ext}")
     p = run.root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(base64.b64decode(out["b64"]))

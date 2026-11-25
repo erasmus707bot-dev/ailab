@@ -13,6 +13,7 @@ import sys
 ROOT = os.path.realpath(sys.argv[1])
 MAX_FILE = 25_000_000   # 2026-11-24: Venice PNGs run 4–6 MB (a 5.6 MB picture showed 'Not found')
 MAX_FILES = 2000
+MAX_SLICE = 4_000_000   # 2026-11-24 long clips: video/audio stream in slices (HTTP Range), no whole-file cap
 TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".html": "text/html",
          ".svg": "image/svg+xml", ".json": "application/json", ".wasm": "application/wasm"}
 
@@ -62,6 +63,26 @@ def handle(req):
             ctype += "; charset=utf-8"
         with open(p, "rb") as fh:
             return {"ok": True, "status": 200, "ctype": ctype, "b64": base64.b64encode(fh.read()).decode()}
+    if op in ("stat", "range"):                     # 🎬 long clips: size first, then slices
+        p = resolve(req.get("path"))
+        if not p:
+            return {"ok": False, "status": 404}
+        size = os.path.getsize(p)
+        ext = os.path.splitext(p)[1].lower()
+        ctype = TYPES.get(ext) or mimetypes.guess_type(p)[0] or "application/octet-stream"
+        if op == "stat":
+            return {"ok": True, "status": 200, "ctype": ctype, "size": size}
+        try:
+            start, length = int(req.get("start", 0)), int(req.get("length", MAX_SLICE))
+        except (TypeError, ValueError):
+            return {"ok": False, "status": 400}
+        if start < 0 or start >= max(size, 1) or length <= 0:
+            return {"ok": False, "status": 416, "size": size}
+        with open(p, "rb") as fh:
+            fh.seek(start)
+            data = fh.read(min(length, MAX_SLICE))
+        return {"ok": True, "status": 206, "ctype": ctype, "size": size, "start": start,
+                "b64": base64.b64encode(data).decode()}
     return {"ok": False, "status": 400}
 
 

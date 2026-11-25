@@ -121,7 +121,7 @@ def run(run) -> None:
     elif not pics_pick.lower().startswith("no"):
         run._record({"action": "picture", "why": "🎨 pictures skipped", "result": {"note": "🔌 pictures need connected mode"}, "usd": 0.0})
     md = place_pictures(text, pics) if pics else text.rstrip() + "\n"
-    rel = f"docs/{st}-{name}.md"
+    rel = picture.claim(run.root, f"docs/{st}-{name}.md")
     p = run.root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(md)

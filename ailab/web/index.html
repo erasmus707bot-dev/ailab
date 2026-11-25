@@ -150,6 +150,9 @@
   .agent textarea { width: 100%; min-height: 90px; resize: vertical; border-radius: var(--r); border: 1px solid var(--line);
     background: var(--panel); padding: 10px; }
   .runbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .liverow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0; }   /* 🏃 runs side by side */
+  .livechip { display: inline-flex; gap: 2px; }
+  .livechip.on > .chip:first-child { outline: 2px solid var(--accent); }
   .steps { display: flex; flex-direction: column; gap: 8px; }
   .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 12px; }
   .step .hd { display: flex; gap: 8px; align-items: baseline; }
@@ -1149,7 +1152,7 @@ function startView() {
     S.flags.prompt ? h("button", { class: "btn", type: "button", id: "goprompt", onclick: () => go("prompt"), title: "Say your idea — get a build prompt in your format — send it" }, "📝 Idea → build prompt") : null,
     S.flags.live ? h("button", { class: "btn pri", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null,
     ...(ag ? [ag.typeRow, ag.task, ag.batchRow, ...((r, pk) => matchMedia("(max-width: 640px)").matches ? [r, pk] : [pk, r])(  /* phones: ▶ Start before the model picker (Argus 2026-11-24) */
-          h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.newBtn, ag.askRow, ag.held), ag.picker), ag.status, ag.final, ag.repoRow,
+          h("div", { class: "runbar" }, ag.startBtn, ag.stopBtn, ag.newBtn, ag.askRow, ag.held), ag.picker), ag.liveRow, ag.status, ag.final, ag.repoRow,
         h("details", {}, h("summary", {}, "✨ More starters"), ag.goals), ag.steps]
       : [offCard("agent", "🤖", "Agent")]),
     h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the three panes back to the standard size and order" }, "🧱 Reset pane layout")));
@@ -1843,6 +1846,23 @@ function agentView(wb) {
     task.focus();
   };
   const status = h("span", { class: "note", id: "agstatus", role: "status" });
+  /* 🏃 2026-11-24 (Scott: "make pictures while a video renders"): every run working on this project — tap to watch, ⏹ to stop */
+  const liveRow = h("div", { class: "liverow", id: "aglive", hidden: true });
+  let liveTimer = 0;
+  async function paintLive() {
+    clearTimeout(liveTimer);
+    const r = await api(`/api/agent/live?project=${encodeURIComponent(p.id)}`);
+    const runs = r.ok ? (r.runs || []) : [], cur = store.get("agrun." + p.id, null);
+    liveRow.hidden = !runs.length || (runs.length === 1 && runs[0].id === cur);
+    liveRow.replaceChildren(...(liveRow.hidden ? [] : [h("span", { class: "note" }, `🏃 ${runs.length} working:`),
+      ...runs.map(x => h("span", { class: "livechip" + (x.id === cur ? " on" : "") },
+        h("button", { class: "chip", type: "button", title: x.task, onclick: () => { store.set("agrun." + p.id, x.id); poll(); paintLive(); } },
+          `${x.icon} ${x.waiting ? "❓ " : ""}${x.task.slice(0, 28)}${x.task.length > 28 ? "…" : ""} · ${x.stage}`),
+        h("button", { class: "chip", type: "button", title: "Stop this run", "aria-label": "Stop this run",
+          onclick: async () => { await api("/api/agent/stop", { id: x.id }); paintLive(); } }, "⏹")))]));
+    if (runs.length && document.contains(liveRow)) liveTimer = setTimeout(paintLive, 3000);
+  }
+  setTimeout(paintLive, 300);
   const held = h("button", { class: "chip", id: "agheld", hidden: true, onclick: () => wb ? wb.showChanges() : go("review") });
   const steps = h("div", { class: "steps", id: "agsteps", "aria-live": "polite" });
   const final = h("div", { class: "final", id: "agfinal", hidden: true });
@@ -1893,7 +1913,8 @@ function agentView(wb) {
     });
     steps.append(log);
     const running = run.state === "running";
-    startBtn.disabled = running; stopBtn.disabled = !running; newBtn.disabled = running;
+    /* 🏃 art runs share a project: ▶ Start stays on (the Lab says no if a second build would clash) */
+    startBtn.disabled = false; stopBtn.disabled = !running; newBtn.disabled = running && !run.art;
     final.hidden = running || !run.why; final.replaceChildren(run.why || "");
     if (run.can_continue) final.append(" ", h("button", { class: "btn pri", type: "button", title: "Give it more steps and carry on from where it stopped", onclick: () => more(run) }, "▶ Continue ⭐"));
     if (run.can_resume) final.append(" ", h("button", { class: "btn pri", type: "button", title: "The Lab restarted mid-run — carry on from the last step", onclick: () => more(run, "resume") }, "▶ Resume ⭐"));
@@ -1920,7 +1941,7 @@ function agentView(wb) {
     startBtn.disabled = true;
     const r = await api("/api/agent/start", { project: p.id, provider: prov, model: modelSel.value, task: look.text(task.value), ask_first: askFirst.checked, ctypes: typePicked(), batch: batchReq() });
     if (!r.ok) { startBtn.disabled = false; status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return; }
-    store.set("agrun." + p.id, r.run.id); paint(r.run);
+    store.set("agrun." + p.id, r.run.id); paint(r.run); paintLive();
   };
   stopBtn.onclick = async () => {
     const id = store.get("agrun." + p.id, null); if (!id) return;
@@ -1937,12 +1958,12 @@ function agentView(wb) {
     if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
   }
-  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, final, steps, more, batchRow };
+  if (wb) return { startWith, typeRow, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
   return [projectRow(), h("section", { class: "agent" },
     typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, look.row, hint, batchRow, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, newBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
-    status, final, steps,
+    liveRow, status, final, steps,
     h("details", {}, h("summary", {}, "ℹ️ Limits"),
       h("p", {}, "Runs in the sandbox (no internet, writes only in this project). Stops at the step cap, the $ cap, ⏹ Stop, or Hermes STOP_SHIFTS. Writes anywhere else wait for your approval.")))];
 }

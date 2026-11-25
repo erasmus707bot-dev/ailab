@@ -30,6 +30,35 @@ WEB = Path(__file__).resolve().parent / "web"
 MAX_BODY = 1_000_000
 MAX_CAPTURE_BODY = 12_000_000
 # Preview pages run untrusted generated code: opaque origin (CSP sandbox), may not frame elsewhere.
+# 🎬 long clips (2026-11-24, Scott: "raise the Lab viewer limit so long clips always open"): video/audio are
+# streamed in slices with HTTP Range — any length opens and seeks; pages/pictures keep the one-piece path.
+MEDIA_EXT = (".mp4", ".webm", ".mov", ".m4v", ".mkv", ".mp3", ".wav", ".ogg", ".oga", ".m4a", ".flac", ".aac", ".opus")
+RANGE_CHUNK = 8_000_000          # most bytes in one 206 answer to an open-ended range; the browser asks for more
+
+
+def parse_range(header: str | None, size: int, cap: int = RANGE_CHUNK):
+    """'bytes=a-b' → (start, end) inclusive, end clipped to a+cap-1 and size-1 · None = no/unsupported header
+    (send it all) · 'bad' = unsatisfiable (416)."""
+    if not header:
+        return None
+    m = re.fullmatch(r"\s*bytes=(\d*)-(\d*)\s*", header)
+    if not m or (not m.group(1) and not m.group(2)):
+        return None                                   # multi-range or junk: answer with the whole file
+    if not m.group(1):                                # suffix: last n bytes
+        n = int(m.group(2))
+        if n <= 0 or size <= 0:
+            return "bad"
+        start = max(0, size - n)
+        end = size - 1
+    else:
+        start = int(m.group(1))
+        end = int(m.group(2)) if m.group(2) else size - 1
+        if start >= size or end < start:
+            return "bad"
+        end = min(end, size - 1)
+    return start, min(end, start + cap - 1)
+
+
 PREVIEW_CSP = ("sandbox allow-scripts allow-forms allow-modals; default-src 'self' data: blob:; "
                "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
                "connect-src 'self'; frame-ancestors 'self'; form-action 'none'")
@@ -510,6 +539,13 @@ class App:
             return _off("agent")
         return 200, {"ok": True, "run": self.agents.get((q.get("id") or [""])[0]).view(), "spend": self.spend()}
 
+    def agent_live(self, q: dict) -> tuple[int, dict]:
+        """🏃 Runs working on a project now — art runs can run side by side (2026-11-24)."""
+        if not self.cfg["flags"]["agent"]:
+            return _off("agent")
+        pid = self._pid((q.get("project") or [""])[0])
+        return 200, {"ok": True, "runs": self.agents.live(pid)}
+
     def agent_answer(self, b: dict) -> tuple[int, dict]:
         """M5: Scott's answer to the agent's on-screen question."""
         if not self.cfg["flags"]["agent"]:
@@ -798,10 +834,53 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             pid, _, rel = rest.partition("/")
             try:
                 pid = app._pid(pid)
+                if rel.lower().endswith(MEDIA_EXT):          # 🎬 stream video/audio (any length, seekable)
+                    return self._stream(pid, rel)
                 code, ctype, data = app.pv.get(pid, rel)
+                if code == 413:                             # too big for one piece → stream it instead
+                    return self._stream(pid, rel)
             except preview.PreviewError as e:
                 code, ctype, data = 503, "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
             return self._send(code, data, ctype, csp=PREVIEW_CSP)
+
+        def _stream(self, pid: str, rel: str):
+            """🎬 HTTP Range over the sandbox's slice reader: 206 for a range, 200 streamed in slices otherwise."""
+            st = app.pv.stat(pid, rel)
+            if not st.get("ok"):
+                return self._send(int(st.get("status") or 404), b"Not found in this project.", "text/plain; charset=utf-8",
+                                  csp=PREVIEW_CSP)
+            size, ctype = int(st["size"]), st["ctype"]
+            rng = parse_range(self.headers.get("Range"), size)
+            if rng == "bad":
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return None
+            start, end = rng if rng else (0, size - 1)
+            self.send_response(206 if rng else 200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(max(0, end - start + 1)))
+            if rng:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", PREVIEW_CSP)
+            self.end_headers()
+            pos = start
+            try:
+                while pos <= end:
+                    data = app.pv.slice(pid, rel, pos, min(4_000_000, end - pos + 1))
+                    if not data:
+                        break
+                    self.wfile.write(data)
+                    pos += len(data)
+            except (BrokenPipeError, ConnectionResetError):   # the player seeked away — normal
+                pass
+            except preview.PreviewError:
+                pass                                          # headers are out; the player retries the range
+            return None
 
         def _before_page(self, rest: str):
             """/preview-before/<pid>/<run id>/<rel> → the project page as it was when that run started (↔ Before)."""
@@ -884,6 +963,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_read, q)
             if u.path == "/api/preview/version":
                 return self._run(app.preview_version, q)
+            if u.path == "/api/agent/live":
+                return self._run(app.agent_live, q)
             if u.path == "/api/agent/run":
                 return self._run(app.agent_run, q)
             if u.path == "/api/live/apps":

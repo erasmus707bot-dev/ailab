@@ -336,7 +336,7 @@ class Run:
                 "step_cap": self.step_cap, "usd": round(self.usd, 6), "cap_usd": self.cap_usd,
                 "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
                 "project": self.project["id"], "provider": self.provider, "model": self.model,
-                "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info(),
+                "proved": self.proof_ok(), "changed": bool(self.changed), **self.stuck_info(), "art": art_run(self),
                 "memory_used": self.memory_used, "memory_saved": self.memory_saved,
                 "plan": self.plan_view(), "question": self.question,
                 "real_steps": len(self.steps) - self.bad, "long_replies": self.long_used, "bad": self.bad, "robot": self.robot, "before": bool(self.before),
@@ -1113,6 +1113,26 @@ class Run:
             store.autosave(self.project["id"], self.autosave_field, json.dumps(self.view())[:100_000])
 
 
+BUSY = "A build is already running on this project. Art runs (🖼 🎬 📝) can go alongside — stop the build to start another build."
+
+
+def art_run(r) -> bool:
+    """🖼 picture · 🎬 video · 📝 writing · 🎛 batch of those = an art run. Art runs share a project with anything
+    (Scott 2026-11-24: "make pictures while a video renders"); build/code runs stay one at a time per project."""
+    return bool(getattr(r, "picture", False) or getattr(r, "video", False) or getattr(r, "docmode", False)
+                or getattr(r, "batch", None))
+
+
+def art_request(task: str, ctypes, batch) -> bool:
+    """Same answer as art_run, worked out before a Run exists (no files made)."""
+    ids = [t["id"] for t in creation.pick(ctypes)]
+    if not ids:
+        ids = creation.art_route(picture.picture_words(task), [])
+    if creation.picture_mode(ids) or creation.video_mode(ids) or creation.doc_mode(ids):
+        return True
+    return bool(batchmod.norm(batch, ids))
+
+
 class Agents:
     def __init__(self):
         self.runs: dict[str, Run] = {}
@@ -1123,20 +1143,43 @@ class Agents:
         if not task.strip():
             raise ValueError("Tell the agent what to do.")
         with self.lock:
-            if any(r.state == "running" and r.project["id"] == project["id"] for r in self.runs.values()):
-                raise ValueError("An agent is already working on this project. Stop it first.")
+            if not art_request(task, ctypes, batch) and self._build_busy(project["id"]):
+                raise ValueError(BUSY)
             run = Run(lab, cfg, project, provider, model, task, step_cap=step_cap, ask_first=ask_first, selftest=selftest,
                       ctypes=ctypes, batch=batch)
             self.runs[run.id] = run
         threading.Thread(target=run.loop, daemon=True, name=f"agent-{run.id}").start()
         return run
 
+    def live(self, pid: str) -> list[dict]:
+        """🏃 Every run working on this project right now (art runs can be several), newest first."""
+        with self.lock:
+            rs = [r for r in self.runs.values() if r.project["id"] == pid and r.state == "running"]
+        out = []
+        for r in sorted(rs, key=lambda x: getattr(x, "started", 0), reverse=True):
+            try:
+                sv = r.stage_view()
+            except Exception:                                         # noqa: BLE001 — a list row must never fail
+                sv = {}
+            ids = getattr(r, "ctypes", []) or []
+            icon = ("🎛" if getattr(r, "batch", None) else "🎬" if getattr(r, "video", False) else
+                    "🖼" if getattr(r, "picture", False) else "📝" if getattr(r, "docmode", False) else "🛠")
+            out.append({"id": r.id, "icon": icon, "art": art_run(r), "task": r.task[:70], "ctypes": ids,
+                        "stage": f"{sv.get('icon', '')} {sv.get('text', '')}".strip()[:90], "waiting": bool(getattr(r, "question", None)),
+                        "usd": round(r.usd, 4), "started": getattr(r, "started", 0)})
+        return out
+
+    def _build_busy(self, pid: str, but: str = "") -> bool:
+        """A build/code run is running on this project (art runs never count)."""
+        return any(x.state == "running" and x.project["id"] == pid and x.id != but and not art_run(x)
+                   for x in self.runs.values())
+
     def more(self, rid: str, n: int | None = None) -> Run:
         """▶ Continue a run that hit its step limit."""
         r = self.get(rid)
         with self.lock:
-            if any(x.state == "running" and x.project["id"] == r.project["id"] for x in self.runs.values()):
-                raise ValueError("An agent is already working on this project. Stop it first.")
+            if not art_run(r) and self._build_busy(r.project["id"], but=r.id):
+                raise ValueError(BUSY)
             r.more(n)
         threading.Thread(target=r.loop, daemon=True, name=f"agent-{r.id}").start()
         return r
@@ -1155,8 +1198,8 @@ class Agents:
         with self.lock:
             if r.state != "interrupted" or r.live or r.msgs is None:
                 raise ValueError("This run can't be resumed. Start a new one.")
-            if any(x.state == "running" and x.project["id"] == r.project["id"] for x in self.runs.values()):
-                raise ValueError("An agent is already working on this project. Stop it first.")
+            if not art_run(r) and self._build_busy(r.project["id"], but=r.id):
+                raise ValueError(BUSY)
             r.prepare_resume()
         threading.Thread(target=r.loop, daemon=True, name=f"agent-{r.id}").start()
         return r

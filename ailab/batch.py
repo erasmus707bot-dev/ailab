@@ -252,7 +252,7 @@ def docs(run) -> None:
                 stop_reason = f"⚠️ {who}"
                 break
             continue
-        rel = f"docs/{stamp}-{slug}-{k + 1}.md"
+        rel = picture.claim(run.root, f"docs/{stamp}-{slug}-{k + 1}.md")
         p = run.root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text + "\n")

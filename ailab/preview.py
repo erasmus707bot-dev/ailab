@@ -295,6 +295,17 @@ class Preview:
             return int(r.get("status") or 404), "text/plain; charset=utf-8", b"Not found in this project."
         return 200, r["ctype"], base64.b64decode(r["b64"])
 
+    def stat(self, pid: str, rel: str, root: Path | None = None) -> dict:
+        """🎬 long clips (2026-11-24): size + type without reading the file."""
+        return self.box(pid, root).ask({"op": "stat", "path": rel})
+
+    def slice(self, pid: str, rel: str, start: int, length: int, root: Path | None = None) -> bytes:
+        """One slice (≤ 4 MB) of a project file, for HTTP Range streaming. Raises PreviewError if it can't be read."""
+        r = self.box(pid, root).ask({"op": "range", "path": rel, "start": int(start), "length": int(length)})
+        if not r.get("ok"):
+            raise PreviewError("That part of the file couldn't be read.", "not_found", "🎬")
+        return base64.b64decode(r["b64"])
+
     def version(self, pid: str) -> str:
         return self.box(pid).ask({"op": "version"}).get("v", "")
 

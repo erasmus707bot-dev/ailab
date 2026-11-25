@@ -95,14 +95,22 @@ class Lab:
             raise SpendBlocked(f"Estimated ${est:.4f} is over this run's cap of ${cap_usd:.2f}.")
         if self.connected and not p.local:
             return self._chat_via_hermes(project, p, model, messages, max_tokens, task)
+        tok = None
         if not p.local:
-            ok, why = self.spend.check(est)
+            if hasattr(self.spend, "hold"):                      # 2026-11-24 parallel runs: check + hold in one step
+                ok, why, tok = self.spend.hold(est)
+            else:
+                ok, why = self.spend.check(est)
             if not ok:
                 raise SpendBlocked(why)
-        key = self.keys.get(p.key_name) if p.key_name else None
-        r = p.chat(model, messages, max_tokens, key, listed)
-        if not p.local:
-            self.spend.record(p.name, r.model, r.usd, r.tokens_in, r.tokens_out, task or project.get("name", ""))
+        try:
+            key = self.keys.get(p.key_name) if p.key_name else None
+            r = p.chat(model, messages, max_tokens, key, listed)
+            if not p.local:
+                self.spend.record(p.name, r.model, r.usd, r.tokens_in, r.tokens_out, task or project.get("name", ""))
+        finally:
+            if tok:
+                self.spend.release(tok)
         return r
 
     def status(self) -> dict:

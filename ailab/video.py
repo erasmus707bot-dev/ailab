@@ -190,7 +190,7 @@ def _free(run, pic: Path | None, secs: int, aspect: str, words: str) -> None:
     if not pic:
         return _fail(run, "The free moving picture needs a picture — make one first (🖼) or pick \"Make a picture first\".")
     picture.stage(run, "🆓", "Making the free moving picture on this computer (ffmpeg)")
-    rel = f"videos/{makers.stamp()}-{makers.slug(words, default='video')}-panzoom.mp4"
+    rel = picture.claim(run.root, f"videos/{makers.stamp()}-{makers.slug(words, default='video')}-panzoom.mp4")
     why = pan_zoom(pic, run.root / rel, secs, aspect)
     if why:
         return _fail(run, why)
@@ -271,7 +271,7 @@ def run(run) -> None:
     if res.get("state") != "done" or not out.get("path"):
         return _fail(run, (res.get("error") or {}).get("message") or "no video came back")
     picture.stage(run, "💾", "Saving the video")
-    rel = f"videos/{makers.stamp()}-{makers.slug(words, default='video')}.mp4"
+    rel = picture.claim(run.root, f"videos/{makers.stamp()}-{makers.slug(words, default='video')}.mp4")
     dst = run.root / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:

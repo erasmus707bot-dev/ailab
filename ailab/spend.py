@@ -4,7 +4,9 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import threading
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -20,6 +22,10 @@ def _today() -> str:
 class LocalLedger:
     def __init__(self, path: Path, daily_cap_usd: float):
         self.path, self.cap = Path(path), float(daily_cap_usd)
+        # 2026-11-24 parallel runs: money a call is about to spend is held until it's recorded, so two runs can't
+        # both pass the cap check before either records (check + hold are one step under _held_lock).
+        self._held: dict[str, float] = {}
+        self._held_lock = threading.Lock()
 
     @contextmanager
     def _lock(self):
@@ -41,10 +47,24 @@ class LocalLedger:
         return round(sum(e["usd"] for e in self._load() if e.get("day") == _today()), 6)
 
     def check(self, usd: float) -> tuple[bool, str]:
-        s = self.spent_today()
+        s = self.spent_today() + sum(self._held.values())
         if s + usd > self.cap:
             return False, f"Lab daily cap reached: ${s:.2f}+${usd:.2f} > ${self.cap:.2f}"
         return True, ""
+
+    def hold(self, usd: float) -> tuple[bool, str, str | None]:
+        """Check the cap AND hold `usd` in one step. Release the token after record() (or on failure)."""
+        with self._held_lock:
+            ok, why = self.check(usd)
+            if not ok:
+                return False, why, None
+            tok = uuid.uuid4().hex
+            self._held[tok] = float(usd)
+            return True, "", tok
+
+    def release(self, tok: str | None) -> None:
+        with self._held_lock:
+            self._held.pop(tok or "", None)
 
     def record(self, provider: str, model: str, usd: float, tokens_in: int = 0, tokens_out: int = 0,
                task: str = "") -> None:
