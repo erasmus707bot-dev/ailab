@@ -22,3 +22,6 @@
 - **Not finished:** a 30 s mp4 never loaded on the emulator (readyState 0), then the emulator hung ("Pixel Launcher isn't responding"; DevTools dropped). Video play-through was verified on desktop Chrome only.
 - **Fix from this:** e690787 — when a video hasn't started within 15 s, the slideshow skips it, so it never gets stuck. Desktop re-check: a playing video was not cut off at 15 s (it was at 18 s, same video).
 - **Not tested:** the native ⏱ picker by finger, and full screen on the phone.
+
+## Real phone, 2026-11-25 10:51
+Scott tested on his S24+: slideshow works, including videos. Feature done.
