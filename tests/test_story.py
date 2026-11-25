@@ -31,7 +31,7 @@ class StoryBrain:
         if "check a new chapter plan" in sys:
             t = json.dumps(self.flags.pop(0) if self.flags else [])
         elif "story bible" in sys:
-            t = json.dumps({"title": "Lighthouse Run", "tone": "tense", "people": [{"name": "Mara", "who": "copper hair"},
+            t = json.dumps({"title": "Lighthouse Run", "tone": "tense", "when": "night, heavy rain", "people": [{"name": "Mara", "who": "copper hair"},
                                                                                    {"name": "Jun", "who": "black hair"}],
                             "places": ["the pier"], "rules": ["storms every night"]})
         elif "You plan a" in sys:
@@ -48,9 +48,9 @@ class StoryBrain:
 
 
 class StoryMCP(RefMCP):
-    def __init__(self, scores=None, voice=True, **kw):
+    def __init__(self, scores=None, voice=True, writing=None, **kw):
         super().__init__(**kw)
-        self.scores, self.voice = list(scores or []), voice
+        self.scores, self.voice, self.writing = list(scores or []), voice, list(writing or [])
 
     def call(self, tool, args=None):
         args = args or {}
@@ -67,6 +67,13 @@ class StoryMCP(RefMCP):
                 raise HermesRefused("not_enabled", "The narrator voice didn't speak: natural voice is not running on gandalf", "On gandalf: bash install_tts_on_gandalf.sh")
             import base64
             return {"b64": base64.b64encode(_wav()).decode()}
+        if tool == "vision_check" and "letters, words or numbers" in str(args.get("points")):
+            self.calls.append(tool)
+            self.args.append(args)
+            self._w = self.writing.pop(0) if self.writing else False
+            return {"ok": True, "key": "vis:w"}
+        if tool == "job_wait" and args.get("key") == "vis:w":
+            return {"state": "done", "finished": True, "result": {"caption": "x", "answers": [{"n": 1, "yes": self._w}]}}
         if tool == "vision_check" and self.scores:
             self.same = self.scores.pop(0)
         return super().call(tool, args)
@@ -121,13 +128,6 @@ class Story(Base):
         self.assertEqual(story._json("no json here", list), [])
         self.assertEqual(story._json('x {"a": "b}"} y', dict), {"a": "b}"})
 
-    def test_bible_survives_restart_and_edits_are_cleaned(self):
-        root = Path(self.tmp.name) / "p"
-        root.mkdir()
-        story.save_bible(root, {"title": "T", "people": [{"name": "Mara", "who": "x"}, {"who": "no name"}], "facts": [{"ch": 1, "fact": "f"}]})
-        b = story.bible(root)
-        self.assertEqual((b["title"], len(b["people"]), b["facts"][0]["fact"]), ("T", 1, "f"))
-
     def test_a_name_in_the_action_joins_the_shot(self):
         """Live 2026-11-25: who=[Ben] for "Ben looks back, seeing Aria…" → Aria got no reference and a stranger was drawn."""
         s = story.clean_shots([{"who": ["Ben"], "action": "Ben looks back, seeing Aria with the package", "where": "street"},
@@ -136,6 +136,13 @@ class Story(Base):
         self.assertEqual(s[0]["who"], ["Ben", "Aria"])
         self.assertEqual(s[1]["who"], ["Aria"])                                   # "Arianna" is not "Aria"
         self.assertEqual(s[2]["who"], [])                                         # "Benjamin" is not "Ben"
+
+    def test_bible_survives_restart_and_edits_are_cleaned(self):
+        root = Path(self.tmp.name) / "p"
+        root.mkdir()
+        story.save_bible(root, {"title": "T", "people": [{"name": "Mara", "who": "x"}, {"who": "no name"}], "facts": [{"ch": 1, "fact": "f"}]})
+        b = story.bible(root)
+        self.assertEqual((b["title"], len(b["people"]), b["facts"][0]["fact"]), ("T", 1, "f"))
 
     # ---------- the run
     def test_short_story_end_to_end(self):
@@ -162,6 +169,26 @@ class Story(Base):
         self.assertEqual(len(story.bible(r.root)["facts"]), 2, "what changed went into the bible")
         self.assertIn("Spend: $0.000", r.why)
         self.assertEqual(r.view()["batch"]["kind"], "story")
+
+    def test_bible_time_rides_in_every_shot(self):
+        m = StoryMCP()
+        r = self._run(m, req={"form": "short", "clips": "none", "narrate": False})
+        r.loop()
+        self.assertEqual(story.bible(r.root)["when"], "night, heavy rain")
+        makes = [a for t, a in zip(m.calls, m.args) if t == "image_make"]
+        self.assertTrue(all("night, heavy rain" in a["prompt"] for a in makes), [a["prompt"][:120] for a in makes])
+
+    def test_writing_on_a_still_is_caught_and_remade(self):
+        m = StoryMCP(writing=[True])
+        r = self._run(m, req={"form": "short", "clips": "none", "narrate": False})
+        self._cast(r.root)
+        r.loop()
+        self.assertEqual(r.state, "done", r.why)
+        makes = [a for t, a in zip(m.calls, m.args) if t == "image_make"]
+        self.assertEqual(len(makes), 4, "shot 1 remade once")
+        self.assertIn("no written text", makes[1]["prompt"].lower() + str(makes[1].get("negative_prompt", "")).lower() + r.steps[-1].get("why", ""))
+        self.assertIn("Mara (tall adult)", makes[1]["prompt"], "the remake keeps the cast looks")
+        self.assertTrue(any("no letters or words anywhere" in (st.get("why") or "") for st in r.steps))
 
     def test_low_free_still_is_remade_once(self):
         m = StoryMCP(scores=[False, True, True, True])

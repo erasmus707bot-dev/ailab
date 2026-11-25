@@ -37,12 +37,14 @@ RETRIES = 1                                       # $0 remakes of a low-scoring 
 FIX_TEXT, FIX_BIBLE, KEEP_BOTH = "✏️ Fix the chapter (keep the bible)", "📚 Fix the bible (the chapter is right)", "↔️ Keep both as they are"
 SIZE = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (1080, 1080)}
 
-BIBLE_SYS = ("You write the story bible for Scott's story. {keep} Reply with JSON only: {{\"title\": str, \"tone\": str, "
+BIBLE_SYS = ("You write the story bible for Scott's story. {keep} Reply with JSON only: {{\"title\": str, \"tone\": str, \"when\": str, "
              "\"people\": [{{\"name\": str, \"who\": str}}], \"places\": [str], \"rules\": [str]}}. Use the cast he gives "
-             "with their names and looks exactly; everyone is an adult. Short plain lines.")
+             "with their names and looks exactly; everyone is an adult. when = the time of day, light and weather the story "
+             "happens in (e.g. \"night, neon light, light rain\"). Short plain lines.")
 SHOTS_SYS = ("You plan a {form} told in shots. {keep} Reply with JSON only: {{\"outline\": str, \"shots\": [{{\"who\": "
-             "[names], \"where\": str, \"action\": str, \"camera\": str, \"seconds\": int, \"line\": str}}]}}. Exactly {n} "
+             "[names], \"where\": str, \"action\": str, \"camera\": str, \"when\": str, \"seconds\": int, \"line\": str}}]}}. Exactly {n} "
              "shots. One clear action per shot, shown not told. camera = framing + move (wide, close-up, slow push-in…). "
+             "when = time of day + light for that shot — the bible's When unless the story moves on in time. "
              "line = one short spoken narration sentence for that shot, or \"\". {extra} Never put text, captions, signs "
              "or writing in a shot. Stay true to the bible and its facts.")
 SHORT_EXTRA = ("Total 15–30 seconds. Shot 1 is the hook — the strongest, most striking picture, it grabs in the first 2 "
@@ -85,7 +87,7 @@ def clean_bible(b) -> dict:
     s = lambda x, n=300: str(x or "").strip()[:n]                                   # noqa: E731
     ppl = [{"name": s(p.get("name"), 40), "who": s(p.get("who"))} for p in b.get("people") or [] if isinstance(p, dict) and s(p.get("name"))]
     facts = [{"ch": int(f.get("ch") or 0), "fact": s(f.get("fact"))} for f in b.get("facts") or [] if isinstance(f, dict) and s(f.get("fact"))]
-    return {"title": s(b.get("title"), 80), "tone": s(b.get("tone")), "people": ppl[:12],
+    return {"title": s(b.get("title"), 80), "tone": s(b.get("tone")), "when": s(b.get("when"), 120), "people": ppl[:12],
             "places": [s(x, 120) for x in b.get("places") or [] if s(x)][:20],
             "rules": [s(x) for x in b.get("rules") or [] if s(x)][:20], "facts": facts[-80:],
             "updated": float(b.get("updated") or 0)}
@@ -204,7 +206,8 @@ def clean_shots(raw, names: list[str], form: str) -> list[dict]:
         except (TypeError, ValueError):
             sec = 4
         out.append({"who": who, "where": str(s.get("where") or "").strip()[:160], "action": str(s["action"]).strip()[:300],
-                    "camera": str(s.get("camera") or "").strip()[:120], "seconds": max(SHOT_MIN_S, min(SHOT_MAX_S, sec)),
+                    "camera": str(s.get("camera") or "").strip()[:120], "when": str(s.get("when") or "").strip()[:120],
+                    "seconds": max(SHOT_MIN_S, min(SHOT_MAX_S, sec)),
                     "line": re.sub(r"\s+", " ", str(s.get("line") or "")).strip()[:300]})
     if form == "short" and out:
         tot = sum(s["seconds"] for s in out)
@@ -229,7 +232,8 @@ def shot_prompt(shot: dict, b: dict, cast: dict[str, dict], looks: bool = True) 
     where = shot["where"]
     if where and not where.lower().startswith(("in ", "at ", "on ", "by ", "inside ", "under ")):
         where = "in " + where
-    bits = [", ".join(who), shot["action"], where, shot["camera"]]
+    when = shot.get("when") or b.get("when", "")                 # live 2026-11-25: a night market drifted to daylight
+    bits = [", ".join(who), shot["action"], where, when, shot["camera"]]
     return ", ".join(x for x in bits if x)
 
 
@@ -246,12 +250,37 @@ def seen_as(look: str) -> str:
     return out
 
 
+WRITING_PT = {"q": "Look closely at every sign, shop front, wall, the ground, vehicles and clothing. Are there any letters, "
+                   "words or numbers anywhere in the picture?", "want": False,
+              "what": "no letters or words anywhere (signs, ground, walls)", "kind": "notext"}
+
+
+def writing_check(run, raw: bytes, e: dict, task: str, k: int) -> dict:
+    """👁 a second, closer look for writing (live 2026-11-25: painted letters on the ground and sign text slipped past the
+    one-line no-text point). Writing found → it counts as a miss and the $0 remake gets the fix — and the remake keeps the
+    shot's real words + looks (the first fix was built from the name-free 👁 words)."""
+    from . import eyes
+    if e.get("error"):
+        return e
+    w = eyes.ask(run, raw, [WRITING_PT], f"shot {k + 1} — any writing?")
+    rows = list(e.get("points") or [])
+    if not w.get("error") and w.get("points") and w["points"][0].get("ok") is False:
+        rows.append(w["points"][0])
+        run._record({"action": "eyes", "why": f"👁 shot {k + 1}: writing found — {WRITING_PT['what']} is missing",
+                     "result": {"caption": w.get("caption", "")[:200]}, "usd": 0.0})
+        e = {**e, "missing": list(e.get("missing") or []) + [WRITING_PT["what"]], "low": True,
+             "score": round(100 * sum(1 for r in rows if r.get("ok")) / max(1, sum(1 for r in rows if r.get("ok") is not None)))}
+    e["fix_task"] = eyes.fix_task(task, rows)
+    e["fix"] = eyes.fix_words(rows)
+    return e
+
+
 def anchors_for(shot: dict, cast: dict[str, dict]) -> list[str]:
     return [cast[w.lower()]["anchor_path"] for w in shot["who"] if w.lower() in cast and cast[w.lower()].get("anchor_path")][:4]
 
 
 def bible_text(b: dict) -> str:
-    lines = [f"Title: {b.get('title', '')}", f"Tone: {b.get('tone', '')}"]
+    lines = [f"Title: {b.get('title', '')}", f"Tone: {b.get('tone', '')}", f"When: {b.get('when', '')}"]
     lines += [f"Person: {p['name']} — {p['who']}" for p in b.get("people", [])]
     lines += [f"Place: {x}" for x in b.get("places", [])] + [f"Rule: {x}" for x in b.get("rules", [])]
     lines += [f"Fact (ch {f['ch']}): {f['fact']}" for f in b.get("facts", [])]
@@ -492,6 +521,7 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                                label=f"shot {s['k'] + 1}")          # 👁 grades what a picture can show, not the bracketed looks
                 eyes.record(run, f"shot {s['k'] + 1}", e)
                 picture._craft_seen(run, "story", e, shot_prompt(s, bib, cast, looks=False))
+                e = writing_check(run, (root / pic["path"]).read_bytes(), e, task, s["k"])
                 s["eyes"] = {x: e.get(x) for x in ("score", "missing", "error") if e.get(x) is not None}
                 if e.get("low") and e.get("fix_task") and tries < retries and not float(pic.get("usd") or 0):
                     tries += 1
