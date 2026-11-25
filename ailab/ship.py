@@ -83,17 +83,23 @@ def package(pid: str, folder: str = "") -> dict:
     return {"files": files, "bytes": total, "name": p.get("name") or pid}
 
 
+HOMES = ("Hermes", "Tools", "Media & fun", "Gifts")      # Hermes library groups (2026-11-24); "" = Hermes decides
+
+
 def start(lab, cfg: dict, pid: str, name: str = "", folder: str = "", platforms: list | None = None,
-          orientation: str = "any") -> dict:
+          orientation: str = "any", home_group: str = "") -> dict:
     if cfg.get("mode") != "connected":
         raise _err("Making real apps needs Hermes — switch the Lab to connected mode.", "no_hermes", "🔌")
     pkg = package(pid, folder)
     plats = [x for x in (platforms or PLATFORMS) if x in PLATFORMS] or list(PLATFORMS)
-    r = lab.mcp.call("app_ship", {"name": (name or pkg["name"]).strip()[:60], "files": pkg["files"],
-                                  "platforms": plats, "orientation": orientation if orientation in
-                                  ("any", "landscape", "portrait") else "any"})
+    args = {"name": (name or pkg["name"]).strip()[:60], "files": pkg["files"], "platforms": plats,
+            "orientation": orientation if orientation in ("any", "landscape", "portrait") else "any"}
+    if home_group in HOMES:
+        args["home_group"] = home_group
+    r = lab.mcp.call("app_ship", args)
     return {"ok": True, "key": r.get("key"), "app": r.get("app"), "files": len(pkg["files"]), "bytes": pkg["bytes"],
-            "where": r.get("where", "")}
+            "where": r.get("where", ""), "library_group": r.get("library_group", "Testing"),
+            "home_group": r.get("home_group") or home_group or ""}
 
 
 def wait(lab, cfg: dict, key: str) -> dict:

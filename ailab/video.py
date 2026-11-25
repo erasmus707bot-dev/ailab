@@ -17,7 +17,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from . import config, makers, picture
+from . import config, eyes, looks, makers, picture
 from .mcp_client import HermesRefused
 
 VIDEO_SYS = ("You help write prompts for a text-to-video model. " + makers.KEEP_WORDS + " Reply ONLY with extra detail to "
@@ -43,6 +43,7 @@ KINDS = {
     "words": "a 🔓 text-to-video model makes it from your words alone",
     "newest": "your newest picture in this project is brought to life",
     "free": "🆓 slow pan-and-zoom of your newest picture, made on this computer (ffmpeg) — no AI motion, $0",
+    "local": "🏠 a first picture, then real AI motion made on this computer's own graphics card — $0, private, slow",
 }
 DEFAULT_PATHS = [
     {"id": "picture_first", "label": "Make a picture first, then bring it to life", "kind": "picture_first", "on": True, "star": True,
@@ -50,8 +51,16 @@ DEFAULT_PATHS = [
     {"id": "words", "label": "Just my words", "kind": "words", "on": True},
     {"id": "newest", "label": "My newest picture in this project", "kind": "newest", "on": True},
     {"id": "free", "label": "🆓 Free moving picture of my newest picture (no AI)", "kind": "free", "on": True},
+    # 🏠 2026-11-24 (Scott, pick 4: "build the path on the 5B, then add the adult-tuned one as a second switch";
+    # "keep 14B model off by default. takes an unlock button to use"). Files: hermes install_video.sh.
+    {"id": "local_5b", "label": "🏠 On this computer — Wan 2.2 5B ($0, slow)", "kind": "local", "model": "local/wan22-5b",
+     "on": True, "why": "free and private; if it fails, the Venice price card comes up instead"},
+    {"id": "local_14b", "label": "🏠 On this computer — Wan 2.2 14B adult-tuned ($0, very slow)", "kind": "local",
+     "model": "local/wan22-14b-rapid-q4", "on": False, "locked": True,
+     "why": "community adult-tuned model, unproven on this card — stays off until you unlock it"},
 ]
-PATH_KEYS = ("id", "label", "kind", "on", "star", "model", "why")
+PATH_KEYS = ("id", "label", "kind", "on", "star", "model", "why", "locked", "unlocked")
+LOCAL_WAIT_S = 65 * 60                          # Hermes gives a local clip 60 min on the 6 GB card
 
 
 def _paths_file() -> Path:
@@ -75,7 +84,13 @@ def all_paths() -> list[dict]:
             continue
         if x["id"] not in out:
             order.append(x["id"])
+        if x["id"] in {p["id"] for p in DEFAULT_PATHS if p.get("locked")}:
+            row["locked"] = True                                  # a built-in lock can't be edited away in the file
         out[x["id"]] = row
+    for r in out.values():                                        # 🔒 locked = off until Scott presses Unlock
+        r["locked"], r["unlocked"] = bool(r.get("locked")), bool(r.get("locked") and r.get("unlocked"))
+        if r["locked"] and not r["unlocked"]:
+            r["on"] = False
     star = (d.get("star") if isinstance(d, dict) else None) or next((i for i in order if out[i].get("star") and out[i].get("on")), "")
     if not out.get(star, {}).get("on"):
         star = next((i for i in order if out[i].get("on")), "")
@@ -87,14 +102,32 @@ def all_paths() -> list[dict]:
 
 
 def set_path(body: dict) -> dict:
-    """⚙️ Settings: {"id", "on"} switches a path; {"star": id} makes it the default. Keeps added custom paths."""
+    """⚙️ Settings: {"id", "on"} switches a path; {"star": id} makes it the default; {"id", "unlock": true|false}
+    unlocks (or re-locks) a 🔒 path — a locked path can't be switched on or made default. Keeps added custom paths."""
     try:
         d = json.loads(_paths_file().read_text()) if _paths_file().is_file() else {}
     except (OSError, ValueError):
         d = {}
     d = d if isinstance(d, dict) else {"paths": d}
     rows = [x for x in d.get("paths") or [] if isinstance(x, dict)]
-    known = {p["id"] for p in all_paths()}
+    now = {p["id"]: p for p in all_paths()}
+    known = set(now)
+    if "unlock" in body:
+        if body.get("id") not in known or not now[body["id"]]["locked"]:
+            raise ValueError("that video path has no lock")
+        row = next((x for x in rows if x.get("id") == body["id"]), None)
+        if not row:
+            row = {"id": body["id"]}
+            rows.append(row)
+        row["unlocked"] = bool(body["unlock"])
+        if not row["unlocked"]:
+            row["on"] = False
+            if d.get("star") == body["id"]:
+                d.pop("star")
+        body = {k: v for k, v in body.items() if k not in ("id", "unlock", "on", "star")}
+    for pid in (body.get("star"), body.get("id") if body.get("on") else None):
+        if pid in now and now[pid]["locked"] and not now[pid]["unlocked"]:
+            raise ValueError("🔒 that video path is locked — press Unlock first")
     if body.get("star"):
         if body["star"] not in known:
             raise ValueError("no such video path")
@@ -154,6 +187,16 @@ def _prompt(run, words: str, sys: str, extra: str) -> str:
     return text[:2500]
 
 
+def with_look(prompt: str, mine: str, look: list[str]) -> str:
+    """Scott's words stay first and whole; the Look's medium/style follows them, its mood/light/colour words close the prompt.
+    A Look word the writer already used is not said twice."""
+    if not look:
+        return prompt
+    mine = (mine or "").strip().rstrip(".")
+    add = prompt[len(mine):].lstrip(" .") if mine and prompt.startswith(mine) else ""
+    return looks.assemble(mine, look, add) if add or mine == prompt.strip().rstrip(".") else looks.assemble(prompt, look)
+
+
 def pan_zoom(src: Path, out: Path, secs: int, aspect: str) -> str:
     """🆓 A slow push-in across one picture with ffmpeg. '' = made; otherwise why not."""
     ff = shutil.which("ffmpeg")
@@ -201,6 +244,13 @@ def _free(run, pic: Path | None, secs: int, aspect: str, words: str) -> None:
 def run(run) -> None:
     """The whole video run. Raises Stopped / SpendBlocked like the agent loop (handled by Run.loop)."""
     words = picture.picture_words(run.task)
+    # 🎨 Look for video (2026-11-25, Scott: "I need access to the mood/theme options"): the same Look line pictures use.
+    look, look_notes = looks.normalize(looks.from_task(words))
+    if not look:                                             # 🎨 R2: the project's official style supplies the Look
+        from . import styles
+        look = styles.project_look(run.root)
+    if look:
+        run._record({"action": "look", "why": f"🎨 Look: {looks.SEP.join(look)}", "result": {"look": look, "notes": look_notes}, "usd": 0.0})
     rows = all_paths()
     on = [r for r in rows if r["on"]] or rows[:1]
     ch = makers.ask(run, "video", makers.items_from(QUESTIONS + path_question(rows)))
@@ -217,10 +267,11 @@ def run(run) -> None:
             return _fail(run, "There is no picture in this project yet — make one with 🖼, or use \"Make a picture first\".")
         if path["kind"] == "free":
             return _free(run, pic, secs, aspect, words)
-    elif path["kind"] == "picture_first":
+    elif path["kind"] in ("picture_first", "local"):
         if not run.connected:
             return _fail(run, "🔌 Pictures are made by Hermes — switch the Lab to connected mode.")
         p = picture.write_prompt(run, words + f"\nShape: {ch.get('shape', '')}")
+        p = with_look(p, picture.own_words(words), look)             # first frame: medium/style up front, mood/light at the end
         made = makers.make_picture(run, p, aspect, f"pictures/{makers.stamp()}-{makers.slug(words, default='picture')}",
                                    "the first frame")
         if made.get("error"):
@@ -230,6 +281,7 @@ def run(run) -> None:
     if not run.connected:                                    # only the free path works without Hermes
         return _free(run, pic, secs, aspect, words)
     prompt = _prompt(run, words, MOTION_SYS if pic else VIDEO_SYS, f"\nLength: {secs} s\nShape: {aspect}")
+    prompt = with_look(prompt, picture.own_words(words), look)       # the clip itself carries the mood/theme too
     args = {"prompt": prompt, "duration": f"{secs}s", "resolution": str(run.cfg.get("video_resolution") or "720p"),
             "negative_prompt": NO_TEXT_VIDEO, "name": picture.own_words(words)[:40], "task": f"lab-video:{run.project['id']}"}
     if path.get("model") or run.cfg.get("video_model"):
@@ -240,36 +292,57 @@ def run(run) -> None:
         args["image_b64"] = base64.b64encode(pic.read_bytes()).decode()
     else:
         args["aspect_ratio"] = aspect
-    picture.stage(run, "💲", "Asking Venice what this clip costs (free)")
-    try:
-        q = run.lab.mcp.call("video_quote", {k: v for k, v in args.items() if k in ("model", "duration", "aspect_ratio",
-                                                                                   "resolution", "image_b64")})
-    except HermesRefused as e:
-        return _fail(run, f"Couldn't price the clip: {e.message}" + (f" — {e.fix}" if e.fix else ""))
-    usd, today, cap = float(q.get("usd") or 0), float(q.get("today_usd") or 0), float(q.get("daily_cap") or 5)
-    over = not q.get("fits", True)
-    choices = ([] if over else [f"{MAKE} (${usd:.2f})"]) + [FREE, CANCEL]
-    head = (f"This {secs}-second clip costs ${usd:.2f} with {makers.short(q.get('model', ''))}. "
-            f"Video spend today: ${today:.2f} of ${cap:.2f}." + (" That's over the video cap — the free one still works." if over else ""))
-    pick = makers.ask(run, "video-price", [{"q": head, "choices": choices, "best": 0, "why": "price first"}], always=True)
-    pick = next(iter(pick.values()), "")
-    if pick.startswith(CANCEL[:1]) or "don't" in pick.lower():
-        run.state, run.why = "done", "🎬 Not made — nothing spent."
-        picture.stage(run, "✅", "Stopped before spending")
-        return
-    if pick.startswith("🆓"):
-        return _free(run, pic, secs, aspect, words)
-    run.cap_usd = max(run.cap_usd, run.usd + usd + 0.05)
-    picture.stage(run, "🎬", "Asking Hermes to make the video")
-    try:
-        st = run.lab.mcp.call("video_make", args)
-    except HermesRefused as e:
-        return _fail(run, f"Hermes couldn't make the video: {e.message}" + (f" — {e.fix}" if e.fix else ""))
-    res = makers.wait_job(run, st["key"], "🎬", f"Making the video with {makers.short(st.get('model', ''))}",
-                          float(st.get("est_usd") or usd), "1–5 min", MAX_WAIT_S)
-    out = res.get("result") or {}
-    if res.get("state") != "done" or not out.get("path"):
-        return _fail(run, (res.get("error") or {}).get("message") or "no video came back")
+    tries = [args]
+    if str(args.get("model", "")).startswith("local/"):          # 🏠 first; if it can't, Venice's default with its price card
+        tries.append({k: v for k, v in args.items() if k != "model"})
+    out, usd, why = {}, 0.0, ""
+    for n, args in enumerate(tries):
+        local = str(args.get("model", "")).startswith("local/")
+        last = n == len(tries) - 1
+        if why:
+            picture.stage(run, "↪️", f"This computer couldn't make it ({why[:120]}) — Venice instead, price first")
+            run._record({"action": "route", "why": f"↪️ local video failed: {why[:200]} — offering Venice", "result": {}, "usd": 0.0})
+        picture.stage(run, "💲", "Checking this computer can make it (free)" if local else "Asking Venice what this clip costs (free)")
+        try:
+            q = run.lab.mcp.call("video_quote", {k: v for k, v in args.items() if k in ("model", "duration", "aspect_ratio",
+                                                                                       "resolution", "image_b64")})
+        except HermesRefused as e:
+            why = e.message + (f" — {e.fix}" if e.fix else "")
+            if last:
+                return _fail(run, f"Couldn't price the clip: {why}")
+            continue
+        usd, today, cap = float(q.get("usd") or 0), float(q.get("today_usd") or 0), float(q.get("daily_cap") or 5)
+        if not local:                                            # 🏠 $0 needs no price card
+            over = not q.get("fits", True)
+            choices = ([] if over else [f"{MAKE} (${usd:.2f})"]) + [FREE, CANCEL]
+            head = (f"This {secs}-second clip costs ${usd:.2f} with {makers.short(q.get('model', ''))}. "
+                    f"Video spend today: ${today:.2f} of ${cap:.2f}." + (" That's over the video cap — the free one still works." if over else ""))
+            pick = makers.ask(run, "video-price", [{"q": head, "choices": choices, "best": 0, "why": "price first"}], always=True)
+            pick = next(iter(pick.values()), "")
+            if pick.startswith(CANCEL[:1]) or "don't" in pick.lower():
+                run.state, run.why = "done", "🎬 Not made — nothing spent."
+                picture.stage(run, "✅", "Stopped before spending")
+                return
+            if pick.startswith("🆓"):
+                return _free(run, pic, secs, aspect, words)
+            run.cap_usd = max(run.cap_usd, run.usd + usd + 0.05)
+        picture.stage(run, "🎬", "Asking Hermes to make the video")
+        try:
+            st = run.lab.mcp.call("video_make", args)
+        except HermesRefused as e:
+            why = e.message + (f" — {e.fix}" if e.fix else "")
+            if last:
+                return _fail(run, f"Hermes couldn't make the video: {why}")
+            continue
+        res = makers.wait_job(run, st["key"], "🎬", f"Making the video with {makers.short(st.get('model', ''))}"
+                              + (" on this computer" if local else ""), float(st.get("est_usd") or usd),
+                              "many minutes on this card" if local else "1–5 min", LOCAL_WAIT_S if local else MAX_WAIT_S)
+        out = res.get("result") or {}
+        if res.get("state") == "done" and out.get("path"):
+            break
+        why = (res.get("error") or {}).get("message") or "no video came back"
+        if last:
+            return _fail(run, why)
     picture.stage(run, "💾", "Saving the video")
     rel = picture.claim(run.root, f"videos/{makers.stamp()}-{makers.slug(words, default='video')}.mp4")
     dst = run.root / rel
@@ -280,7 +353,11 @@ def run(run) -> None:
         return _fail(run, f"The video was made (Media Studio has it) but couldn't be copied here: {e}")
     usd = float(out.get("usd") or usd)
     run.usd += usd
-    _done(run, {"path": rel, "model": out.get("model", ""), "usd": round(usd, 4), "seconds": int(out.get("seconds") or 0),
+    seen = None
+    if eyes.on(run):                                             # 👁 M1: one frame from the middle, checked against his words
+        seen = eyes.check(run, eyes.frame(dst), words, moving=True, label="a frame of the video")
+        eyes.record(run, "video", seen)
+    _done(run, {"path": rel, **({"eyes": seen} if seen else {}), "model": out.get("model", ""), "usd": round(usd, 4), "seconds": int(out.get("seconds") or 0),
                 "duration": out.get("duration", f"{secs}s"), "media_item": out.get("media_item", ""), "prompt": prompt,
                 "from_picture": pic.name if pic else ""},
           f"🎬 Video made with {makers.short(out.get('model', ''))} in {int(out.get('seconds') or 0)} s for ${usd:.2f}. "

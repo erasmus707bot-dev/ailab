@@ -422,6 +422,9 @@ def _handler(live: Live, side: str):
 
         def _do(self):
             self.close_connection = True
+            from . import gate                                  # 2026-11-24 online Lab: previews are Scott-only too
+            if not gate.allowed(self.headers, self.client_address[0], live.cfg):
+                return self._plain(403, gate.REFUSED_HTML, "text/html; charset=utf-8")
             try:
                 self._serve()
             except (BrokenPipeError, ConnectionResetError):

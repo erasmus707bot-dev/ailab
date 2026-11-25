@@ -20,7 +20,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import agent, config, guardlink, preview, store
+from . import agent, config, guardlink, preview, shots, store
 from .secretscan import SECRET_RX, has_secret  # noqa: F401 — SECRET_RX kept importable
 
 TEXT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".svg", ".md", ".txt", ".xml", ".webmanifest"}
@@ -167,8 +167,41 @@ def held(state: str | None = "waiting") -> list[dict]:
         g = guardlink.program_of(config.load(), t)
         rows.append({**r, "sha": hashlib.sha256(text.encode()).hexdigest(), "preview": text[:4000],
                      "target": str(t), "new": cur is None, "diff": agent.make_diff(t.name, cur, text),
-                     "guarded": g[0] if g else ""})
+                     "guarded": g[0] if g else "", "look": shots.kind(t.name),
+                     "moved": _moved(r, t)})
     return rows
+
+
+def _moved(item: dict, t: Path) -> bool:
+    """True when the real file changed after this was proposed (2026-11-25: applying the whole file would undo that)."""
+    base = item.get("base")
+    if not base:
+        return False
+    try:
+        cur = t.read_bytes() if t.is_file() else b""
+    except OSError:
+        return True
+    return hashlib.sha256(cur).hexdigest() != base
+
+
+def _check_moved(item: dict, t: Path) -> None:
+    if _moved(item, t):
+        raise ReviewError(f"{t.name} changed after this was proposed (someone else edited it) — applying it now would "
+                          "undo their edit. Reject it and ask the Lab to make the change again.", "moved", "🔀")
+
+
+def make_shots(aid: str) -> dict:
+    """📸 Before | After pictures for one waiting change (shots.py)."""
+    item = next((r for r in agent.approvals("waiting") if r["id"] == aid), None)
+    if not item:
+        raise ReviewError("That item isn't waiting any more.", "state", "📋")
+    text = _content(aid).read_text(errors="replace")
+    t = target(item)
+    try:
+        cur = t.read_text(errors="replace") if t.is_file() and t.stat().st_size <= 400_000 else None
+    except OSError:
+        cur = None
+    return shots.make(aid, t, text, agent.make_diff(t.name, cur, text), config.home() / "approvals", config.load())
 
 
 def target(item: dict) -> Path:
@@ -207,6 +240,7 @@ def apply(aid: str, sha: str, confirm: str) -> dict:
     if hashlib.sha256(text.encode()).hexdigest() != sha:
         raise ReviewError("It changed since you looked — reload and check it again.", "stale", "🔁")
     t = _safe_target(target(item))
+    _check_moved(item, t)
     if guardlink.program_of(config.load(), t):                     # 🛡 the Lab or Hermes → only through the Guard
         return apply_group([{"id": aid, "sha": sha}], confirm)
     backup = ""
@@ -243,6 +277,7 @@ def apply_group(picks: list[dict], confirm: str, runner=None) -> dict:
         if hashlib.sha256(text.encode()).hexdigest() != sha:
             raise ReviewError("One changed since you looked — reload and check it again.", "stale", "🔁")
         t = _safe_target(target(item))
+        _check_moved(item, t)
         g = guardlink.program_of(cfg, t)
         if not g:
             plain.append(pk)

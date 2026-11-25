@@ -22,6 +22,7 @@ from . import looks
 from . import video as videomod             # 🛤 video paths (2026-11-24)
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
+from . import gate
 from .privacy import PrivacyRefused
 from .providers import NAMES
 from .spend import SpendBlocked
@@ -342,6 +343,157 @@ class App:
         return 200, {"ok": True, "opened": True, "path": str(path),
                      "message": "📂 Opened on gandalf's screen. On your phone, 📋 copy the path instead."}
 
+    # 🗄 Shelf (remodel M2): ✅ Keep / 🗑 Throw away (hidden 30 days) / ↩ Bring back — ailab/shelf.py
+    def _shelf_run(self, b: dict):
+        r = self.agents.get(str(b.get("run") or ""))
+        if r.state == "running":
+            raise ValueError("It's still working — ⏹ Stop it or wait until it's done.")
+        return r
+
+    def shelf_get(self, q: dict) -> tuple[int, dict]:
+        from . import shelf
+        return 200, {"ok": True, **shelf.view(preview.ensure_site(self._pid(q.get("project"))))}
+
+    def shelf_source(self, q: dict) -> tuple[int, dict]:
+        """✏️ Change this (M3): the words a Library item was made from — newest run that made it, else its kept entry."""
+        from . import shelf
+        pid = self._pid(q.get("project"))
+        path = str((q.get("path") or [""])[0])
+        for r in sorted(list(self.agents.runs.values()), key=lambda x: getattr(x, "started", 0), reverse=True):
+            try:
+                if r.project["id"] == pid and any(m["path"] == path for m in r.made_view()):
+                    return 200, {"ok": True, "task": r.task, "run": r.id}
+            except Exception:                                    # noqa: BLE001 — an odd old run must not hide the rest
+                continue
+        for x in reversed(shelf.view(preview.ensure_site(pid))["kept"]):
+            if path in (x.get("files") or []):
+                return 200, {"ok": True, "task": x.get("task") or "", "run": x.get("run")}
+        return 200, {"ok": True, "task": "", "run": None}
+
+    # ---------- 🎭 M2 references ----------
+    def refs_get(self, q: dict) -> tuple[int, dict]:
+        from . import refs
+        return 200, {"ok": True, "refs": refs.get(preview.ensure_site(self._pid(q.get("project")))), "max": refs.MAX_REFS}
+
+    def refs_pin(self, b: dict) -> tuple[int, dict]:
+        from . import refs
+        return 200, refs.pin(preview.ensure_site(self._pid(b.get("project"))), str(b.get("path") or ""))
+
+    def refs_unpin(self, b: dict) -> tuple[int, dict]:
+        from . import refs
+        return 200, refs.unpin(preview.ensure_site(self._pid(b.get("project"))), str(b.get("path") or ""))
+
+    # ---------- 🎭 R1 global cast (Hermes store over MCP) ----------
+    def _cast_mcp(self):
+        mcp = getattr(self.lab, "mcp", None)
+        if mcp is None:
+            raise RuntimeError("🔌 The global cast lives in Hermes — switch the Lab to connected mode.")
+        return mcp
+
+    def _cast_do(self, fn) -> tuple[int, dict]:
+        from .mcp_client import HermesRefused
+        try:
+            return 200, fn()
+        except HermesRefused as e:
+            return 200, {"ok": False, "icon": "🎭", "message": e.message + (f" — {e.fix}" if e.fix else "")}
+        except RuntimeError as e:
+            return 200, {"ok": False, "icon": "🔌", "message": str(e)}
+
+    def cast_get(self, q: dict) -> tuple[int, dict]:
+        """🎭 Every saved character + named casts (global), and the cast this project chose."""
+        from . import cast
+        root = preview.ensure_site(self._pid(q.get("project")))
+        def go():
+            lst = self._cast_mcp().call("cast_list", {})
+            return {"ok": True, "characters": lst.get("characters", []), "casts": lst.get("casts", []),
+                    "chosen": cast.chosen(root), "min": cast.MIN_N, "max": cast.MAX_N}
+        return self._cast_do(go)
+
+    def cast_choose(self, b: dict) -> tuple[int, dict]:
+        """♻️ Reuse a cast in this project."""
+        from . import cast
+        pid = self._pid(b.get("project"))
+        ids = b.get("ids") if isinstance(b.get("ids"), list) else []
+        return self._cast_do(lambda: cast.pull(self._cast_mcp(), preview.ensure_site(pid), pid, str(b.get("name") or ""), ids))
+
+    def cast_import(self, b: dict) -> tuple[int, dict]:
+        """⬆ This project's 📌 references → the global cast (copies; originals stay)."""
+        from . import cast
+        pid = self._pid(b.get("project"))
+        return self._cast_do(lambda: cast.import_refs(self._cast_mcp(), preview.ensure_site(pid), pid))
+
+    # ---------- 🎨 R2 official styles ----------
+    def _style_ctx(self, b: dict):
+        proj = store.project(self._pid(b.get("project")))
+        return proj, preview.ensure_site(proj["id"])
+
+    def styles_get(self, q: dict) -> tuple[int, dict]:
+        from . import styles
+        proj, root = self._style_ctx(q)
+        ch = styles.chosen(root)
+        return 200, {"ok": True, "styles": styles.all_styles(), "chosen": ch["name"] if ch else "",
+                     "proposal": styles.proposal(root, proj["id"])}
+
+    def styles_make(self, b: dict) -> tuple[int, dict]:
+        """🔒 Make this an official style — from kept result #n of this project."""
+        from . import shelf, styles
+        proj, root = self._style_ctx(b)
+        item = next((x for x in shelf.view(root)["kept"] if str(x.get("n")) == str(b.get("n"))), None)
+        if item is None:
+            return 200, {"ok": False, "icon": "🗄", "message": "Keep it first (✅ Keep) — only kept results can become a style."}
+        return 200, styles.promote(root, str(b.get("name") or ""), item, proj.get("name") or proj["id"])
+
+    def styles_choose(self, b: dict) -> tuple[int, dict]:
+        from . import styles
+        _, root = self._style_ctx(b)
+        return 200, styles.choose(root, str(b.get("name") or ""))
+
+    def styles_answer(self, b: dict) -> tuple[int, dict]:
+        from . import styles
+        proj, root = self._style_ctx(b)
+        return 200, styles.answer(root, proj["id"], str(b.get("sig") or ""), str(b.get("answer") or ""),
+                                  str(b.get("name") or ""), proj.get("name") or proj["id"])
+
+    def shelf_done(self, b: dict) -> tuple[int, dict]:
+        from . import shelf
+        return 200, {"ok": True, "done_at": shelf.set_done(preview.ensure_site(self._pid(b.get("project"))), bool(b.get("done")))}
+
+    def shelf_keep(self, b: dict) -> tuple[int, dict]:
+        from . import shelf
+        try:
+            r = self._shelf_run(b)
+            from . import styles
+            return 200, {"ok": True, "item": shelf.keep(r.root, r.id, r.task, r.made_view(), self._seen(r), styles.facts(r))}
+        except (ValueError, KeyError) as e:
+            return 200, {"ok": False, "code": "shelf", "icon": "🗄",
+                         "message": "Can't find that run — it may be from before a Lab restart." if isinstance(e, KeyError) else str(e)}
+
+    def shelf_toss(self, b: dict) -> tuple[int, dict]:
+        from . import shelf
+        try:
+            r = self._shelf_run(b)
+            made, undone = r.made_view(), []
+            new = {m["path"] for m in made if m.get("new")}
+            for st in reversed(list(r.steps)):                  # edits to files that were already there go back first
+                if st.get("diff") and not st.get("undone") and st.get("path") and st["path"] not in new:
+                    try:
+                        r.undo_step(int(st.get("n") or 0))
+                        undone.append(st["path"])
+                    except Exception:                           # noqa: BLE001 — one stuck undo must not block the rest
+                        pass
+            item = shelf.toss(r.root, r.id, r.task, made, sorted(set(undone)), self._seen(r))
+            return 200, {"ok": True, "item": item, "run": r.view()}
+        except (ValueError, KeyError) as e:
+            return 200, {"ok": False, "code": "shelf", "icon": "🗄",
+                         "message": "Can't find that run — it may be from before a Lab restart." if isinstance(e, KeyError) else str(e)}
+
+    def shelf_restore(self, b: dict) -> tuple[int, dict]:
+        from . import shelf
+        try:
+            return 200, {"ok": True, **shelf.restore(preview.ensure_site(self._pid(b.get("project"))), str(b.get("run") or ""))}
+        except ValueError as e:
+            return 200, {"ok": False, "code": "shelf", "icon": "🗄", "message": str(e)}
+
     def preview_files(self, q: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["preview"]:
             return _off("preview")
@@ -461,11 +613,70 @@ class App:
                     "change request (1-3 short sentences) that an AI builder can follow. Keep everything he asked for, "
                     "add nothing he didn't ask for, use plain words, no lists, no quotes. Reply with the request only.")
 
+    # 🪄 Prompt improvement cycle (Scott 2026-11-24: "i want my prompts to get an improvement cycle"). Same route, mode "prompt":
+    # the writer keeps every word he gave and adds only what the kind of work is missing. "previous" + "fix" = the next round.
+    IMPROVE_SYS = ("Scott typed a prompt for the AI Lab. Make it a stronger prompt for {what}. Keep his subject and every word "
+                   "and detail he gave: do not remove, soften or swap any of it, and add no warnings, notes or comments. "
+                   "Add only what is missing: {adds}. Plain words, one paragraph, no lists, no quotes, at most {words} "
+                   "words. Reply with the improved prompt only.")
+    IMPROVE_KINDS = {"video": ("a short video", "framing, light, setting, what moves and how the camera moves", 110),
+                     "image": ("a picture", "framing, light, setting, mood and fine detail", 110),
+                     "text": ("a piece of writing", "voice, length, shape and who it is for", 120),
+                     "build": ("software an AI builder will make", "what it does, what is on the screen and how to check it works", 160),
+                     "": ("the AI Lab", "the details a model needs to do it well", 140)}
+
+    @staticmethod
+    def _taste(root) -> dict:
+        """🧠 remodel M3: what he ✅ kept and 🗑 threw away in this project — the improver leans toward the first, away from the second."""
+        from . import shelf
+        try:
+            v = shelf.view(root)
+        except Exception:                                        # noqa: BLE001 — taste is a bonus, never a blocker
+            return {"kept": [], "tossed": []}
+        def line(x):                                             # 👁 M1: + what the vision model saw and how well it matched
+            t, s = str(x.get("task") or "").split("\n")[0].strip()[:200], x.get("seen") or {}
+            if not t or not (s.get("caption") or s.get("score") is not None):
+                return t
+            bits = ([f"{s['score']}% match"] if s.get("score") is not None else []) + ([f"it showed: {s['caption'][:160]}"] if s.get("caption") else [])
+            return f"{t} [👁 {' — '.join(bits)}]"
+        uniq = lambda xs: list(dict.fromkeys(a for a in xs if a))                # noqa: E731
+        out = {"kept": uniq(line(x) for x in v["kept"][-5:]), "tossed": uniq(line(x) for x in v["tossed"][-5:])}
+        try:                                                     # 🎨 R2: + the chosen official style's promoted lessons
+            from . import styles
+            st = styles.chosen(root)
+            if st and st.get("prompt_lessons"):
+                out["style"] = {"name": st["name"], "lessons": st["prompt_lessons"][-10:]}
+        except Exception:                                        # noqa: BLE001
+            pass
+        return out
+
+    @staticmethod
+    def _seen(r) -> dict | None:
+        from . import eyes
+        return eyes.seen(list(getattr(r, "pictures", None) or []) + list(getattr(r, "videos", None) or []))
+
+    def _improve_msgs(self, b: dict, text: str, taste: dict | None = None) -> list[dict]:
+        ids = [x for x in (b.get("ctypes") or []) if isinstance(x, str)]
+        kind = next((k for k in ("video", "image", "text") if k in ids), "build" if ids else "")
+        what, adds, words = self.IMPROVE_KINDS[kind]
+        prev, fix = str(b.get("previous") or "").strip()[:4000], str(b.get("fix") or "").strip()[:600]
+        user = "His words: " + text
+        if taste and taste.get("kept"):
+            user += "\n\nPrompts he kept in this project (the kind of detail that worked for him): " + " || ".join(taste["kept"])
+        if taste and taste.get("tossed"):
+            user += "\n\nPrompts he threw away (do not steer toward these): " + " || ".join(taste["tossed"])
+        if taste and taste.get("style"):
+            user += f"\n\nLessons from his official style “{taste['style']['name']}”: " + " || ".join(taste["style"]["lessons"])
+        if prev:
+            user += "\n\nYour last version: " + prev + ("\n\nHe says to fix: " + fix if fix else "\n\nGive a fresh, different take.")
+        return [{"role": "system", "content": self.IMPROVE_SYS.format(what=what, adds=adds, words=words)}, {"role": "user", "content": user}]
+
     def agent_rephrase(self, b: dict) -> tuple[int, dict]:
         """🪄 Help me say it: rough words → a clear change request Scott can edit before it runs."""
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
-        text = str(b.get("text") or "").strip()[:1500]
+        improve = b.get("mode") == "prompt"
+        text = str(b.get("text") or "").strip()[:4000 if improve else 1500]
         if not text:
             return 400, {"ok": False, "code": "bad_args", "icon": "✏️", "message": "Type what you want changed first."}
         proj = store.project(self._pid(b.get("project")))
@@ -473,17 +684,22 @@ class App:
         ctx = f"What was made: {made}.\n" if made else ""
         from . import picture
         msgs = [{"role": "system", "content": self.REPHRASE_SYS}, {"role": "user", "content": ctx + "His words: " + text}]
+        max_tok, max_len, cap, job = 300, 1200, 0.05, "lab-rephrase"
+        if improve:
+            taste = self._taste(preview.ensure_site(proj["id"]))
+            msgs, max_tok, max_len, cap, job = self._improve_msgs(b, text, taste), 900, 4000, 0.10, "lab-improve"
         usd, why = 0.0, ""
         for prov, model in self._rephrase_writers(b):            # 2026-11-24 live: "⏳ is not a valid model ID" (HTTP 400)
             try:
-                r = self.lab.chat(proj, prov, model, msgs, 300, cap_usd=0.05, task="lab-rephrase")
+                r = self.lab.chat(proj, prov, model, msgs, max_tok, cap_usd=cap, task=job)
             except Exception as e:                               # noqa: BLE001 — try the next writer
                 why = f"{model}: {str(e)[:120]}"
                 continue
             usd += float(r.usd or 0)
             out = (r.text or "").strip().strip('"').strip()
-            if out and len(out) <= 1200 and not picture.REFUSAL_RX.search(out[:80]):
-                return 200, {"ok": True, "text": out, "usd": round(usd, 6), "writer": f"{prov}/{model}"}
+            if out and len(out) <= max_len and not picture.REFUSAL_RX.search(out[:80]):
+                return 200, {"ok": True, "text": out, "usd": round(usd, 6), "writer": f"{prov}/{model}",
+                             **({"learned": {"kept": len(taste["kept"]), "tossed": len(taste["tossed"])}} if improve else {})}
             why = f"{model} didn't give a usable rewrite"
         return 200, {"ok": False, "code": "no_writer", "icon": "🪄",
                      "message": f"No writer could help ({why or 'none set up'}) — your own words work too.", "usd": round(usd, 6)}
@@ -501,7 +717,7 @@ class App:
         mine = [(prov, model)] if prov and self._real_model(model) else []
         pw = [tuple(w) for w in [self.cfg.get("prompt_writer") or []] + list(self.cfg.get("prompt_writer_backups") or [])
               if isinstance(w, (list, tuple)) and len(w) == 2]
-        if b.get("picture"):
+        if b.get("picture") or b.get("mode") == "prompt":     # 🪄 improve: 🔓 uncensored writers first (Scott's default)
             pics = [tuple(w) for w in (self.cfg.get("picture_writers") or []) if isinstance(w, (list, tuple)) and len(w) == 2]
             order = (pics or list(picture.WRITERS)) + mine + pw
         else:
@@ -728,7 +944,8 @@ class App:
     def ship_start(self, b: dict) -> tuple[int, dict]:
         plats = b.get("platforms") if isinstance(b.get("platforms"), list) else None
         return 200, ship.start(self.lab, self.cfg, self._pid(b.get("project")), str(b.get("name") or ""),
-                               str(b.get("folder") or ""), plats, str(b.get("orientation") or "any"))
+                               str(b.get("folder") or ""), plats, str(b.get("orientation") or "any"),
+                               str(b.get("home_group") or ""))
 
     def ship_wait(self, b: dict) -> tuple[int, dict]:
         return 200, ship.wait(self.lab, self.cfg, str(b.get("key") or ""))
@@ -745,6 +962,10 @@ class App:
 
     def review_reject(self, b: dict) -> tuple[int, dict]:
         return 200, review.reject(str(b.get("id") or ""))
+
+    def review_shots(self, b: dict) -> tuple[int, dict]:
+        """📸 Before | After pictures for a waiting change (2026-11-25)."""
+        return 200, {"ok": True, **review.make_shots(str(b.get("id") or ""))}
 
     def chat(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["router"]:
@@ -931,7 +1152,20 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                     "text/plain; charset=utf-8", f"{e.icon} {e.message}".encode()
             return self._send(code, data, ctype, csp=PREVIEW_CSP)
 
+        def _refused(self) -> bool:
+            """2026-11-24 online Lab: only Scott (gandalf itself, or his Tailscale login). True = answered 403."""
+            if gate.allowed(self.headers, self.client_address[0], app.cfg):
+                return False
+            if urlparse(self.path).path.startswith("/api/"):
+                self._send(403, {"ok": False, "code": "not_scott", "icon": "🔒",
+                                 "message": "Only Scott can use the AI Lab — sign in to Tailscale as yourself."})
+            else:
+                self._send(403, gate.REFUSED_HTML, "text/html; charset=utf-8")
+            return True
+
         def do_GET(self):                                                # noqa: N802
+            if self._refused():
+                return
             u = urlparse(self.path)
             q = parse_qs(u.query)
             if u.path.startswith("/preview/"):
@@ -972,6 +1206,20 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.roster, q)
             if u.path == "/api/where":                     # 📍 where a project's files really are (2026-11-24)
                 return self._run(app.where_get, q)
+            if u.path == "/api/shelf/source":
+                return self._run(app.shelf_source, q)
+            if u.path == "/api/shelf":
+                return self._run(app.shelf_get, q)
+            if u.path == "/api/refs":                      # 🎭 M2 the project's reference pictures (cast strip)
+                return self._run(app.refs_get, q)
+            if u.path == "/api/cast/pic":                  # 🎭 R1 a cast thumbnail — only inside Hermes's assets folder
+                from . import cast as castmod
+                b_, ct_ = castmod.picture(str((q.get("path") or [""])[0]))
+                return self._send(200, b_, ct_) if b_ else self._send(404, b"Not a cast picture.", "text/plain; charset=utf-8")
+            if u.path == "/api/cast":                      # 🎭 R1 global cast + this project's chosen cast
+                return self._run(app.cast_get, q)
+            if u.path == "/api/styles":                    # 🎨 R2 official styles + the project's choice + a proposal
+                return self._run(app.styles_get, q)
             if u.path == "/api/preview/files":
                 return self._run(app.preview_files, q)
             if u.path == "/api/preview/file":
@@ -998,6 +1246,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.guard_state, q)
             if u.path == "/api/agent/approvals":
                 return self._run(app.agent_approvals, q)
+            if u.path == "/api/review/shot":                     # 📸 one Before | After picture (png)
+                from . import shots as _shots                    # noqa: PLC0415
+                png = _shots.picture(config.home() / "approvals", (q.get("id") or [""])[0], (q.get("side") or [""])[0])
+                return self._send(200, png, "image/png") if png else self._send(404, b"No such picture.", "text/plain; charset=utf-8")
             if u.path == "/api/agent/shot":
                 png = app.agent_shot((q.get("id") or [""])[0], (q.get("name") or [""])[0])
                 return self._send(200, png, "image/png") if png else self._send(404, b"No such picture.", "text/plain; charset=utf-8")
@@ -1006,6 +1258,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             return self._send(404, {"ok": False, "code": "not_found"})
 
         def do_POST(self):                                               # noqa: N802
+            if self._refused():
+                return
             n = int(self.headers.get("Content-Length") or 0)
             p = urlparse(self.path).path
             if n > (MAX_CAPTURE_BODY if p in ("/api/preview/capture", "/api/compare/capture") else MAX_BODY):
@@ -1033,6 +1287,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_capture, b)
             if p in LIVE_POST:
                 return self._run(getattr(app, LIVE_POST[p]), b)
+            if p == "/api/agent/start":
+                return self._run(app.agent_start, b)
             if p == "/api/video_paths":                    # 🛤 ⚙️ {"id","on"} or {"star": id}
                 return self._run(lambda: (200, videomod.set_path(b)))
             if p == "/api/picture_first":                  # 🏠/🌐 {"first": "local"|"venice"}
@@ -1043,8 +1299,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                     r["cfg"] = str(app.cfg.get("picture_first") or "")
                     r["cfg_speed"] = str(app.cfg.get("picture_speed") or "")
                 return self._run(lambda: (200 if r["ok"] else 400, r))
-            if p == "/api/agent/start":
-                return self._run(app.agent_start, b)
+            if p in ("/api/shelf/keep", "/api/shelf/toss", "/api/shelf/restore", "/api/shelf/done"):
+                return self._run({"keep": app.shelf_keep, "toss": app.shelf_toss, "restore": app.shelf_restore,
+                                  "done": app.shelf_done}[p.rsplit("/", 1)[1]], b)
             if p == "/api/where/open":
                 return self._run(app.where_open, b)
             if p == "/api/batch/estimate":                 # 🎛 Batch create (2026-11-24)
@@ -1087,6 +1344,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_apply_group, b)
             if p == "/api/review/reject":
                 return self._run(app.review_reject, b)
+            if p == "/api/review/shots":                   # 📸 Before | After pictures (2026-11-25)
+                return self._run(app.review_shots, b)
+            if p in ("/api/refs/pin", "/api/refs/unpin"):
+                return self._run(getattr(app, "refs_" + p.rsplit("/", 1)[1]), b)
+            if p in ("/api/cast/choose", "/api/cast/import"):
+                return self._run(getattr(app, "cast_" + p.rsplit("/", 1)[1]), b)
+            if p in ("/api/styles/make", "/api/styles/choose", "/api/styles/answer"):
+                return self._run(getattr(app, "styles_" + p.rsplit("/", 1)[1]), b)
             if p == "/api/looks/save":
                 return self._run(lambda: (200, looks.save(b.get("name"), b.get("look") if isinstance(b.get("look"), list) else [])))
             if p == "/api/looks/delete":

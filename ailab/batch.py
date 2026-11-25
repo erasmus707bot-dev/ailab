@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import time
 
-from . import creation, looks, makers, picture
+from . import creation, eyes, looks, makers, picture
 
 MAX_N = 24
 PICTURE_USD = 0.012       # Venice picture ($0.01) + the writer's few hundred tokens — shown as "about"
@@ -156,12 +156,35 @@ def norm(b, ctypes) -> dict | None:
         start = max(0, min(10_000, int(b.get("start") or 0)))
     except (TypeError, ValueError):
         return None
+    if isinstance(b.get("cast"), dict):                        # 🎲 R1 Design a cast: N people, its own run (cast.run)
+        if kind != "picture":
+            return None
+        from . import cast
+        try:
+            cn = max(cast.MIN_N, min(cast.MAX_N, int(b["cast"].get("n") or cast.DEFAULT_N)))
+        except (TypeError, ValueError):
+            return None
+        return {"kind": "cast", "n": cn, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
+    sheet = str(b.get("sheet") or "")                          # 🎭 M2 character sheet: the source picture (project path)
+    if sheet:
+        if kind != "picture":
+            return None
+        from . import refs
+        n, dial, start = len(refs.SHEET_VIEWS), 0, 0
     if not kind or n < 2 and not start:
         return None
-    return {"kind": kind, "n": n, "dial": dial, "start": start, "earlier": [], "items": [], "failed": 0, "now": 0}
+    out = {"kind": kind, "n": n, "dial": dial, "start": start, "earlier": [], "items": [], "failed": 0, "now": 0}
+    if sheet:
+        out["sheet"] = sheet
+    return out
+
+
+CAST_PICTURES = 8          # per person: anchor + 5 sheet views + room for one redesign and a retry
 
 
 def price(kind: str, cfg: dict) -> float:
+    if kind == "cast":
+        return float(cfg.get("batch_picture_usd", PICTURE_USD)) * CAST_PICTURES
     return float(cfg.get("batch_picture_usd", PICTURE_USD) if kind == "picture" else cfg.get("batch_doc_usd", DOC_USD))
 
 
@@ -180,11 +203,14 @@ def view(run) -> dict | None:
         return None
     return {**{k: b[k] for k in ("kind", "n", "dial", "start", "failed", "now")}, "level": level(b["dial"]),
             "level_words": LEVEL_WORDS[level(b["dial"])], "items": b["items"], "earlier": b.get("earlier", []),
-            "next_start": b["start"] + b["n"], "kept": kept(run.root)}
+            "next_start": b["start"] + b["n"], "kept": kept(run.root),
+            **({"briefs": b.get("briefs", []), "apart": b.get("apart", []), "saved": b.get("saved", [])} if b["kind"] == "cast" else {})}
 
 
 def stage_prefix(run) -> str:
     b = getattr(run, "batch", None)
+    if b and b.get("kind") == "cast":
+        return f"🎭 person {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" else ""
     return f"🎛 {min(b['now'] + 1, b['n'])} of {b['n']} · " if b and run.state == "running" else ""
 
 
@@ -197,7 +223,11 @@ def pictures(run) -> None:
         for i in range(b["n"]):
             b["now"] = i
             k = b["start"] + i
-            task_k, v, look = picture_task(base, b["dial"], k)
+            if b.get("sheet"):
+                from . import refs
+                (task_k, v), look = refs.sheet_task(base, k), []
+            else:
+                task_k, v, look = picture_task(base, b["dial"], k)
             run.task, run.state, run.why = task_k, "running", ""
             before = len(run.pictures)
             try:
@@ -220,12 +250,80 @@ def pictures(run) -> None:
             run.save()
     finally:
         run.task = base
+    try:
+        look_at(run)
+    except Exception as e:                                       # noqa: BLE001 — the pictures are made; eyes never lose them
+        if type(e).__name__ in ("Stopped", "SpendBlocked", "PrivacyRefused"):
+            raise
     _finish(run, "picture", stop_reason)
+
+
+def look_at(run) -> None:
+    """👁 M1: after the batch is made, the vision model checks each picture against its own words; best = ⭐."""
+    b = run.batch
+    if not eyes.on(run) or not b["items"]:
+        return
+    if b.get("sheet"):
+        return same_faces(run)
+    by = {p["path"]: p for p in run.pictures}
+    for i, it in enumerate(b["items"]):
+        pic = by.get(it["path"])
+        if it.get("kind") != "picture" or pic is None or it.get("eyes"):
+            continue
+        task_k = picture_task(run.task, b["dial"], it["k"])[0]
+        try:
+            raw = (run.root / it["path"]).read_bytes()
+        except OSError:
+            continue
+        e = eyes.check(run, raw, task_k, pic.get("look"), label=f"picture {i + 1} of {len(b['items'])}")
+        pic["eyes"] = e
+        it["eyes"] = {k: e.get(k) for k in ("score", "missing", "caption", "error", "fix", "fix_task", "low", "refused") if e.get(k) is not None}
+        if e.get("error"):                                       # the vision model is off or broken: don't ask 15 more times
+            eyes.record(run, "batch", e)
+            break
+        run.save()
+    scored = [it for it in b["items"] if (it.get("eyes") or {}).get("score") is not None]
+    for it in b["items"]:
+        it.pop("best", None)
+    if scored:
+        top = max(scored, key=lambda it: it["eyes"]["score"])
+        top["best"] = True
+        run._record({"action": "eyes", "why": f"👁 checked {len(scored)} pictures — best match #{top['k'] + 1} at {top['eyes']['score']}%",
+                     "result": {"scores": {str(it["k"] + 1): it["eyes"]["score"] for it in scored}}, "usd": 0.0})
 
 
 # ---- 📝 docs: one reply per variation, saved as docs/<time>-<words>-<k>.md ----
 DOC_SYS = ("Write what Scott asked for, in Markdown. Keep to his topic and every fact he gave. If a 'Variation:' line is "
            "there, follow it for tone, angle and shape. Reply with the document only — no notes before or after.")
+
+
+def same_faces(run) -> None:
+    """🎭 M2: each sheet view next to the source picture — 👁 "same person?" ($0). Drift is named, never hidden."""
+    from . import refs
+    b = run.batch
+    try:
+        src = (run.root / b["sheet"]).read_bytes()
+    except OSError:
+        return
+    same, drift = 0, []
+    for i, it in enumerate(b["items"]):
+        if it.get("kind") != "picture" or it.get("eyes"):
+            continue
+        try:
+            raw = (run.root / it["path"]).read_bytes()
+        except OSError:
+            continue
+        e = refs.same_face(run, src, raw, f"view {i + 1} of {len(b['items'])} next to the original")
+        it["eyes"] = {k: e.get(k) for k in ("score", "missing", "caption", "error", "same", "refused") if e.get(k) is not None}
+        if e.get("error"):
+            eyes.record(run, "sheet", e)
+            break
+        same += bool(e.get("same"))
+        if not e.get("same"):
+            drift.append(it.get("variation") or f"view {i + 1}")
+        run.save()
+    run._record({"action": "eyes", "why": f"🎭 same-face check: {same} of {len(b['items'])} views match the original"
+                 + (f" — drifted: {', '.join(drift)}" if drift else ""), "result": {"same": same, "drift": drift}, "usd": 0.0})
 
 
 def docs(run) -> None:

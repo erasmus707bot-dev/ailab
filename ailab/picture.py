@@ -15,8 +15,9 @@ from __future__ import annotations
 import base64
 import re
 import time
+from pathlib import Path
 
-from . import creation, looks, memory, picture_route, tag_prompt
+from . import creation, eyes, looks, memory, picture_route, tag_prompt
 from .mcp_client import HermesRefused
 
 SHAPES = {"square": "1:1", "wide": "16:9", "tall": "9:16"}
@@ -134,6 +135,27 @@ def writers(run) -> list[tuple[str, str]]:
     return [w for w in out if w[0] in getattr(run.lab, "providers", {w[0]: 1})]
 
 
+def _style_note(run) -> str:
+    """🎨 R2: lessons of the project's official style (empty when none is chosen)."""
+    try:
+        from . import styles
+        return styles.writer_note(run.root)
+    except Exception:                                            # noqa: BLE001 — a style is a bonus, never a blocker
+        return ""
+
+
+_REF_MODELS = ("local/flux2-klein-4b", "venice/qwen-edit-uncensored")
+
+
+def _refs(run) -> list[str]:
+    """🎭 M2: absolute reference-picture paths for this run (empty = words only, the old path)."""
+    try:
+        from . import refs
+        return refs.for_run(run)
+    except Exception:                                            # noqa: BLE001 — references are a bonus, never a blocker
+        return []
+
+
 def write_prompt(run, words: str) -> str:
     """Scott's words stay exactly as typed; a writer model (uncensored first) only adds detail after them.
     Any writer that refuses or fails is skipped; with none left, his words alone make the picture."""
@@ -142,7 +164,7 @@ def write_prompt(run, words: str) -> str:
         try:
             stage(run, "✍️", f"Adding detail to your words with {model.split('/')[-1]}")
             r = run.lab.chat(run.project, prov, model,
-                             [{"role": "system", "content": PROMPT_SYS}, {"role": "user", "content": words}], 300,
+                             [{"role": "system", "content": PROMPT_SYS + _style_note(run)}, {"role": "user", "content": words}], 300,
                              cap_usd=max(0.0, run.cap_usd - run.usd), task=f"lab-picture:{run.project['id']}")
             run.usd += float(r.usd or 0)
             run.tokens_in += int(getattr(r, "tokens_in", 0) or 0)
@@ -198,6 +220,9 @@ def run(run) -> None:
         return
     words = picture_words(run.task)
     look, look_notes = looks.normalize(looks.from_task(words))          # 🎨 Look line (2026-11-24)
+    if not look:                                             # 🎨 R2: the project's official style supplies the Look
+        from . import styles
+        look = styles.project_look(run.root)
     choices = {}
     if getattr(run, "_picture_answer", None) is None and run.ask_first:
         items = _items(run, look)
@@ -253,8 +278,26 @@ def run(run) -> None:
         args["aspect_ratio"] = asp
     queue, res, out, model, est, t0, pmodel, venice_off, refused = list(plan["models"]), {}, {}, "?", 0.0, time.time(), "", None, None
     base_prompt, base_neg, tagged = args["prompt"], args["negative_prompt"], None
+    ref_paths, ref_added = ([] if forced else _refs(run)), False   # 🎭 M2: the cast strip / a character sheet's source
+    if ref_paths:
+        from . import refs as R
+        local_ok = any(m.startswith("local/") for m in queue) and R.REF_MODELS[0] in picture_route.ready(run)
+        q2 = R.queue(queue, local_ok, any(m.startswith("venice/") for m in queue))
+        ref_added = R.REF_MODELS[1] in q2 and R.REF_MODELS[1] not in queue
+        queue = q2
+        if any(m in R.REF_MODELS for m in queue):
+            run._record({"action": "refs", "why": f"🎭 {len(ref_paths)} reference picture{'s' if len(ref_paths) > 1 else ''} sent so the face holds",
+                         "result": {"refs": [Path(x).name for x in ref_paths]}, "usd": 0.0})
+        else:
+            run._record({"action": "refs", "why": "🎭 no picture model here can use reference pictures (start the local picture "
+                         "service or turn Venice on) — made from your words only", "result": {"refs": []}, "usd": 0.0})
+            ref_paths = []
     while queue:
         pmodel = args["model"] = queue.pop(0)
+        if ref_paths and pmodel in _REF_MODELS:
+            args["reference_images"] = ref_paths
+        else:
+            args.pop("reference_images", None)
         if pmodel.startswith("local/"):
             args["speed"] = speed
         else:
@@ -275,6 +318,16 @@ def run(run) -> None:
         try:
             start = run.lab.mcp.call("image_make", args)
         except HermesRefused as e:
+            if args.get("reference_images") and e.code in ("not_enabled", "bad_path", "bad_args", "too_big"):
+                run._record({"action": "refs", "why": f"🎭 references not used — {e.message}",   # Hermes: route off until its probe passes
+                             "result": {"note": e.message, "fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
+                ref_paths = []
+                args.pop("reference_images", None)
+                if ref_added:
+                    queue = [m for m in queue if m != _REF_MODELS[1]]
+                if pmodel != _REF_MODELS[1]:
+                    queue.insert(0, pmodel)                  # same model, words only
+                continue
             if pmodel.startswith("venice/") and e.code in ("not_enabled", "no_key") and not forced:
                 venice_off = e
             refused, res = e, {}
@@ -305,6 +358,7 @@ def run(run) -> None:
         stage(run, "🔑", "Venice key not added yet — using the default picture model (filtered)")
         args.pop("model", None)
         args.pop("speed", None)
+        args.pop("reference_images", None)
         args["prompt"], args["negative_prompt"] = base_prompt, base_neg
         pmodel = ""
         try:
@@ -341,7 +395,13 @@ def run(run) -> None:
     run.pictures.append(pic)
     run._record({"action": "picture", "path": rel, "why": "🎨 made the picture", "result": {k: v for k, v in pic.items() if k != "prompt"},
                  "usd": usd})
+    if eyes.on(run) and not getattr(run, "batch", None):     # 👁 M1: does it match his words? ($0, never fails the run)
+        pic["eyes"] = eyes.check(run, p.read_bytes(), words, look, label="the picture")
+        eyes.record(run, "picture", pic["eyes"])
     run.state = "done"
     run.why = (f"🖼 Picture made with {pic['model'].split('/')[-1]} in {pic['seconds']} s for ${usd:.3f}. "
                f"Saved in {rel}" + (" and in your Gallery (ai-lab)." if pic["library"] else ".") + f" {pic['keys']}")
+    if (pic.get("eyes") or {}).get("score") is not None:
+        e = pic["eyes"]
+        run.why += f" 👁 {e['score']}% match" + (f" — missing: {', '.join(e['missing'])}." if e["missing"] else ".")
     stage(run, "✅", "Done")

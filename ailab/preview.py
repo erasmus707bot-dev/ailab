@@ -115,7 +115,8 @@ def list_root(root: Path) -> list[dict]:
     for p in sorted(root.rglob("*")):
         rel = p.relative_to(root).as_posix()
         if p.is_file() and not p.is_symlink() and not any(s.startswith(".") for s in rel.split("/")):
-            out.append({"path": rel, "bytes": p.stat().st_size, "editable": p.suffix.lower() in EDIT_EXT})
+            st = p.stat()                                       # mtime: 📚 Library shows the newest first
+            out.append({"path": rel, "bytes": st.st_size, "editable": p.suffix.lower() in EDIT_EXT, "mtime": int(st.st_mtime)})
         if len(out) >= 500:
             break
     return out

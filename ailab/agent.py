@@ -8,6 +8,7 @@ Commands run under srt with no network, writing only inside the project folder.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -109,10 +110,11 @@ Real code folders (linked by Scott): {names}. You can read them and PROPOSE chan
 {{"action":"repo","do":"find","repo":"NAME","pattern":"def complete_task","glob":"*.py"}}   -> paths + matching lines ("dir" narrows it)
 {{"action":"repo","do":"list","repo":"NAME","dir":"forge/ailab"}}
 {{"action":"repo","do":"pull","repo":"NAME","paths":["forge/ailab/card.py"]}}   -> copies into this project as repos/NAME/forge/ailab/card.py
-{{"action":"repo","do":"propose","repo":"NAME","paths":["forge/ailab/card.py"],"note":"what changed and why"}}
+{{"action":"repo","do":"propose","repo":"NAME","paths":["forge/ailab/card.py"],"note":"what changed and why","plain":{{"what":"what Scott will notice, in everyday words","where":"which screen / button / feature","risk":"look only | how it works | data"}}}}
 Way of working: find the code, pull only the files you need, read them, change your copy with "edit" (one spot at a
 time), check it with "run" (python3 -m py_compile repos/NAME/x.py, or node --check), then propose the files you
-changed. Scott sees each as a diff and applies it himself. Keep changes small and matching the code around them."""
+changed. Scott sees each with your "plain" words and Before | After pictures and applies it himself — he does not read
+code, so "plain" is required: no code words, say what he will see or what will work differently. Keep changes small."""
 
 
 def _short(x, n):
@@ -134,12 +136,17 @@ def _approvals() -> Path:
     return d
 
 
-def hold_for_approval(pid: str, run_id: str, path: str, content: str, note: str = "") -> dict:
-    """A write outside the project folder: kept, not applied. Scott decides (📋 Review, M6)."""
+def hold_for_approval(pid: str, run_id: str, path: str, content: str, note: str = "", plain: dict | None = None,
+                      base: str | None = None) -> dict:
+    """A write outside the project folder: kept, not applied. Scott decides (📋 Review, M6).
+    plain = {what, where, risk} in everyday words (2026-11-25); base = sha256 of the real file when it was proposed —
+    apply refuses if the real file changed since (a whole-file write would undo someone else's edit)."""
     aid = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     (_approvals() / f"{aid}.txt").write_text(content)
     item = {"id": aid, "at": time.time(), "kind": "write_outside_project", "project": pid, "run": run_id,
-            "path": path[:300], "bytes": len(content.encode()), "state": "waiting", **({"note": note[:300]} if note else {})}
+            "path": path[:300], "bytes": len(content.encode()), "state": "waiting", **({"note": note[:300]} if note else {}),
+            **({"plain": {k: str(plain.get(k) or "")[:300] for k in ("what", "where", "risk")}} if plain else {}),
+            **({"base": base} if base else {})}
     with open(_approvals() / "items.jsonl", "a") as fh:
         fh.write(json.dumps(item) + "\n")
     return item
@@ -740,6 +747,10 @@ class Run:
             if not paths:
                 return {"error": "paths must be a list of the files you changed (paths inside the linked folder)."}
             note, proposed, skipped = str(a.get("note") or "")[:300], [], []
+            plain = a.get("plain") if isinstance(a.get("plain"), dict) else {}
+            if not str(plain.get("what") or "").strip() or not str(plain.get("where") or "").strip():
+                return {"error": 'Add "plain": {"what": "what Scott will notice, in everyday words", "where": "which '
+                                 'screen or feature", "risk": "look only | how it works | data"} — Scott does not read code.'}
             waiting = approvals()
             for rel in [str(x) for x in paths][:repos.MAX_PULL]:
                 rel = rel.removeprefix(f"repos/{name}/")
@@ -762,7 +773,9 @@ class Run:
                 for old in waiting:                               # a newer proposal for the same file replaces the waiting one
                     if old.get("path") == str(target) and old.get("project") == self.project["id"]:
                         set_approval_state(old["id"], "superseded")
-                item = hold_for_approval(self.project["id"], self.id, str(target), text, note=f"{name}: {note}" if note else name)
+                cur = target.read_bytes() if target.is_file() else b""
+                item = hold_for_approval(self.project["id"], self.id, str(target), text, note=f"{name}: {note}" if note else name,
+                                         plain=plain, base=hashlib.sha256(cur).hexdigest())
                 proposed.append({"path": rel, "approval": item["id"]})
             return {"proposed": proposed, "skipped": skipped,
                     "note": "Held for Scott — he sees each as a diff and applies it himself. Nothing was written to the real folder."}
@@ -1021,6 +1034,10 @@ class Run:
                 self._record({"action": "route", "why": f"🎨 Art idea with no chip picked → made as {kind} with the uncensored "
                               "writer + art models (not the coding agent)", "result": {"ctypes": self.ctypes}, "usd": 0.0})
             if getattr(self, "batch", None):                # 🎛 batch: N pictures / docs, its own short path
+                if self.batch["kind"] == "cast":            # 🎲 R1 Design a cast (2026-11-25)
+                    from . import cast as castmod
+                    castmod.run(self)
+                    return
                 (batchmod.pictures if self.batch["kind"] == "picture" else batchmod.docs)(self)
                 return
             if getattr(self, "picture", False):             # 🖼 picture run: its own short path, same safety handling
@@ -1106,7 +1123,8 @@ class Run:
         except preview.PreviewError as e:
             self.state, self.why = "failed", f"{e.icon} {e.message}"
         except Exception as e:                                        # noqa: BLE001 — report, never crash the Lab
-            self.state, self.why = "failed", f"⚠️ {type(e).__name__}: {str(e)[:300]}"
+            from . import guide                                       # noqa: PLC0415
+            self.state, self.why = "failed", guide.explain(e, where=f"run {self.id} · {self.project.get('name', '')}")
         finally:
             self.live = False
             self.save()

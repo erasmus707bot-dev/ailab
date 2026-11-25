@@ -57,6 +57,10 @@ DEFAULTS: dict = {
     "repos": {},                          # 🔗 linked code folders the agent may read + propose changes to: {"hermes": "~/hermes"}
     "programs": {},                       # 🔗 one program, several linked folders: {"hermes": ["hermes", "hermes-forge"]}
     "hermes_url": "",                     # connected mode: where the ⌂ Hermes button goes
+    # 2026-11-24 online Lab (Tailscale HTTPS serve, like Hermes + ERASMUS). Who may use it: Hermes's owner logins
+    # (gate.py) plus any listed here. public_url is what Hermes / Iris buttons open.
+    "owner_logins": [],
+    "public_url": "https://gandalf-nuc11phi7.tail5f20a0.ts.net:8850/",
 }
 
 
