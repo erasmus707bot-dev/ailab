@@ -486,6 +486,14 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .bdlist { display: flex; flex-wrap: wrap; gap: 6px; }
   .bdbox input[type=search] { flex: 1; min-width: 0; min-height: 44px; }
   @media (max-width: 640px) { .bdscene { grid-template-columns: 1fr; } }
+  /* 🎬 R3 rebuild — side by side, stacked on a phone */
+  .rbpair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rbpair video { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; }
+  .rbstrip { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rbscene { display: flex; align-items: center; gap: 4px; min-height: 44px; }
+  .rbscene img { height: 48px; border-radius: 6px; }
+  .rbbox .trow.warn { border-color: #b9893a; }
+  @media (max-width: 640px) { .rbpair { grid-template-columns: 1fr; } }
   /* 🧹 2026-11-25 simplify: 🚪 clean start + 📚 all-projects Library */
   .welcome { max-width: 640px; margin: 4vh auto 0; display: flex; flex-direction: column; gap: 14px; }
   .welcome h2 { margin: 0; }
@@ -514,6 +522,7 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   <select class="projsel" id="projsel" title="Project"></select>
   <button class="ib" id="projnew" title="New project" aria-label="New project">➕</button>
   <button class="ib" id="libtop" title="📚 Library — everything you've made, in every project" aria-label="Library — everything you've made">📚</button>
+  <a class="ib" id="crafttop" href="/craft" title="📓 Craft Book — what the Lab has learned makes your pictures, clips and stories come out right" aria-label="Craft Book" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit">📓</a>
   <a class="ib" id="looptop" href="/loop" title="🔁 Loop — make it with Hermes + the Lab, rate it, it learns" aria-label="Creative Loop" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit">🔁</a>
   <button class="ib" id="projwhere" title="📍 Where are this project's files?" aria-label="Where are this project's files">📍</button>
   <button class="chip" id="waiting" title="Changes waiting for your OK" hidden></button>
@@ -522,7 +531,6 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
     <span class="chip spend" id="spend" title="Spent today / daily cap"><span>💲</span><span id="spendtxt">–</span><span class="bar"><i id="spendbar"></i></span></span>
     <button class="ib" id="full" title="Full screen" aria-label="Full screen">⛶</button>
     <button class="ib" id="settings" title="Settings — keys" aria-label="Settings">⚙️</button>
-  <a class="ib" id="crafttop" href="/craft" title="📓 Craft Book — what the Lab has learned makes your pictures, clips and stories come out right" aria-label="Craft Book" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit">📓</a>
     <button class="ib" id="theme" title="Light / dark" aria-label="Light or dark mode">☀️</button>
   </span>
 </header>
@@ -1265,6 +1273,77 @@ function breakdownBox(p, hooks) {
 /* 📖 M3 Story (Scott 2026-11-25): pick a cast (♻️ reuse / 🆕 make), say the idea, pick ⚡ Short / 📚 Long / ✍️ Words,
    ▶ Make the story → one chapter per run: 📚 bible → 🗒 shots → 🖼 stills (cast as references, 👁 checked) → 🎞 clips →
    🎙 voice → one film. 📚 Story bible = what every later chapter must respect; edit it here. */
+/* 🎬 R3 (Scott 2026-11-25): rebuild a video with his own cast. Start screen = ♻️ reuse / 🆕 make a cast · pick a broken-down
+   video · 🔁 whole / 🎯 pick scenes · level · sound · voice · clip path. ⚖️ Review = original and rebuild side by side, in sync,
+   a score per shot, 🔁 retry one shot. Results are 🔒 personal. */
+function rebuildBox(p, hooks) {
+  const box = h("div", { class: "rbbox", id: "rbbox" }), note = h("span", { class: "note", role: "status" });
+  const sel = (label, pairs, pick) => h("select", { "aria-label": label }, ...pairs.map(([k, v]) => h("option", { value: String(k), selected: String(k) === String(pick) }, v + (String(k) === String(pick) ? " ⭐" : ""))));
+  const src = h("select", { "aria-label": "Which video to rebuild" }), strip = h("div", { class: "rbstrip", hidden: true });
+  const mode = sel("Whole video or pick scenes", [["whole", "🔁 Whole video"], ["pick", "🎯 Pick scenes"]], "whole");
+  const level = sel("How close", [[2, "🎯 Same shots (framing + camera)"], [3, "🏃 Same movement — hosted, price shown first"]], 2);
+  const audio = sel("Sound", [["narrate", "✍️ New words + narrator"], ["keep", "🔊 Keep the original sound"], ["silent", "🔇 Silent"]], "narrate");
+  const voice = sel("Voices", [["narrator", "🎙 One narrator"], ["each", "🗣 A voice per character"], ["lipsync", "👄 Talking, lip sync — hosted, not available yet"]], "narrator");
+  const clips = sel("How the shots move", [["free", "🆓 Pan-and-zoom ($0)"], ["local", "🏠 AI motion on this computer ($0, slow)"], ["venice", "💲 Venice AI motion (price first)"]], "free");
+  const review = h("div", { class: "rbreview" }), list = h("div", { class: "bdlist" });
+  let scenes = [];
+  async function loadScenes() {
+    if (!src.value) return;
+    const r = await api(`/api/breakdown?id=${encodeURIComponent(src.value)}`);
+    scenes = r.ok ? (r.scenes || []) : [];
+    strip.replaceChildren(...scenes.map(s => h("label", { class: "rbscene" }, h("input", { type: "checkbox", value: String(s.i), checked: true }),
+      h("img", { src: `/api/breakdown/pic?path=${encodeURIComponent(s.frame_path)}`, alt: "", loading: "lazy" }), ` ${s.i + 1}`)));
+  }
+  mode.addEventListener("change", () => { strip.hidden = mode.value !== "pick"; if (!strip.hidden && !strip.childElementCount) loadScenes(); });
+  src.addEventListener("change", () => { strip.replaceChildren(); if (mode.value === "pick") loadScenes(); });
+  const cfg = extra => ({ bd: src.value, mode: mode.value, picks: mode.value === "pick" ? [...strip.querySelectorAll("input:checked")].map(i => +i.value) : [],
+    level: +level.value, audio: audio.value, voice: voice.value, clips: clips.value, ...(extra || {}) });
+  const go = h("button", { class: "btn pri", type: "button", onclick: () => {
+    if (!src.value) { note.textContent = "🎞 Pick a broken-down video first (open a video → 🎞 Break it down)."; return; }
+    if (!(hooks && hooks.rebuild)) return;
+    hooks.rebuild(`Rebuild “${src.selectedOptions[0].textContent}” with my cast`, cfg());
+    note.textContent = "🎬 Rebuild started — watch 🤖 Make. Then ⚖️ Review below."; } }, "▶ Rebuild it");
+  async function openReview(bd) {
+    const r = await api(`/api/rebuild?project=${encodeURIComponent(p.id)}&bd=${encodeURIComponent(bd)}`);
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message}`; return; }
+    const tab = r.table || [];
+    const orig = h("video", { src: `/api/rebuild/src?project=${encodeURIComponent(p.id)}&bd=${encodeURIComponent(bd)}`, muted: true, playsinline: true, preload: "metadata" });
+    const out = h("video", { src: r.film ? `/preview/${p.id}/${encodeURI(r.film)}` : "", controls: true, playsinline: true, preload: "metadata" });
+    const srcT = t => { for (const x of tab) if ((t >= x.out_start && t < x.out_end) || x === tab[tab.length - 1]) {
+      const f = Math.max(0, Math.min(1, (t - x.out_start) / ((x.out_end - x.out_start) || 1))); return x.src_start + f * (x.src_end - x.src_start); } return 0; };
+    const sync = () => { const want = srcT(out.currentTime); if (Math.abs(orig.currentTime - want) > 0.3) orig.currentTime = want; };
+    out.addEventListener("play", () => { sync(); orig.play().catch(() => {}); });
+    out.addEventListener("pause", () => orig.pause());
+    out.addEventListener("seeked", sync);
+    out.addEventListener("timeupdate", sync);
+    const shots = (r.beats || []).map(x => { const e = x.eyes || {}, bad = (x.identity || []).concat(x.clip_identity || []);
+      return h("div", { class: "trow" + (bad.length || (e.score != null && e.score < 70) ? " warn" : "") },
+        x.still ? h("img", { src: `/preview/${p.id}/${encodeURI(x.still)}`, alt: "", style: "height:56px;border-radius:6px" }) : null,
+        h("span", {}, `Shot ${x.k + 1} · scene ${x.scene + 1} · ${x.seconds} s · ${e.score != null ? `👁 ${e.score}%` : "👁 —"}`
+          + (bad.length ? ` · ⚠️ ${bad.join(", ")}` : "") + (x.error ? ` · ❌ ${x.error}` : "")),
+        h("button", { class: "btn", type: "button", title: "Play both from this shot", onclick: () => { out.currentTime = tab.find(t => t.k === x.k)?.out_start || 0; } }, "▶ Jump"),
+        h("button", { class: "btn", type: "button", title: "Re-make only this shot — the others stay as they are", onclick: () => { hooks.rebuild(`Retry shot ${x.k + 1} of “${r.title}”`, { ...(r.settings || {}), bd, retry: x.k }); note.textContent = `🔁 Re-making shot ${x.k + 1} only — watch 🤖 Make.`; } }, "🔁 Retry this shot")); });
+    const keep = h("button", { class: "btn pri", type: "button", disabled: !r.film, onclick: async () => { const k = await api("/api/batch/keep", { project: p.id, path: r.film, keep: true }); note.textContent = k.ok ? "✅ Kept — it's on your 📚 Library shelf (🔒 personal)." : `⚠️ ${k.message}`; } }, "✅ Keep whole rebuild");
+    review.replaceChildren(h("div", { class: "trow" }, h("b", {}, `⚖️ ${r.title} — 🔒 personal`), h("button", { class: "btn", type: "button", onclick: () => review.replaceChildren() }, "✕ Close")),
+      ...(r.notes || []).map(n => h("p", { class: "note" }, n)),
+      h("div", { class: "rbpair" }, h("figure", {}, orig, h("figcaption", { class: "note" }, "Original (follows the rebuild)")), h("figure", {}, out, h("figcaption", { class: "note" }, "Your rebuild"))),
+      ...shots, h("div", { class: "runbar" }, keep));
+    review.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  async function paint() {
+    const b = await api("/api/breakdowns");
+    const done = b.ok ? (b.breakdowns || []).filter(x => x.state === "done") : [];
+    src.replaceChildren(...(done.length ? done.map(x => h("option", { value: x.id }, `${x.title || x.name}${x.private ? " 🔒" : ""} (${x.count} scenes)`)) : [h("option", { value: "" }, "— no broken-down videos yet —")]));
+    const rr = await api(`/api/rebuild?project=${encodeURIComponent(p.id)}`);
+    list.replaceChildren(...((rr.ok && rr.rebuilds) || []).map(x => h("button", { class: "btn", type: "button", onclick: () => openReview(x.bd) }, `⚖️ ${x.title} (${x.shots} shots)`)));
+  }
+  box.replaceChildren(castPicker(p, hooks, { id: "rbcast", forWhat: "a video rebuild" }),
+    h("div", { class: "trow" }, h("span", {}, "Video:"), src), h("div", { class: "trow" }, mode, level), strip,
+    h("div", { class: "trow" }, audio, voice, clips), h("div", { class: "runbar" }, go, h("button", { class: "btn", type: "button", onclick: paint }, "↻")),
+    h("div", { class: "trow" }, h("span", {}, "⚖️ Review a rebuild:"), list), review, note);
+  paint();
+  return box;
+}
 function storyBox(p, hooks) {
   const box = h("div", { class: "storybox", id: "storybox" }), note = h("span", { class: "note", role: "status" });
   const idea = h("textarea", { rows: 3, placeholder: "Your story idea, in your words — e.g. two rivals race to light the lighthouse in a storm", "aria-label": "Story idea" });
@@ -1912,6 +1991,8 @@ function startView() {
       S.flags.live ? h("button", { class: "btn", type: "button", id: "golive", onclick: () => go("live"), title: "See a running page, say what to change, see Now beside New" }, "🪞 Show & change a page") : null),
     ag ? h("details", { class: "optfold", id: "wbstory", ontoggle: e => { if (e.target.open && !e.target.querySelector(".storybox")) e.target.append(storyBox(p, libHooks)); } },
       h("summary", {}, "📖 Story — short video, long chapters, or words")) : null,
+    ag ? h("details", { class: "optfold", id: "wbrebuild", ontoggle: e => { if (e.target.open && !e.target.querySelector(".rbbox")) e.target.append(rebuildBox(p, libHooks)); } },
+      h("summary", {}, "🎬 Rebuild a video with my cast")) : null,
     ag ? h("details", { class: "optfold" }, h("summary", {}, "🎯 More ways to start"), ag.repoRow, ag.goals) : null);
   /* 🧹 remodel M2 (Scott 2026-11-25, pick 1): the loop — ✅ Keep & start new (gets a number in 📚 Library) ·
      🗑 Throw away (hidden, ↩ back for 30 days) · 🆕 Just clear (decide later). All three leave a clean slate in the same project. */
@@ -1939,8 +2020,9 @@ function startView() {
     sheet: path => { if (ag) ag.startWith("Character sheet of the person in this picture", ["image"], false, { n: 5, sheet: path }); },
     make: task => { if (ag) ag.startWith(task, ["image"], false); },
     castDesign: (n, forWhat) => { if (ag) ag.startWith(`Design a cast of ${n} people` + (forWhat ? ` for: ${forWhat}` : ""), ["image"], false, { cast: { n } }); },
-    motionFill: fill => { if (ag) ag.startWith(fill.mode === "result" ? "🏃 Save the motion of this result" : "🏃 Pull a motion from a video", ["image"], false, { fill }); },
-    story: (idea, opts) => { if (ag) ag.startWith(idea, ["image"], false, { story: opts }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject };
+    story: (idea, opts) => { if (ag) ag.startWith(idea, ["image"], false, { story: opts }); },
+    rebuild: (title, opts) => { if (ag) ag.startWith(title, ["image"], false, { rebuild: opts }); },
+    motionFill: fill => { if (ag) ag.startWith(fill.mode === "result" ? "🏃 Save the motion of this result" : "🏃 Pull a motion from a video", ["image"], false, { fill }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject };
   const lib = libraryBox(p, libHooks);
   let libKey = null;
   function syncStage() {
