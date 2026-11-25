@@ -171,8 +171,9 @@ STUDY_NEG = ("child, teen, minor, young-looking, youthful face, school uniform, 
              "extra fingers, extra toes, missing fingers, extra limbs, deformed anatomy, cropped body part, blurry, "
              "asymmetric face, distorted face, warped features, mixed-sex anatomy, sexual pose, explicit, "
              "lingerie, lace, thong, sheer fabric, glamour, boudoir, pin-up")
-STUDY_PHOTO_NEG = "flayed, ecorche, exposed muscle, skeleton, skull, mannequin, statue, plastic"
+STUDY_PHOTO_NEG = "flayed, ecorche, exposed muscle, skeleton, skull, mannequin, statue, plastic, bandage, tape, brace"
 STUDY_DRAWN_NEG = "full body, full skeleton, multiple views, sketch sheet"
+# M3 run (2026-11-25 10:28): 'biceps' made Juggernaut flex; knees got kinesiology tape; soles drew foot tops. M3c (14:27): global fixes failed → per-part 'nx'.
 # 2026-11-25 run 1: Juggernaut drew skinned/écorché bodies and a mannequin for photos; SDXL base drew whole skeletons
 # and skull sheets for single parts; run 2-3: Female figure drifted to lingerie on Juggernaut — negatives alone didn't stop it, so lower-body presets ask for plain briefs; Lustify (Venice) sexualised hips/thighs/stomach — Study never goes to Venice.
 # 2026-11-25 anatomy study (Scott): every 🦴 Study pick carries an adult-only guard and the usual anatomy failures.
@@ -196,6 +197,10 @@ def negative(names: list[str], base: str, cat: dict | None = None) -> str:
     extra = STUDY_PHOTO_NEG if photo(names) or not drawn else STUDY_DRAWN_NEG
     if drawn and not photo(names) and not any(n.lower() == "face study" for n in names):
         extra += ", skull"
+    # 🦴 per-part negatives (2026-11-25 M3c: neck drew faces, knees got tape, soles drew foot tops — global negatives can't say "no face" for one part)
+    own = [it["nx"] for n in names for _t, it in [idx.get(n.lower(), (None, None))] if it and it.get("nx")]
+    if own:
+        extra += ", " + ", ".join(own)
     return f"{out}, {STUDY_NEG}, {extra}"
 
 

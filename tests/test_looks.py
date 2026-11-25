@@ -250,3 +250,11 @@ def test_study_photo_only_words():
     ph = " ".join(looks.parts(["Photo", "Hips study"])[0])
     at = " ".join(looks.parts(["Anatomy atlas", "Hips study"])[0])
     assert "briefs" in ph and "briefs" not in at
+
+
+def test_study_part_negatives_only_for_that_part():
+    """2026-11-25 M3c: per-part 'nx' negatives (neck → no face) ride only with their own Study pick."""
+    neck = looks.negative(["Photo", "Male figure", "Neck study"], "text")
+    face = looks.negative(["Photo", "Male figure", "Face study"], "text")
+    assert "eyes, nose" in neck and "eyes, nose" not in face
+    assert "kinesiology tape" in looks.negative(["Anatomy atlas", "Knees study"], "text")
