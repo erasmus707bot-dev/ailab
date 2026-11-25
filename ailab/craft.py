@@ -6,7 +6,7 @@ asked, each with its evidence. Makers hand the fitting notes to the writer model
 away and 🔁 fixes that worked feed back, so notes earn their place or get proposed for retirement.
 
     note = {id, kind, when[], model, do, why, cat, source, status, added, base, used, helped, kept, tossed, examples[]}
-    kind   picture | video | story | motion | rebuild | doc | build | any
+    kind   picture | video | story | motion | rebuild | doc | build | capture | any
     when   words that must appear in his words ("#count" = he gave a number of things); empty = always
     source seed | handoff | scott → start `proposed` (Scott's one batch review) · measured → goes live by itself
     status proposed | live | retired          (flag `retire` = used 6×, helped 0 → Scott is asked)
@@ -27,7 +27,7 @@ from pathlib import Path
 
 from . import config
 
-KINDS = ("picture", "video", "story", "motion", "rebuild", "doc", "build", "any")
+KINDS = ("picture", "video", "story", "motion", "rebuild", "doc", "build", "capture", "any")
 SOURCES = ("seed", "handoff", "scott", "measured")
 MAX_NOTES_IN_PROMPT = 6
 MAX_CHARS = 1100

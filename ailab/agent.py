@@ -264,8 +264,10 @@ class Run:
         self.picture = creation.picture_mode(self.ctypes)
         self.pictures: list[dict] = []
         # 🎬 video runs + 📝 document runs (2026-11-24, Scott: "my art in video, document, game, and software forms")
-        self.video = creation.video_mode(self.ctypes)
-        self.docmode = creation.doc_mode(self.ctypes) and not self.video
+        # 🎥 capture runs (Lab capture C2, 2026-11-25): screenshots + clips through Hermes capture tools
+        self.capture = creation.capture_mode(self.ctypes)
+        self.video = creation.video_mode(self.ctypes) and not self.capture
+        self.docmode = creation.doc_mode(self.ctypes) and not self.video and not self.capture
         self.videos: list[dict] = []
         self.split: dict | None = None        # 🎭 art/code split result (content.py) for game/site/app runs
         # 🎛 Batch create (2026-11-24 Module 3): N pictures or docs, the dial sets how different each one is
@@ -300,7 +302,7 @@ class Run:
         self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
         # M5 (2026-11-24): plain progress list from the prompt's "## Module N" headings + on-screen questions
         heads = list(re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)[ \t]*[—:–.-]*[ \t]*(.*)$", self.task, re.M))[:12]
-        if self.picture or self.batch or self.video or self.docmode:   # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
+        if self.picture or self.batch or self.video or self.docmode or self.capture:   # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
             heads = []                        # — a picture run makes one picture; it has no modules or gates
         self.plan = [m.group(1) for m in heads]
         self.prompt_plan = bool(heads)        # modules came from a build prompt (not the agent's own plan)
@@ -1052,6 +1054,10 @@ class Run:
                     return
                 (batchmod.pictures if self.batch["kind"] == "picture" else batchmod.docs)(self)
                 return
+            if getattr(self, "capture", False):             # 🎥 capture run (Lab capture C2, 2026-11-25)
+                from . import capturerun
+                capturerun.run(self)
+                return
             if getattr(self, "picture", False):             # 🖼 picture run: its own short path, same safety handling
                 picture.run(self)
                 return
@@ -1150,6 +1156,7 @@ def art_run(r) -> bool:
     """🖼 picture · 🎬 video · 📝 writing · 🎛 batch of those = an art run. Art runs share a project with anything
     (Scott 2026-11-24: "make pictures while a video renders"); build/code runs stay one at a time per project."""
     return bool(getattr(r, "picture", False) or getattr(r, "video", False) or getattr(r, "docmode", False)
+                or getattr(r, "capture", False)
                 or getattr(r, "batch", None))
 
 
@@ -1158,7 +1165,7 @@ def art_request(task: str, ctypes, batch) -> bool:
     ids = [t["id"] for t in creation.pick(ctypes)]
     if not ids:
         ids = creation.art_route(picture.picture_words(task), [])
-    if creation.picture_mode(ids) or creation.video_mode(ids) or creation.doc_mode(ids):
+    if creation.picture_mode(ids) or creation.video_mode(ids) or creation.doc_mode(ids) or creation.capture_mode(ids):
         return True
     return bool(batchmod.norm(batch, ids))
 

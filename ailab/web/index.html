@@ -2339,8 +2339,8 @@ function askPop(run) {
   if (q.kind === "plan") {                                /* 🗺 plan gate: the list, then Go */
     const free = h("input", { type: "text", placeholder: "…or say what to change in the plan", "aria-label": "What to change" });
     submit = () => { if (free.value.trim()) reply(free.value.trim()); };
-    body = [h("h3", {}, "🗺 Here is the plan"), h("ol", { class: "planlist" }, (q.plan || []).map(x => h("li", {}, `⏳ ${x}`))),
-      h("div", { class: "row" }, h("button", { class: "btn pri", type: "button", onclick: () => reply("Go") }, "▶ Go ⭐")),
+    body = [h("h3", {}, q.title || "🗺 Here is the plan"), h("ol", { class: "planlist" }, (q.plan || []).map(x => h("li", {}, `⏳ ${x}`))),
+      h("div", { class: "row" }, h("button", { class: "btn pri yours", type: "button", onclick: () => reply("Go") }, q.go || "▶ Go ⭐")),
       free, h("div", { class: "row" }, later, h("button", { class: "btn", type: "submit" }, "✏️ Send change"), note)];
   } else {                                                /* ❓ question cards: options, ⭐ = the AI's recommended pick */
     const items = (q.items && q.items.length) ? q.items : [{ q: q.text, choices: q.choices || [], best: -1, why: "" }];

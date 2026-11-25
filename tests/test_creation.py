@@ -11,7 +11,7 @@ from tests.test_workflow import DONE, OK, W, wait_for
 class TypesFile(Base):
     def test_starting_types(self):
         ids = [t["id"] for t in creation.all_types()]
-        self.assertEqual(ids, ["website", "android", "windows", "linux", "game", "text", "edit", "image", "video"])
+        self.assertEqual(ids, ["website", "android", "windows", "linux", "game", "text", "edit", "image", "video", "capture"])
         for t in creation.all_types():
             self.assertTrue(t["icon"] and t["label"] and t["use"] and t["robot"] in ("play", "page", "none"))
 
@@ -63,7 +63,7 @@ class TypesFile(Base):
     def test_bad_extra_file_is_ignored(self):
         (config.home() / "creation_types.json").write_text("{nope")
         try:
-            self.assertEqual(len(creation.all_types()), 9)
+            self.assertEqual(len(creation.all_types()), 10)
         finally:
             (config.home() / "creation_types.json").unlink()
 
@@ -130,7 +130,7 @@ class Routes(AgentOn):
     def test_types_route_and_start_with_chips(self):
         code, r, _ = self.req("/api/creation_types")
         self.assertEqual(code, 200)
-        self.assertEqual(len(r["types"]), 9)
+        self.assertEqual(len(r["types"]), 10)
         self.assertIn("words", r["types"][0])
         self.lab.chat = Brain([act(action="done", summary="ok")]).chat
         code, r, _ = self.req("/api/agent/start", {"project": "scratch", "provider": "ollama", "model": "m", "task": "a site",

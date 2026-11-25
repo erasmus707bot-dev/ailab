@@ -76,6 +76,14 @@ TYPES: list[dict] = [
      "questions": [["Length?", ["Under 30 seconds ⭐", "About a minute", "Longer"]],
                    ["Shape?", ["Tall (phone) ⭐", "Wide (screen)", "Square"]]]},
 ]
+CAPTURE = {"id": "capture", "icon": "🎥", "label": "Capture", "use": "💬 general", "robot": "none", "ship": [],
+           "words": ["screenshot", "screenshots", "screen shot", "screen shots", "capture", "walk-through", "walkthrough",
+                     "screen recording", "record the screen", "demo clip", "portfolio shot", "portfolio shots", "phone shots"],
+           "guide": "Screenshots and clips of Scott's apps (Lab capture C2): the Lab plans the shots, captures the test phone, "
+                    "its own browser or the test VM through Hermes capture tools, checks each with 👁 Eyes and saves them in "
+                    "captures/. His real desktop only after his ✋ in Hermes.",
+           "questions": []}
+TYPES.append(CAPTURE)
 KEYS = ("id", "icon", "label", "use", "robot", "ship", "words", "guide", "questions", "art", "handoff")
 ROBOT_ORDER = {"play": 3, "page": 2, "none": 1}
 
@@ -159,6 +167,11 @@ def video_mode(ids) -> bool:
     """🎬 on (🖼 may be on too), nothing page/app-like → a video run (video.py)."""
     ids = [t["id"] for t in pick(ids)]
     return "video" in ids and not any(t in ids for t in PAGE_TYPES)
+
+
+def capture_mode(ids) -> bool:
+    """🎥 on → a capture run (capturerun.py). It wins over 🎬/🖼/📝: "a clip of my app" is a recording, not a made video."""
+    return "capture" in [t["id"] for t in pick(ids)]
 
 
 def doc_mode(ids) -> bool:
