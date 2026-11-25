@@ -126,7 +126,23 @@ Both made by the Lab (deepseek-v4.1-flash, Scratch), diffs read, **not applied �
 **Applied by Scott 04:38–04:42, committed:** ailab `0ace9f2` (✋ row CSS — HEAD + this hunk only) · hermes `cc5a1e04` (Iris 🛟 tile). Guard copies "before a Lab change" 04:38:30 (ailab) and 04:42:21 (hermes); both watches were running at 04:43, held list empty.
 - **Bug seen (Scott's screenshots), NOT fixed:** after "🛡 Apply all 2 together" the note stayed on "🧪 testing all of them together in a safe copy…" forever. The Lab change went in and the Lab restarted itself at 04:38:31 (that is the apply working), which cut the reply, so the page never heard the result. The Hermes row was still waiting afterwards and Scott applied it by its own ✅ at 04:42 — so in a mixed Lab + Hermes group, the Lab's own restart appears to stop the rest of the group. Fix needed in the Lab: write/restart the Lab LAST in a group (or finish every write before any restart), and have the page poll `/api/health` until `started` changes, then reload the ✋ list.
 
-**Left:** fix the apply-all bug above · Argus re-check of ✋ rows with the new CSS (needs a waiting row; the all-row box/button sit outside `.chg`) · Iris rebuild + touch test of the 🛟 tile · pushes (Scott).
+**Apply-all bug fixed:** ailab `de8936d` — prove every program first, write, then restart; the Lab itself last (4 s). +1 test. Applied by Scott through 🛡 05:51.
+
+## Session 6 — 2026-11-25 (Scott: "no idea what is being cleared because it's just code" → pick 1: plain card + pictures)
+**Built + live** (most of it landed in another session's catch-up commit `158f1d6`; mine on top: `9884ce7`, `93ed722`):
+- **Plain words required:** `repo propose` refuses without `"plain": {what, where, risk}`; stored on the row. The Lab writes them by itself (seen live twice).
+- **🔀 moved check:** each row stores the real file's sha when proposed; Apply refuses if the file changed since (a whole-file write would undo someone else's edit). +tests.
+- **📸 Before | After** (`ailab/shots.py`): page files (.html/.css/.js) get two phone-sized pictures. Lab and Hermes pages render against the **running program** through a GET-only proxy (real data), only the changed file swapped; a static folder copy if the live page ≠ the disk file. The changed spot is found by its words first, then specific selectors, unhidden, scrolled to and outlined in gold on After. Code files get "⚙️ Nothing to picture — changes how it works". ~4 s per row, cached per proposal.
+- **✋ row UI:** title = where · 👀 What changes / 📍 Where / ⚖️ Kind / 🛡 who · pictures · code folded under "🔧 Show the code".
+- Verified live: Hermes /remote text change → gold outline on the right sentence, Before vs After correct.
+- **Argus (phone):** row shows plain card, both pictures (161×356 each, tap opens big), buttons 50 px, code folded, no console errors, no sideways scroll. Text under 23 px fixed (`93ed722`). **"🔧 Show the code" toggle NOT confirmed by touch** — the rig's taps kept landing on the next element.
+- **Finding (not mine, not fixed):** the Lab renders 494 px wide on the 393 px phone — the top bar's `span.chips` (🔌 Hermes · 💲 $x / $2) overflows, so Chrome zooms the whole page out (~0.8×). Makes everything smaller on Scott's phone and threw off the rig.
+
+**🛟 Guard incident 05:04:** `ailab-guard restore ailab 20261125-130237-858` was run **from a terminal** (Guard log `by: terminal`) — not the watchdog, not Lab code. It put back 1 file (`video.py`, since re-done by its session) and set aside 1 (`tests/test_video_look.py` → put back, `4f2d0da`, 4 pass). The copy it used was mine, taken AFTER my edits — rule from now on: Guard copy before editing, and no whole-tree watch while other sessions are editing (a roll-back takes their work too). Helper kept: `~/hermes-data/_tmp/guardfix/fetch.sh`.
+
+**Waiting in ✋:** "touch-test row — reject after" (Hermes remote.html sentence) — Scott: ✗ Reject it.
+
+**Left:** confirm "🔧 Show the code" by touch once the top bar fits the phone · Iris rebuild + 🛟 tile touch test · pushes (Scott) · Guard improvement worth considering: restore only the files a change touched, not the whole tree.
 
 No night tail: M4 needs the guard installed + `check` all ✅ first.
 
