@@ -63,6 +63,15 @@ def _json(text: str) -> dict:
         raise LoopError("The model's JSON was broken — try again.", "bad_reply", 502) from None
 
 
+class _Shim:
+    """Just enough of a run for craft.for_run: an id, the config, a step list."""
+    def __init__(self, rid: str, cfg: dict):
+        self.id, self.cfg, self.steps, self.craft_used = rid, cfg, [], []
+
+    def _record(self, row: dict) -> None:
+        self.steps.append(row)
+
+
 class Loop:
     def __init__(self, app):
         self.app = app
@@ -89,7 +98,51 @@ class Loop:
         return self._call("creative_job_plan", args)
 
     def run(self, b: dict) -> dict:
-        return self._call("creative_job_run", {"job_id": str(b.get("job_id") or ""), "payloads": b.get("payloads") or {}})
+        jid, pls = str(b.get("job_id") or ""), dict(b.get("payloads") or {})
+        if (getattr(self.app, "cfg", None) or {}).get("loop_writer", True) is not False:
+            try:
+                pls = self.write_prompts(self._call("creative_job_get", {"job_id": jid})["job"], pls)
+            except Exception:                                   # noqa: BLE001 — a missing prompt falls back to Hermes's own
+                pass
+        return self._call("creative_job_run", {"job_id": jid, "payloads": pls})
+
+    # ---- 📓 Loop pictures get the Lab's writer (Craft Book notes + 🔢 count layout), 2026-11-25
+    def write_prompts(self, job: dict, pls: dict) -> dict:
+        """Every 🖼 lab.image piece not yet made gets a written prompt in its payload; Hermes uses it instead of
+        "do — goal". Notes used are remembered as run "loop:<job>:<n>" so ✅/🔁/❌ ratings count on them."""
+        for piece in job.get("pieces") or []:
+            n = piece.get("n")
+            if piece.get("method") != "lab.image" or piece.get("state") in ("done", "running") \
+                    or pls.get(str(n)) is not None or pls.get(n) is not None:
+                continue
+            text = self.write_one(job, piece)
+            if text:
+                pls[str(n)] = {"prompt": text[:1500]}
+        return pls
+
+    def write_one(self, job: dict, piece: dict) -> str:
+        from . import craft, picture                            # noqa: PLC0415
+        words = f"{piece.get('do') or ''} — {job.get('goal') or ''}".strip(" —")
+        shim = _Shim(f"loop:{job.get('id')}:{piece.get('n')}", self.app.cfg)
+        sys = picture.PROMPT_SYS + craft.for_run(shim, "picture", words)
+        project = {"id": f"loop-{job.get('id')}", "name": f"loop-{job.get('id')}", "sensitive": bool(job.get("sensitive"))}
+        lay = picture.count_layout(words)
+        head = f"{words.rstrip('.')}." + (f" {lay}" if lay else "")
+        cfg_w = [tuple(w) for w in (self.app.cfg.get("picture_writers") or []) if isinstance(w, (list, tuple)) and len(w) == 2]
+        provs = getattr(self.app.lab, "providers", {}) or {}
+        for prov, model in [w for w in (cfg_w or list(picture.WRITERS)) if w[0] in provs]:
+            try:
+                r = self.app.lab.chat(project, prov, model, [{"role": "system", "content": sys},
+                                                             {"role": "user", "content": words}], 300, cap_usd=0.05,
+                                      task="creative_prompt")
+            except Exception:                                   # noqa: BLE001 — privacy / cap / provider: try the next
+                continue
+            add = re.sub(r"^\s*(prompt|details?)\s*:\s*", "", (r.text or "").strip(), flags=re.I).strip().strip('"').strip()
+            if add.lower().startswith(words.lower()):
+                add = add[len(words):].lstrip(" ,.;:-").strip()
+            if 5 <= len(add) <= 1200 and not picture.REFUSAL_RX.search(add[:80]):
+                return f"{head} {add}"
+        return head if lay else ""                              # no writer: only worth sending when it adds the layout
 
     def get(self, q: dict) -> dict:
         return self._call("creative_job_get", {"job_id": str((q.get("job_id") or [""])[0])})
@@ -98,8 +151,12 @@ class Loop:
         return self._call("creative_jobs", {"limit": 30})
 
     def rate(self, b: dict) -> dict:
-        return self._call("creative_rate", {"job_id": str(b.get("job_id") or ""), "piece": int(b.get("piece") or 0),
-                                            "button": str(b.get("button") or ""), "reasons": list(b.get("reasons") or [])})
+        jid, n, button = str(b.get("job_id") or ""), int(b.get("piece") or 0), str(b.get("button") or "")
+        out = self._call("creative_rate", {"job_id": jid, "piece": n, "button": button, "reasons": list(b.get("reasons") or [])})
+        if button in ("keep", "redo", "wrong"):                 # 📓 ✅ = kept, 🔁/❌ = thrown away, on the notes it used
+            from . import craft                                 # noqa: PLC0415
+            craft.verdict(f"loop:{jid}:{n}", button == "keep")
+        return out
 
     def estimate(self, q: dict) -> dict:
         return self._call("creative_estimate", {"job_id": str((q.get("job_id") or [""])[0])})

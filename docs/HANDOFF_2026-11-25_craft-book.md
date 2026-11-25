@@ -79,3 +79,12 @@ Continue phrase: `continue AI Lab Craft Book from the 2026-11-25 handoff — liv
   every count right. Ducks went 4/5 → 5/5 with the code layout. Grid: hermes-data/_tmp/count_grid_2026-11-25.jpg.
 - The retry never fired live (nothing missed) — proven by tests only.
 - Step line now says "the exact number, none extra" for people (it said "in a row").
+
+## Loop gap closed (15:20) · ailab + hermes `6300d5d2`, Lab 687 tests OK, Hermes creative 93 passed
+- Found: Loop 🖼 pieces had **no writer** — Hermes built the prompt as "do — goal" in code.
+- Lab `loop.run` now writes each not-yet-made `lab.image` piece's prompt (Craft Book notes + 🔢 count layout) and sends
+  it as `payloads[n] = {"prompt"}`; Hermes `_run_job` uses it (`mcp_creative.py`, 2 lines). Notes are remembered as run
+  `loop:<job>:<n>`. `loop.rate`: ✅ Keep → kept, 🔁 Redo / ❌ Wrong → thrown away on those notes.
+- No writer answers → only the count layout is sent (or nothing). `config.json "loop_writer": false` turns it off.
+- Not covered: lab.video pieces (no video writer here yet); Hermes's own 👁 quality score doesn't feed `craft.observe`.
+- UNVERIFIED live: needs a Lab restart (Lab code) — Hermes picks up mcp_creative on its next restart too.
