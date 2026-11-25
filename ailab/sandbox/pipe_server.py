@@ -11,7 +11,7 @@ import os
 import sys
 
 ROOT = os.path.realpath(sys.argv[1])
-MAX_FILE = 5_000_000
+MAX_FILE = 25_000_000   # 2026-11-24: Venice PNGs run 4–6 MB (a 5.6 MB picture showed 'Not found')
 MAX_FILES = 2000
 TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".html": "text/html",
          ".svg": "image/svg+xml", ".json": "application/json", ".wasm": "application/wasm"}

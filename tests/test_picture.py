@@ -170,3 +170,19 @@ def test_own_words_drops_markdown_marks_and_no_text_list():
     assert picture.own_words("**a cat** on a `roof`") == "a cat on a roof"
     assert "watermark" in picture.NO_TEXT and "caption" in picture.NO_TEXT and "text" in picture.NO_TEXT
     assert "Never ask for text" in picture.PROMPT_SYS
+
+
+def test_picture_run_from_build_prompt_has_no_modules_or_gate():
+    """2026-11-24 live: a 🖼 run started from a build prompt offered ▶ Go on to 1 · Build it."""
+    from ailab import agent, config
+    from tests.test_agent import Brain
+    import tempfile
+    from pathlib import Path
+    r = agent.Run(Brain(["x"]), config.load({"mode": "standalone"}), {"id": "scratch", "name": "scratch"}, "openrouter", "m",
+                  BP + "\n## Module 1 — Build it\nmake it\n", ctypes=["image"], root=Path(tempfile.mkdtemp()))
+    assert r.plan == [] and r.gate_info() is None
+
+
+def test_preview_serves_big_pictures():
+    from ailab.sandbox import pipe_server
+    assert pipe_server.MAX_FILE >= 20_000_000

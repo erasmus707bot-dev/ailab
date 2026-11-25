@@ -276,6 +276,8 @@ class Run:
         self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
         # M5 (2026-11-24): plain progress list from the prompt's "## Module N" headings + on-screen questions
         heads = list(re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)[ \t]*[—:–.-]*[ \t]*(.*)$", self.task, re.M))[:12]
+        if self.picture:                      # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
+            heads = []                        # — a picture run makes one picture; it has no modules or gates
         self.plan = [m.group(1) for m in heads]
         self.prompt_plan = bool(heads)        # modules came from a build prompt (not the agent's own plan)
         self.plan_text: dict[str, str] = {    # 2026-11-24: each module's heading + body (for the empty-module guard)
