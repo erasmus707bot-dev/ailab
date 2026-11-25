@@ -85,3 +85,41 @@ class Retry(Base):
         r, m = self.go([[False, True, False]], cfg={"count_fix": {"retry": 0, "layout": False}})
         self.assertEqual(m.calls.count("image_make"), 1)
         self.assertNotIn("in one row", m.args[m.calls.index("image_make")]["prompt"])
+
+
+class Redo(Retry):
+    """🔁 follow-up 2026-11-25: any low 👁 score gets the $0 local redo, not only a wrong count — no writer call."""
+
+    def test_low_score_redo_spells_out_the_miss_after_his_words(self):
+        r, m = self.go([[True, False, False], [True, True, False]])
+        self.assertEqual(r.state, "done", r.why)
+        makes = [a["prompt"] for t, a in zip(m.calls, m.args) if t == "image_make"]
+        self.assertEqual(len(makes), 2)
+        self.assertTrue(makes[1].startswith(makes[0].rstrip()), makes[1])          # first prompt kept byte for byte
+        self.assertIn("Make sure: clearly show", makes[1])
+        self.assertEqual(r.pictures[-1]["eyes"]["score"], 100)
+        self.assertTrue(any(s.get("action") == "redo" and "no writer" in s["why"] for s in r.steps))
+
+    def test_count_miss_alone_keeps_the_prompt(self):
+        r, m = self.go([[False, True, False], [True, True, False]])
+        makes = [a["prompt"] for t, a in zip(m.calls, m.args) if t == "image_make"]
+        self.assertEqual(makes[0], makes[1])
+
+    def test_he_sets_the_count(self):
+        r, m = self.go([[True, False, False]] * 4, cfg={"eyes": {"retry": 2}})
+        self.assertEqual(m.calls.count("image_make"), 3)
+        r, m = self.go([[True, False, False]], cfg={"eyes": {"retry": 0}})
+        self.assertEqual(m.calls.count("image_make"), 1)
+
+    def test_good_score_and_paid_route_never_redo(self):
+        r, m = self.go([[True, True, False]], cfg={"eyes": {"retry": 3}})
+        self.assertEqual(m.calls.count("image_make"), 1)
+        r, m = self.go([[True, False, False]], local=False)
+        self.assertEqual(m.calls.count("image_make"), 1)
+
+
+def test_redo_prompt_tags_and_nothing_to_add():
+    e = {"points": [{"kind": "show", "what": "a bathtub", "ok": False}, {"kind": "count", "what": "5 ducks", "ok": False}]}
+    assert picture.redo_prompt("ducks.", e, False) == "ducks. Make sure: clearly show a bathtub."
+    assert picture.redo_prompt("ducks, bath", e, True) == "ducks, bath, clearly show a bathtub"
+    assert picture.redo_prompt("ducks.", {"points": [e["points"][1]]}, False) == "ducks."

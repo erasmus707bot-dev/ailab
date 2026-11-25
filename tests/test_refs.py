@@ -216,7 +216,8 @@ class Strict(Refs):
         r = self._run(mcp)
         r.loop()
         self.assertEqual(r.state, "done", r.why)
-        self.assertEqual([a["model"] for t, a in zip(mcp.calls, mcp.args) if t == "image_make"], ["local/juggernaut-xl-v9"])
+        # never Venice; a second juggernaut call is the 👁 $0 redo after a low score (follow-up 2026-11-25)
+        self.assertEqual({a["model"] for t, a in zip(mcp.calls, mcp.args) if t == "image_make"}, {"local/juggernaut-xl-v9"})
 
     def test_same_face_line_is_written_even_when_the_check_breaks(self):
         r = self._run(RefMCP(), task="Character sheet of the person in this picture", batch_req={"n": 5, "sheet": "pictures/ref.png"})

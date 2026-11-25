@@ -232,12 +232,31 @@ def count_missed(e: dict | None) -> bool:
 
 
 def count_retries(run) -> int:
-    """config "count_fix": {"layout": true, "retry": 1}. Retry is $0 local pictures only."""
+    """$0 local redos after 👁: config "eyes": {"retry": n} (0–3) — else the older "count_fix": {"retry": n}. Default 1."""
+    n = eyes.settings(getattr(run, "cfg", None))["retry"]
+    if n is not None:
+        return n
     c = (getattr(run, "cfg", None) or {}).get("count_fix") or {}
     try:
         return max(0, min(3, int(c.get("retry", 1))))
     except (TypeError, ValueError):
         return 1
+
+
+def low_score(run, e: dict | None) -> bool:
+    """👁 under his "low" line (default 70%) — the same line that turns 🔁 Fix and try again primary."""
+    sc = (e or {}).get("score")
+    return sc is not None and sc < eyes.settings(getattr(run, "cfg", None))["low"]
+
+
+def redo_prompt(prompt: str, e: dict | None, tags: bool) -> str:
+    """🔁 $0 redo with no writer: the prompt that was sent, plus the misses said plainly (his words stay first, untouched).
+    A count miss alone adds nothing — the count line is already in the prompt; a new seed is the fix."""
+    rows = [r for r in (e or {}).get("points") or [] if r.get("kind") != "count"]
+    fix = eyes.fix_words(rows)
+    if not fix:
+        return prompt
+    return f"{prompt.rstrip(' ,.')}, {fix.replace('; ', ', ')}" if tags else f"{prompt.rstrip()} Make sure: {fix}."
 
 
 def picture_model(run, style: str) -> tuple[str, bool]:
@@ -318,7 +337,7 @@ def run(run) -> None:
         m = own_words(words)
         prompt = (f"{m.rstrip('.')}. {lay} {prompt[len(m):].lstrip(' .')}" if prompt.startswith(m)
                   else f"{prompt.rstrip('.')}. {lay}").strip()
-        run._record({"action": "count", "why": "🔢 a number of things — told the picture model to lay them out in a row",
+        run._record({"action": "count", "why": "🔢 a number of things — told the picture model " + ("to lay them out in a row" if "in one row" in lay else "the exact number, none extra"),
                      "result": {"layout": lay}, "usd": 0.0})
     vmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
     plan = picture_route.plan(run, look, style, vmodel, forced)
@@ -501,12 +520,18 @@ def run(run) -> None:
         eyes.record(run, "picture", pic["eyes"])
         _craft_seen(run, "picture", pic["eyes"], words)
         tries = count_retries(run) if (pmodel or "").startswith("local/") else 0
-        while tries and count_missed(pic["eyes"]):           # 🔢 count off → one more try with a new seed ($0 on gandalf)
+        sent = args["prompt"]
+        while tries and (count_missed(pic["eyes"]) or low_score(run, pic["eyes"])):   # 🔢/👁 off → redo, new seed ($0 on gandalf)
             tries -= 1
             run._check_stop()
-            run._record({"action": "count", "why": "🔢 the count was off — one more try with a new seed ($0 on gandalf)",
-                         "result": {"missing": pic["eyes"].get("missing")}, "usd": 0.0})
-            stage(run, "🔢", "The count was off — trying once more")
+            counted = count_missed(pic["eyes"])
+            args["prompt"] = redo_prompt(sent, pic["eyes"], tag_prompt.wants(pmodel))
+            run._record({"action": "count" if counted else "redo", "usd": 0.0,
+                         "why": ("🔢 the count was off" if counted else f"👁 only {pic['eyes'].get('score')}% match")
+                                + " — one more try with a new seed" + ("" if args["prompt"] == sent else ", the misses spelled out")
+                                + " ($0 on gandalf, no writer)",
+                         "result": {"missing": pic["eyes"].get("missing"), "prompt": args["prompt"]}})
+            stage(run, "🔁", ("The count was off" if counted else "👁 Low match") + " — trying once more ($0)")
             try:
                 start2 = run.lab.mcp.call("image_make", args)
             except HermesRefused:
@@ -515,14 +540,14 @@ def run(run) -> None:
             out2 = res2.get("result") or {}
             if res2.get("state") != "done" or not out2.get("b64"):
                 break
-            pic2, p2 = keep(out2, model2, t2, "🎨 made it again (count retry)")
+            pic2, p2 = keep(out2, model2, t2, "🎨 made it again ($0 redo)")
             pic2["eyes"] = eyes.check(run, p2.read_bytes(), words, look, label="the retry")
             eyes.record(run, "picture", pic2["eyes"])
             _craft_seen(run, "picture", pic2["eyes"], words, compare=False)   # one score per run in with/without
             better = (pic2["eyes"].get("score") or 0) > (pic["eyes"].get("score") or 0)
-            run._record({"action": "count", "usd": 0.0,
-                         "why": (f"🔢 the retry is better ({pic2['eyes'].get('score')}% vs {pic['eyes'].get('score')}%) — it's the main picture"
-                                 if better else f"🔢 the retry wasn't better ({pic2['eyes'].get('score')}%) — kept the first; both are saved"),
+            run._record({"action": "count" if counted else "redo", "usd": 0.0,
+                         "why": (f"🔁 the retry is better ({pic2['eyes'].get('score')}% vs {pic['eyes'].get('score')}%) — it's the main picture"
+                                 if better else f"🔁 the retry wasn't better ({pic2['eyes'].get('score')}%) — kept the first; both are saved"),
                          "result": {"first": pic["path"], "retry": pic2["path"], "better": better}})
             if better:
                 pic = pic2

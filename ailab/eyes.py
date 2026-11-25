@@ -41,7 +41,11 @@ OWN_FIX = re.compile(r"(?:there must be [^;]*?— count them|clearly show [^;]+|
 def settings(cfg: dict | None) -> dict:
     e = (cfg or {}).get("eyes")
     e = e if isinstance(e, dict) else {}
-    return {"on": e.get("on", True) is not False, "low": int(e.get("low") or LOW)}
+    try:                                                     # 🔁 $0 local redos after a low score; None = not set here
+        retry = None if e.get("retry") is None else max(0, min(3, int(e["retry"])))
+    except (TypeError, ValueError):
+        retry = None
+    return {"on": e.get("on", True) is not False, "low": int(e.get("low") or LOW), "retry": retry}
 
 
 def on(run) -> bool:
