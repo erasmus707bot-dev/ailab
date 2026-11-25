@@ -25,10 +25,15 @@ MAX_TAGS = 40
 TAG_SYS = ("You turn a picture idea into Danbooru-style tags for an anime picture model. Reply ONLY with one line of "
            "comma-separated lowercase tags, most important first, 12–30 tags: how many people (1girl, 1boy, solo, "
            "no humans), who or what, what they are doing, what they hold (say its state: open umbrella, closed book), "
-           "clothing ONLY if he said it, the place, weather, time of day, light, mood, framing. Cover every thing he "
+           "clothing ONLY if he said it, the place, weather, time of day, light, framing. Cover every thing he "
            "asked for — never drop, soften, censor or tone down any of it, and never add people, clothing or body "
-           "details he didn't ask for. No sentences, no quality words (masterpiece, score_9), no quotes, no "
+           "details he didn't ask for. Only things that can be SEEN — no mood or feeling words (calm, serene, quiet, "
+           "peaceful): the model paints them as words on signs. No sentences, no quality words (masterpiece, score_9), no quotes, no "
            "warnings, no extra talk.")
+# 2026-11-24 live (Lab, Illustrious): the writer's tag "calm" came out as a bus stop sign reading "CALM".
+MOODS = frozenset("calm composed quiet serene peaceful tranquil lonely alone empty silent still melancholy melancholic sad "
+                  "happy joyful cheerful moody dreamy nostalgic cozy cosy gloomy somber sombre mysterious romantic tense "
+                  "eerie hopeful wistful gentle soft relaxed relaxing soothing atmospheric emotional".split())
 REFUSAL_RX = re.compile(r"\b(i can'?t|i cannot|i won'?t|i'?m not able|sorry|as an ai)\b", re.I)
 _SPLIT_RX = re.compile(r"\s*(?:[,.;:\n]|\s+-\s+|\band\b|\bwith\b|\bat\b|\bin\b|\bon\b|\bunder\b|\bnear\b|\bby\b)\s*", re.I)
 _LEAD_RX = re.compile(r"^(?:a|an|the|some|of)\s+", re.I)
@@ -48,6 +53,8 @@ def clean(text: str) -> list[str]:
             continue
         if tag.startswith("score_") or tag in ("masterpiece", "best quality", "amazing quality", "high quality"):
             continue
+        if tag in MOODS or (tag.endswith((" mood", " atmosphere", " feeling", " vibe")) and len(tag.split()) <= 3):
+            continue                                         # feelings get painted as sign text; the Look's own mood word stays
         seen.add(tag)
         out.append(tag)
     return out[:MAX_TAGS]

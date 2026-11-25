@@ -22,6 +22,10 @@ class Builder(unittest.TestCase):
         got = T.clean("Tags: 1girl, Rain, rain, masterpiece, score_9, this is a very long sentence that is not a tag at all, \"bus stop\".")
         self.assertEqual(got, ["1girl", "rain", "bus stop"])
 
+    def test_clean_drops_mood_words(self):
+        got = T.clean("1girl, calm, Serene, quiet atmosphere, rain, composed, empty, bus stop, peaceful mood, empty street")
+        self.assertEqual(got, ["1girl", "rain", "bus stop", "empty street"])
+
     def test_build_prefix_tags_then_words_exact(self):
         p = T.build(PONY, ["1girl", "rain"], "A Girl with a RED umbrella")
         self.assertTrue(p.startswith("score_9, score_8_up, score_7_up, source_anime, 1girl, rain, "))
@@ -63,6 +67,12 @@ class InRun(Route):
         self.assertTrue(a["negative_prompt"].startswith("worst quality"))
         self.assertIn("photograph", a["negative_prompt"])
         self.assertTrue(any(s.get("action") == "tags" for s in r.steps))
+
+    def test_look_mood_word_stays_writer_mood_goes(self):
+        m = LocalMCP(models=ALL)
+        self.go2(m, "a girl at a bus stop\nLook: Anime · Serene", ["soft light", TAGS + ", calm, quiet"])
+        p = self.makes(m)[0]["prompt"]
+        self.assertIn("serene mood", p); self.assertNotIn(", calm,", p); self.assertNotIn(", quiet,", p)
 
     def test_writer_refuses_rules_take_over(self):
         m = LocalMCP(models=ALL)
