@@ -103,7 +103,10 @@ def write(run, writer_list, mine: str, look_words: list[str], add: str = "", sta
             tags = [] if REFUSAL_RX.search(text[:80]) else clean(text)
             if len(tags) >= 4:
                 seen = set(tags)
-                tags += [w.lower() for lw in look_words for w in [lw.strip()] if w and w.lower() not in seen]
+                for w in (x.strip().lower() for lw in look_words for x in lw.split(",")):   # Look words once each
+                    if w and w not in seen:
+                        seen.add(w)
+                        tags.append(w)
                 return tags[:MAX_TAGS], f"{prov}/{model}"
         except Exception:                                        # noqa: BLE001 — try the next writer
             continue

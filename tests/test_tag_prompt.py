@@ -74,6 +74,12 @@ class InRun(Route):
         p = self.makes(m)[0]["prompt"]
         self.assertIn("serene mood", p); self.assertNotIn(", calm,", p); self.assertNotIn(", quiet,", p)
 
+    def test_look_words_not_doubled(self):
+        m = LocalMCP(models=ALL)
+        self.go2(m, "a girl at a bus stop\nLook: Anime", ["soft light", TAGS + ", cel shading, anime style"])
+        p = self.makes(m)[0]["prompt"]
+        self.assertEqual(p.count("anime style"), 1); self.assertEqual(p.count("cel shading"), 1)
+
     def test_writer_refuses_rules_take_over(self):
         m = LocalMCP(models=ALL)
         r, _ = self.go2(m, "a girl with a red umbrella\nLook: Anime", ["soft light", "Sorry, I can't help with that."])
