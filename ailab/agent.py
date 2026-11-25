@@ -20,6 +20,7 @@ import uuid
 from pathlib import Path
 
 from . import config, memory, picture, preview, repos, secretscan, store, creation
+from . import content as artsplit, docrun, video as videomod   # 🎭 🎬 📝 art in every form (2026-11-24)
 from . import batch as batchmod
 from .mcp_client import HermesRefused
 from .transport import HttpError
@@ -250,6 +251,11 @@ class Run:
         # 🖼 picture runs (2026-11-24): only the Image chip → ask style/shape → prompt → Hermes image_make → picture
         self.picture = creation.picture_mode(self.ctypes)
         self.pictures: list[dict] = []
+        # 🎬 video runs + 📝 document runs (2026-11-24, Scott: "my art in video, document, game, and software forms")
+        self.video = creation.video_mode(self.ctypes)
+        self.docmode = creation.doc_mode(self.ctypes) and not self.video
+        self.videos: list[dict] = []
+        self.split: dict | None = None        # 🎭 art/code split result (content.py) for game/site/app runs
         # 🎛 Batch create (2026-11-24 Module 3): N pictures or docs, the dial sets how different each one is
         self.batch = batchmod.norm(batch, self.ctypes) if root is None else None
         if self.batch and isinstance(batch.get("earlier"), list):
@@ -282,7 +288,7 @@ class Run:
         self.memory_saved: list[str] = []     # 🧠 M2: things Scott stated in the task, saved to memory
         # M5 (2026-11-24): plain progress list from the prompt's "## Module N" headings + on-screen questions
         heads = list(re.finditer(r"^##\s*Module\s+([0-9A-Za-z]+)[ \t]*[—:–.-]*[ \t]*(.*)$", self.task, re.M))[:12]
-        if self.picture or self.batch:        # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
+        if self.picture or self.batch or self.video or self.docmode:   # 2026-11-24 live: a 🖼 run from a build prompt showed "▶ Go on to 1 · Build it"
             heads = []                        # — a picture run makes one picture; it has no modules or gates
         self.plan = [m.group(1) for m in heads]
         self.prompt_plan = bool(heads)        # modules came from a build prompt (not the agent's own plan)
@@ -332,6 +338,8 @@ class Run:
                 "can_continue": self.state == "capped" and self.cap_kind == "steps" and self.msgs is not None,
                 "can_resume": self.state == "interrupted" and self.msgs is not None, "restored": self.restored,
                 **self.type_view(), "picture": getattr(self, "picture", False), "pictures": getattr(self, "pictures", []),
+                "videos": getattr(self, "videos", []), "split": getattr(self, "split", None),
+                "video": getattr(self, "video", False), "docmode": getattr(self, "docmode", False),
                 "stage": self.stage_view(), "elapsed_s": int(time.time() - getattr(self, "started", time.time())),
                 "made": self.made_view(), "gate": self.gate_info(), "folder": str(self.root), "batch": batchmod.view(self)}
 
@@ -339,7 +347,9 @@ class Run:
     STAGE_WORDS = {"list": ("📂", "Looking at the files"), "read": ("📖", "Reading {path}"), "write": ("✍️", "Writing {path}"),
                    "edit": ("✏️", "Changing {path}"), "run": ("🧪", "Checking that it works"), "repo": ("🔎", "Looking in your code"),
                    "hermes": ("🔌", "Using Hermes: {tool}"), "ask": ("❓", "Waiting for your choice"), "plan": ("🗺", "Waiting for you to OK the plan"),
-                   "bad_reply": ("↻", "Asking the model again"), "prompt": ("✍️", "Wrote the picture prompt"), "picture": ("🎨", "Made the picture")}
+                   "bad_reply": ("↻", "Asking the model again"), "prompt": ("✍️", "Wrote the picture prompt"), "picture": ("🎨", "Made the picture"),
+                   "video": ("🎬", "Made the video"), "doc": ("📝", "Wrote it"), "art": ("🎭", "Wrote your art"),
+                   "split": ("🎭", "Split your art from the code")}
 
     def stage_view(self) -> dict:
         st = getattr(self, "stage", None)
@@ -394,7 +404,8 @@ class Run:
                               f"Do Module {nxt} next and stop at its gate.\n\n" + body)[:4000]}
 
     # 📦 What was made (2026-11-24, Scott: "I need the output more available and obvious")
-    KIND_EXT = {"picture": ("png", "jpg", "jpeg", "webp", "gif", "svg"), "page": ("html", "htm"), "doc": ("md", "txt")}
+    KIND_EXT = {"picture": ("png", "jpg", "jpeg", "webp", "gif", "svg"), "page": ("html", "htm"),
+                "doc": ("md", "txt", "docx", "pdf"), "video": ("mp4", "webm", "mov")}
 
     def made_view(self) -> list[dict]:
         out: dict[str, dict] = {}
@@ -414,8 +425,12 @@ class Run:
             out[path] = {"path": path, "kind": kind, "new": out.get(path, {}).get("new", new), "step": st.get("n")}
         for pic in getattr(self, "pictures", []) or []:
             out.setdefault(pic["path"], {"path": pic["path"], "kind": "picture", "new": True, "step": None})
-        for d in getattr(self, "docs", []) or []:                 # 🎛 batch docs
-            out.setdefault(d["path"], {"path": d["path"], "kind": "doc", "new": True, "step": None})
+        for d in getattr(self, "docs", []) or []:                 # 🎛 batch docs · 📝 doc runs · 🎭 art files
+            ext = d["path"].rsplit(".", 1)[-1].lower()
+            out.setdefault(d["path"], {"path": d["path"], "kind": "doc" if ext in self.KIND_EXT["doc"] else "code",
+                                       "new": True, "step": None})
+        for v in getattr(self, "videos", []) or []:               # 🎬 video runs
+            out.setdefault(v["path"], {"path": v["path"], "kind": "video", "new": True, "step": None})
         return list(out.values())
 
     def plan_view(self) -> list[dict]:
@@ -1002,6 +1017,16 @@ class Run:
             if getattr(self, "picture", False):             # 🖼 picture run: its own short path, same safety handling
                 picture.run(self)
                 return
+            if getattr(self, "video", False):               # 🎬 video run (2026-11-24)
+                videomod.run(self)
+                return
+            if getattr(self, "docmode", False):             # 📝 document run (2026-11-24)
+                docrun.run(self)
+                return
+            if not self.steps and artsplit.wanted(self):    # 🎭 game/site/app: art first, the coder gets a plain brief
+                artsplit.prepare(self)
+                if getattr(self, "split", None) and self.split.get("ok"):
+                    self.msgs = msgs = self._start_msgs()
             while True:
                 self._check_stop()
                 a, r = self._replay, None

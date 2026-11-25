@@ -912,7 +912,8 @@ function startView() {
   let madeSig = "";
   function paintMade(run, chg, pics, running) {
     if (run.batch) { madeBox.replaceChildren(); madeBox.hidden = true; madeSig = ""; return; }   /* 🎛 the batch grid is in the agent pane */
-    const sigNow = `${run.id}:${pics.length}:${chg.length}:${run.state}`;
+    const vids = run.videos || [];
+    const sigNow = `${run.id}:${pics.length}:${chg.length}:${vids.length}:${run.state}`;
     if (sigNow === madeSig) return; madeSig = sigNow;
     madeBox.replaceChildren(); madeBox.hidden = true;
     if (pics.length) {                                         /* newest first, big */
@@ -922,6 +923,18 @@ function startView() {
         return h("figure", {}, h("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" }, h("img", { src: url, alt: pc.prompt ? pc.prompt.slice(0, 140) : "Picture the Lab made", loading: "lazy" })),
           h("figcaption", {}, `🎨 ${String(pc.model || "").split("/").pop()} · $${(+pc.usd || 0).toFixed(3)}${pc.seconds ? ` · ${pc.seconds} s` : ""}${pc.library ? " · 💾 in your Gallery" : ""}`),
           pc.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, pc.prompt)) : null,
+    if (vids.length || run.video || run.docmode) {             /* 🎬 video run · 📝 doc run (2026-11-24): every file as a tile */
+      vids.slice().reverse().forEach(v => {
+        const url = `/preview/${p.id}/${v.path}`;
+        madeBox.hidden = false;
+        madeBox.append(h("figure", { class: "vidbig" }, h("video", { src: url, controls: true, playsinline: true, preload: "metadata", style: "width:100%;max-height:75vh;border-radius:12px;background:#000" }),
+          h("figcaption", {}, `🎬 ${String(v.model || "").split("/").pop()} · $${(+v.usd || 0).toFixed(2)}${v.duration ? ` · ${v.duration}` : ""}${v.media_item ? " · 💾 in Media Studio" : ""}`),
+          v.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, v.prompt)) : null,
+          h("a", { class: "btn", href: url, download: v.path.split("/").pop() }, "⬇ Download")));
+      });
+      if (!running) { const mc = madeCard(p.id, run); if (mc) { madeBox.hidden = false; madeBox.append(mc); } }
+      return;
+    }
           h("a", { class: "btn", href: url, download: pc.path.split("/").pop() }, "⬇ Download"));
       })));
       if (!running && ag && ag.startWith) {                      /* 🔁 Make another · ✏️ Change it */
@@ -1160,7 +1173,7 @@ function autosave(text) {
 const mlabel = (r, m) => { const t = (r.tags || {})[m] || {}, tier = t.tier ? ` · ${t.tier}` : "", lim = t.limits ? `${t.limits} ` : "";
   return r.picks && r.picks[m] ? `⭐ ${lim}${m} — ${r.picks[m]}${tier}` : `${lim}${m} — ${t.use || ""}${tier}`; };
 /* 📦 What was made: one tile per file made or changed — pictures shown, writing shown, pages one tap away */
-const KIND_ICON = { picture: "🖼", page: "🌐", doc: "📝", code: "📄" };
+const KIND_ICON = { picture: "🖼", page: "🌐", doc: "📝", code: "📄", video: "🎬" };
 function madeCard(pid, run) {
   const made = run.made || [];
   if (!made.length) return null;
@@ -1168,9 +1181,11 @@ function madeCard(pid, run) {
     const url = `/preview/${pid}/${m.path}`, name = m.path.split("/").pop(), dir = m.path.split("/").slice(0, -1).join("/");
     let body = null;
     if (m.kind === "picture") body = h("a", { href: url, target: "_blank", rel: "noopener", title: "Full size" }, h("img", { src: `${url}?v=${run.id}`, alt: name, loading: "lazy" }));
-    if (m.kind === "doc") { body = h("div", { class: "docview short" }, "⏳");
+    if (m.kind === "video") body = h("video", { src: `${url}?v=${run.id}`, controls: true, preload: "metadata", playsinline: true, style: "width:100%;max-height:70vh;border-radius:10px;background:#000" });   /* 🎬 2026-11-24 */
+    if (m.kind === "doc" && !/\.(md|txt)$/i.test(m.path)) body = h("p", { class: "note" }, /\.pdf$/i.test(m.path) ? "📄 PDF copy — tap Open" : "📄 Word copy — tap Download");
+    else if (m.kind === "doc") { body = h("div", { class: "docview short" }, "⏳");
       fetch(`${url}?v=${Date.now()}`).then(r => r.ok ? r.text() : Promise.reject()).then(t => { body.textContent = t.length > 1500 ? t.slice(0, 1500) + "\n…" : t; }).catch(() => { body.textContent = "Couldn't open it here — use ⤢ Read all."; }); }
-    const open = { page: "👁 Open it", doc: "⤢ Read all", picture: "⤢ Full size" }[m.kind] || "📄 View";
+    const open = { page: "👁 Open it", doc: "⤢ Read all", picture: "⤢ Full size", video: "⤢ Play full size" }[m.kind] || "📄 View";
     return h("div", { class: "mtile" },
       h("div", { class: "mhd" }, h("span", { "aria-hidden": "true" }, KIND_ICON[m.kind] || "📄"), h("b", {}, name), h("span", { class: "note" }, (m.new ? "new" : "changed") + (dir ? ` · ${dir}` : ""))),
       body,

@@ -7,8 +7,9 @@ Each type is one small setup — which model to suggest, which robot test, which
 ships, and a few lines for the agent. A new type = a new entry here, or in <lab home>/creation_types.json (same keys;
 an entry with an existing id replaces it, {"id": "x", "off": true} hides one). No code change needed.
 
-Image and video: the Lab has no Hermes tool that makes pictures or video yet (checked 2026-11-24), so those types write
-a ready-to-use brief and hand off to Hermes Image Studio (/models) and Media Studio (/media).
+🖼 Image → picture run (picture.py) · 🎬 Video (+ 🖼) → video run (video.py, Hermes video_make / Venice) · 📝 Text
+→ document run (docrun.py, uncensored writer, pictures on request, Word + PDF). With an app/game/site chip on, the agent builds it and the
+🎭 art/code split (content.py) makes the story, words and pictures first (2026-11-24, Scott: art in every form).
 """
 from __future__ import annotations
 
@@ -69,8 +70,9 @@ TYPES: list[dict] = [
     {"id": "video", "icon": "🎬", "label": "Video", "use": "💬 general", "robot": "none", "ship": [], "art": True,
      "handoff": {"path": "/media", "name": "Media Studio", "file": "video_brief.md"},
      "words": ["video", "clip", "film", "movie", "animation", "reel", "youtube", "tiktok", "footage", "edit my video"],
-     "guide": "A video. The Lab cannot make or cut video itself yet, so write video_brief.md: length, shot list (one line per shot "
-              "with seconds), words on screen, music feel, and the edit steps. Scott takes it to Hermes Media Studio.",
+     "guide": "A video. On its own (or with 🖼) the 🎬 chip runs a video run: Hermes video_make (Venice, uncensored Wan 2.7), "
+              "price shown first. Together with a page or app: write video_brief.md (length, one line per shot with seconds, "
+              "music feel) and Scott makes the clip with a 🎬 run.",
      "questions": [["Length?", ["Under 30 seconds ⭐", "About a minute", "Longer"]],
                    ["Shape?", ["Tall (phone) ⭐", "Wide (screen)", "Square"]]]},
 ]
@@ -130,9 +132,21 @@ PAGE_TYPES = ("website", "android", "windows", "linux", "game", "edit")
 
 
 def picture_mode(ids) -> bool:
-    """🖼 on, nothing page/app-like on → a picture run (no agent steps, no page test)."""
+    """🖼 on, nothing page/app-like or video on → a picture run (no agent steps, no page test)."""
     ids = [t["id"] for t in pick(ids)]
-    return "image" in ids and not any(t in ids for t in PAGE_TYPES)
+    return "image" in ids and not any(t in ids for t in PAGE_TYPES + ("video",))
+
+
+def video_mode(ids) -> bool:
+    """🎬 on (🖼 may be on too), nothing page/app-like → a video run (video.py)."""
+    ids = [t["id"] for t in pick(ids)]
+    return "video" in ids and not any(t in ids for t in PAGE_TYPES)
+
+
+def doc_mode(ids) -> bool:
+    """📝 on, nothing page/app-like, video or picture → a document run (docrun.py; it asks about pictures itself)."""
+    ids = [t["id"] for t in pick(ids)]
+    return "text" in ids and not any(t in ids for t in PAGE_TYPES + ("video", "image"))
 
 
 def robot_mode(ids) -> str:
