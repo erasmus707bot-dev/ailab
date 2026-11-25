@@ -205,6 +205,41 @@ def write_prompt(run, words: str) -> str:
     return mine
 
 
+PEOPLE = {"people", "persons", "men", "women", "girls", "boys", "kids", "children", "friends", "lovers", "dancers",
+          "sisters", "brothers", "soldiers", "players", "kings", "queens", "knights", "witches", "couriers", "riders",
+          "workers", "students", "teens", "babies", "guys", "ladies", "gentlemen", "monks", "nuns", "elves", "dwarves"}
+
+
+def count_layout(words: str) -> str:
+    """🔢 He gave a number of things (2–8): say it so a picture model can count it (2026-11-25 live: 'five ducks' → 4,
+    even with the craft note riding on the writer). Built in code — it does not depend on the writer obeying."""
+    m = eyes.COUNT.search(own_words(words))
+    if not m:
+        return ""
+    n = eyes.NUMS.get(m.group(1).lower()) or int(m.group(1))
+    if not 3 <= n <= 8:                                      # two is drawn right on its own; past 8 a row won't fit
+        return ""
+    noun = m.group(2).strip()
+    last = noun.split()[-1]
+    if last.lower() in PEOPLE:                               # people act together — a row would stiffen the scene
+        return f"Exactly {n} {noun} ({n} in all), each whole and in view; no other {last} anywhere in the picture."
+    return (f"Exactly {n} {noun} ({n} in all), in one row side by side, evenly spaced, each whole and fully in view; "
+            f"no other {last} anywhere in the picture.")
+
+
+def count_missed(e: dict | None) -> bool:
+    return any(p.get("kind") == "count" and p.get("ok") is False for p in ((e or {}).get("points") or []))
+
+
+def count_retries(run) -> int:
+    """config "count_fix": {"layout": true, "retry": 1}. Retry is $0 local pictures only."""
+    c = (getattr(run, "cfg", None) or {}).get("count_fix") or {}
+    try:
+        return max(0, min(3, int(c.get("retry", 1))))
+    except (TypeError, ValueError):
+        return 1
+
+
 def picture_model(run, style: str) -> tuple[str, bool]:
     """(model, chosen by Scott in config). Every style → Lustify v8 (Chroma signed paintings, 2026-11-24)."""
     forced = str(run.cfg.get("picture_model") or "")
@@ -278,6 +313,13 @@ def run(run) -> None:
         m = own_words(words)                                # the model if the writer happened to say it (Lustify drew photos)
         prompt = (f"{m.rstrip('.')}. {style}. {prompt[len(m):].lstrip(' .')}" if prompt.startswith(m)
                   else f"{prompt.rstrip('.')}. {style}.").strip()
+    lay = count_layout(words) if ((getattr(run, "cfg", None) or {}).get("count_fix") or {}).get("layout", True) is not False else ""
+    if lay and lay.lower() not in prompt.lower():            # 🔢 right after his words, where a picture model weighs most
+        m = own_words(words)
+        prompt = (f"{m.rstrip('.')}. {lay} {prompt[len(m):].lstrip(' .')}" if prompt.startswith(m)
+                  else f"{prompt.rstrip('.')}. {lay}").strip()
+        run._record({"action": "count", "why": "🔢 a number of things — told the picture model to lay them out in a row",
+                     "result": {"layout": lay}, "usd": 0.0})
     vmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
     plan = picture_route.plan(run, look, style, vmodel, forced)
     if not plan["models"]:                                   # 🦴 Study with the local card off — never falls to Venice
@@ -432,30 +474,65 @@ def run(run) -> None:
         run._record({"action": "picture", "why": "🎨 make the picture", "result": {"error": msg}, "usd": 0.0})
         run.state, run.why = "failed", f"🎨 {msg}"
         return
-    stage(run, "💾", "Saving the picture")
-    ext = ".jpg" if "jpeg" in (out.get("media_type") or "") else ".png"
-    slug = re.sub(r"[^a-z0-9]+", "-", words.lower()).strip("-")[:40] or "picture"
-    rel = claim(run.root, f"pictures/{time.strftime('%Y%m%d-%H%M%S')}-{slug}{ext}")
-    p = run.root / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_bytes(base64.b64decode(out["b64"]))
-    usd = float(out.get("usd") or 0)
-    run.usd += usd
-    pic = {"path": rel, "prompt": prompt, "model": out.get("model", model), "usd": round(usd, 4),
-           "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape,
-           "look": look, "keys": picture_route.keys_line(run, pmodel or "")}
-    if out.get("timing"):                                    # ⏱ where a local picture's seconds went (2026-11-25 probe)
-        pic["timing"] = out["timing"]
-    run.pictures.append(pic)
-    run._record({"action": "picture", "path": rel, "why": "🎨 made the picture", "result": {k: v for k, v in pic.items() if k != "prompt"},
-                 "usd": usd})
+    def keep(out, model, t0, why):
+        stage(run, "💾", "Saving the picture")
+        ext = ".jpg" if "jpeg" in (out.get("media_type") or "") else ".png"
+        slug = re.sub(r"[^a-z0-9]+", "-", words.lower()).strip("-")[:40] or "picture"
+        rel = claim(run.root, f"pictures/{time.strftime('%Y%m%d-%H%M%S')}-{slug}{ext}")
+        p = run.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(base64.b64decode(out["b64"]))
+        usd = float(out.get("usd") or 0)
+        run.usd += usd
+        pic = {"path": rel, "prompt": prompt, "model": out.get("model", model), "usd": round(usd, 4),
+               "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape,
+               "look": look, "keys": picture_route.keys_line(run, pmodel or "")}
+        if out.get("timing"):                                # ⏱ where a local picture's seconds went (2026-11-25 probe)
+            pic["timing"] = out["timing"]
+        run.pictures.append(pic)
+        run._record({"action": "picture", "path": rel, "why": why, "result": {k: v for k, v in pic.items() if k != "prompt"},
+                     "usd": usd})
+        return pic, p
+
+    pic, p = keep(out, model, t0, "🎨 made the picture")
+    usd = pic["usd"]
     if eyes.on(run) and not getattr(run, "batch", None):     # 👁 M1: does it match his words? ($0, never fails the run)
         pic["eyes"] = eyes.check(run, p.read_bytes(), words, look, label="the picture")
         eyes.record(run, "picture", pic["eyes"])
         _craft_seen(run, "picture", pic["eyes"], words)
+        tries = count_retries(run) if (pmodel or "").startswith("local/") else 0
+        while tries and count_missed(pic["eyes"]):           # 🔢 count off → one more try with a new seed ($0 on gandalf)
+            tries -= 1
+            run._check_stop()
+            run._record({"action": "count", "why": "🔢 the count was off — one more try with a new seed ($0 on gandalf)",
+                         "result": {"missing": pic["eyes"].get("missing")}, "usd": 0.0})
+            stage(run, "🔢", "The count was off — trying once more")
+            try:
+                start2 = run.lab.mcp.call("image_make", args)
+            except HermesRefused:
+                break
+            res2, model2, _est2, t2 = _wait(run, start2, pmodel)
+            out2 = res2.get("result") or {}
+            if res2.get("state") != "done" or not out2.get("b64"):
+                break
+            pic2, p2 = keep(out2, model2, t2, "🎨 made it again (count retry)")
+            pic2["eyes"] = eyes.check(run, p2.read_bytes(), words, look, label="the retry")
+            eyes.record(run, "picture", pic2["eyes"])
+            _craft_seen(run, "picture", pic2["eyes"], words, compare=False)   # one score per run in with/without
+            better = (pic2["eyes"].get("score") or 0) > (pic["eyes"].get("score") or 0)
+            run._record({"action": "count", "usd": 0.0,
+                         "why": (f"🔢 the retry is better ({pic2['eyes'].get('score')}% vs {pic['eyes'].get('score')}%) — it's the main picture"
+                                 if better else f"🔢 the retry wasn't better ({pic2['eyes'].get('score')}%) — kept the first; both are saved"),
+                         "result": {"first": pic["path"], "retry": pic2["path"], "better": better}})
+            if better:
+                pic = pic2
+            else:
+                run.pictures.remove(pic2)                    # the first stays the main (last) one; the retry is kept before it
+                run.pictures.insert(run.pictures.index(pic), pic2)
+        usd = pic["usd"]
     run.state = "done"
     run.why = (f"🖼 Picture made with {pic['model'].split('/')[-1]} in {pic['seconds']} s for ${usd:.3f}. "
-               f"Saved in {rel}" + (" and in your Gallery (ai-lab)." if pic["library"] else ".") + f" {pic['keys']}")
+               f"Saved in {pic['path']}" + (" and in your Gallery (ai-lab)." if pic["library"] else ".") + f" {pic['keys']}")
     if (pic.get("eyes") or {}).get("score") is not None:
         e = pic["eyes"]
         run.why += f" 👁 {e['score']}% match" + (f" — missing: {', '.join(e['missing'])}." if e["missing"] else ".")
