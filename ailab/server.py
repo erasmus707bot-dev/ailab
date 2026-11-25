@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 from . import (__version__, agent, compare, config, livepage, memory, notify, preview, promptbuilder, repos, review, ship, creation,
                robotcheck, roster, store)
 from . import looks
+from . import video as videomod             # 🛤 video paths (2026-11-24)
 from .keys import KeyMissing
 from .mcp_client import HermesRefused
 from .privacy import PrivacyRefused
@@ -882,6 +883,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             if u.path == "/api/preview/version":
                 return self._run(app.preview_version, q)
             if u.path == "/api/agent/run":
+            if u.path == "/api/video_paths":               # 🛤 ⚙️ video paths: switch on/off + ⭐ default (2026-11-24)
+                return self._run(lambda: (200, {"ok": True, "paths": videomod.all_paths(), "kinds": videomod.KINDS}))
                 return self._run(app.agent_run, q)
             if u.path == "/api/live/apps":
                 return self._run(app.live_apps, q)
@@ -949,6 +952,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
             if p == "/api/agent/stop":
                 return self._run(app.agent_stop, b)
             if p == "/api/agent/undo":
+            if p == "/api/video_paths":                    # 🛤 ⚙️ {"id","on"} or {"star": id}
+                return self._run(lambda: (200, videomod.set_path(b)))
                 return self._run(app.agent_undo, b)
             if p.startswith("/api/prompt/"):
                 return self._run(app.prompt_post, p[len("/api/prompt/"):], b)

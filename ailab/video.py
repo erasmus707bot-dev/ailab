@@ -11,12 +11,13 @@ no cost, no content rules. Pictures are never given text, captions or watermarks
 from __future__ import annotations
 
 import base64
+import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
 
-from . import makers, picture
+from . import config, makers, picture
 from .mcp_client import HermesRefused
 
 VIDEO_SYS = ("You help write prompts for a text-to-video model. " + makers.KEEP_WORDS + " Reply ONLY with extra detail to "
@@ -29,8 +30,96 @@ MOTION_SYS = ("You help write prompts for an image-to-video model that brings Sc
               "Never ask for text, captions or watermarks.")
 NO_TEXT_VIDEO = "text, words, letters, captions, subtitles, titles, watermark, logo, signature, frame, border"
 QUESTIONS = [["Length?", ["5 seconds ⭐", "8 seconds", "10 seconds"]],
-             ["Shape?", ["Tall (phone) ⭐", "Wide (screen)", "Square"]],
-             ["Start from?", ["Just my words ⭐", "Make a picture first, then bring it to life", "My newest picture in this project"]]]
+             ["Shape?", ["Tall (phone) ⭐", "Wide (screen)", "Square"]]]
+
+# 🛤 Video paths (2026-11-24, Scott: "make [picture first] default but plan for other paths to be built in … so as future
+# methods are found they can be added as a switch/toggle"). Each path = one way to get a video. Switch them on/off and
+# pick the ⭐ default in ⚙️ Settings → 🎬 Video paths (saved in <lab home>/video_paths.json). The "Start from?" card lists
+# the paths that are on. A new MODEL for an existing kind is a JSON entry only, e.g.
+#   {"id": "kling-words", "label": "Kling v4 from my words", "kind": "words", "model": "kling-v4-text-to-video", "on": true}
+# A new METHOD (local ComfyUI video, another service…) = one new handler in KINDS below + its entry.
+KINDS = {
+    "picture_first": "Lustify draws the first frame, then a 🔓 image-to-video model adds motion",
+    "words": "a 🔓 text-to-video model makes it from your words alone",
+    "newest": "your newest picture in this project is brought to life",
+    "free": "🆓 slow pan-and-zoom of your newest picture, made on this computer (ffmpeg) — no AI motion, $0",
+}
+DEFAULT_PATHS = [
+    {"id": "picture_first", "label": "Make a picture first, then bring it to life", "kind": "picture_first", "on": True, "star": True,
+     "why": "Lustify is proven uncensored for the first frame; the video model only adds motion"},
+    {"id": "words", "label": "Just my words", "kind": "words", "on": True},
+    {"id": "newest", "label": "My newest picture in this project", "kind": "newest", "on": True},
+    {"id": "free", "label": "🆓 Free moving picture of my newest picture (no AI)", "kind": "free", "on": True},
+]
+PATH_KEYS = ("id", "label", "kind", "on", "star", "model", "why")
+
+
+def _paths_file() -> Path:
+    return config.home() / "video_paths.json"
+
+
+def all_paths() -> list[dict]:
+    """Built-in paths + video_paths.json (same id → its fields replace; new id with a known kind → added). Exactly one ⭐."""
+    out = {p["id"]: dict(p) for p in DEFAULT_PATHS}
+    order = [p["id"] for p in DEFAULT_PATHS]
+    try:
+        d = json.loads(_paths_file().read_text()) if _paths_file().is_file() else {}
+    except (OSError, ValueError):
+        d = {}
+    for x in (d.get("paths") if isinstance(d, dict) else d) or []:
+        if not isinstance(x, dict) or not re.fullmatch(r"[a-z0-9_-]{2,40}", str(x.get("id") or "")):
+            continue
+        base = out.get(x["id"], {"on": False})
+        row = {**base, **{k: x[k] for k in PATH_KEYS if k in x}}
+        if row.get("kind") not in KINDS or not row.get("label"):
+            continue
+        if x["id"] not in out:
+            order.append(x["id"])
+        out[x["id"]] = row
+    star = (d.get("star") if isinstance(d, dict) else None) or next((i for i in order if out[i].get("star") and out[i].get("on")), "")
+    if not out.get(star, {}).get("on"):
+        star = next((i for i in order if out[i].get("on")), "")
+    rows = [out[i] for i in order]
+    for r in rows:
+        r["star"] = r["id"] == star
+        r["what"] = KINDS[r["kind"]]
+    return rows
+
+
+def set_path(body: dict) -> dict:
+    """⚙️ Settings: {"id", "on"} switches a path; {"star": id} makes it the default. Keeps added custom paths."""
+    try:
+        d = json.loads(_paths_file().read_text()) if _paths_file().is_file() else {}
+    except (OSError, ValueError):
+        d = {}
+    d = d if isinstance(d, dict) else {"paths": d}
+    rows = [x for x in d.get("paths") or [] if isinstance(x, dict)]
+    known = {p["id"] for p in all_paths()}
+    if body.get("star"):
+        if body["star"] not in known:
+            raise ValueError("no such video path")
+        d["star"] = body["star"]
+        row = next((x for x in rows if x.get("id") == body["star"]), None)
+        (row.update(on=True) if row else rows.append({"id": body["star"], "on": True}))
+    if "id" in body:
+        if body["id"] not in known:
+            raise ValueError("no such video path")
+        row = next((x for x in rows if x.get("id") == body["id"]), None)
+        (row.update(on=bool(body.get("on"))) if row else rows.append({"id": body["id"], "on": bool(body.get("on"))}))
+    d["paths"] = rows
+    _paths_file().parent.mkdir(parents=True, exist_ok=True)
+    tmp = _paths_file().with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, indent=2, ensure_ascii=False))
+    tmp.replace(_paths_file())
+    ps = all_paths()
+    if not any(p["on"] for p in ps):
+        raise ValueError("keep at least one video path on")
+    return {"ok": True, "paths": ps}
+
+
+def path_question(rows: list[dict]) -> list:
+    on = [r for r in rows if r["on"]]
+    return [["Start from?", [r["label"] + (" ⭐" if r["star"] else "") for r in on]]] if len(on) > 1 else []
 SHAPE_AR = {"tall": "9:16", "wide": "16:9", "square": "1:1"}
 MAKE, FREE, CANCEL = "▶ Make it", "🆓 Free moving picture instead (pan and zoom, no AI motion)", "✖ Don't make it"
 MAX_WAIT_S = 16 * 60
@@ -112,16 +201,23 @@ def _free(run, pic: Path | None, secs: int, aspect: str, words: str) -> None:
 def run(run) -> None:
     """The whole video run. Raises Stopped / SpendBlocked like the agent loop (handled by Run.loop)."""
     words = picture.picture_words(run.task)
-    ch = makers.ask(run, "video", makers.items_from(QUESTIONS))
+    rows = all_paths()
+    on = [r for r in rows if r["on"]] or rows[:1]
+    ch = makers.ask(run, "video", makers.items_from(QUESTIONS + path_question(rows)))
     secs, aspect = _secs(ch.get("length", "")), _aspect(ch.get("shape", ""))
-    start = (ch.get("start from") or "").lower()
+    pick = ch.get("start from", "")
+    path = next((r for r in on if r["label"] == pick), None) or next((r for r in on if r["star"]), on[0])
+    run.video_path = path["id"]
+    run._record({"action": "route", "why": f"🛤 video path: {path['label']}", "result": {"path": path["id"], "kind": path["kind"]}, "usd": 0.0})
     run._check_stop()
     pic: Path | None = None
-    if "newest" in start:
+    if path["kind"] in ("newest", "free"):
         pic = newest_picture(run.root)
         if not pic:
-            return _fail(run, "There is no picture in this project yet — make one with 🖼, or pick \"Make a picture first\".")
-    elif "picture first" in start:
+            return _fail(run, "There is no picture in this project yet — make one with 🖼, or use \"Make a picture first\".")
+        if path["kind"] == "free":
+            return _free(run, pic, secs, aspect, words)
+    elif path["kind"] == "picture_first":
         if not run.connected:
             return _fail(run, "🔌 Pictures are made by Hermes — switch the Lab to connected mode.")
         p = picture.write_prompt(run, words + f"\nShape: {ch.get('shape', '')}")
@@ -136,8 +232,8 @@ def run(run) -> None:
     prompt = _prompt(run, words, MOTION_SYS if pic else VIDEO_SYS, f"\nLength: {secs} s\nShape: {aspect}")
     args = {"prompt": prompt, "duration": f"{secs}s", "resolution": str(run.cfg.get("video_resolution") or "720p"),
             "negative_prompt": NO_TEXT_VIDEO, "name": picture.own_words(words)[:40], "task": f"lab-video:{run.project['id']}"}
-    if run.cfg.get("video_model"):
-        args["model"] = str(run.cfg["video_model"])
+    if path.get("model") or run.cfg.get("video_model"):
+        args["model"] = str(path.get("model") or run.cfg["video_model"])
     if pic:
         if pic.stat().st_size > 12_000_000:
             return _fail(run, f"{pic.name} is over 12 MB — too big to send as the first frame.")

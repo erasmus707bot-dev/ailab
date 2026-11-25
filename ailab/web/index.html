@@ -614,7 +614,30 @@ function settingsView() {
         inp, h("div", { class: "acts" }, save, test, rm), msg));
     });
   });
-  return [box];
+  return [box, videoPathsBox()];
+}
+/* 🛤 Video paths (2026-11-24, Scott: "plan for other paths … so as future methods are found they can be added as a
+   switch/toggle"): every way the Lab can make a video, each switched on/off, one ⭐ default. New paths show up here
+   by themselves (added in <lab home>/video_paths.json or in code). */
+function videoPathsBox() {
+  const box = h("section", { class: "keys", "aria-label": "Video paths" }, h("h3", {}, "🎬 Video paths"),
+    h("p", { class: "note" }, "Ways the Lab can make your videos. Switch each on or off; ⭐ is used when you don't pick. The ones that are on show up on the \"Start from?\" card."));
+  const list = h("div", {}, h("p", { class: "note" }, "⏳"));
+  box.append(list);
+  const paint = (r) => {
+    if (!r.ok) { list.replaceChildren(h("p", {}, "⚠️ " + (r.message || r.code || "Couldn't load the video paths"))); return; }
+    list.replaceChildren(...r.paths.map(pa => {
+      const on = h("input", { type: "checkbox", checked: pa.on, "aria-label": `Use ${pa.label}` });
+      on.onchange = async () => paint(await api("/api/video_paths", { id: pa.id, on: on.checked }));
+      const star = h("button", { class: "btn" + (pa.star ? " pri" : ""), type: "button", disabled: pa.star, "aria-pressed": pa.star ? "true" : "false",
+        onclick: async () => paint(await api("/api/video_paths", { star: pa.id })) }, pa.star ? "⭐ Default" : "Make default");
+      return h("div", { class: "keyrow" }, h("label", { class: "chk" }, on, " ", h("b", {}, pa.label)),
+        h("div", { class: "st" }, pa.what + (pa.model ? ` · model ${pa.model}` : "") + (pa.why ? ` — ${pa.why}` : "")),
+        h("div", { class: "acts" }, star));
+    }));
+  };
+  api("/api/video_paths").then(paint);
+  return box;
 }
 
 /* ---------- 📝 Prompt builder (2026-11-24 M4) ----------

@@ -61,9 +61,11 @@ class VideoRun(Base):
 
     def test_price_card_then_video_saved(self):
         mcp = ArtMCP(vid_path=self.mp4())
-        r, b = self.make(mcp)
+        r, b = self.make(mcp, ask=True)
         t = threading.Thread(target=r.loop); t.start()
         self.assertTrue(wait_for(lambda: r.question is not None))
+        r.answer("Length? → 5 seconds · Shape? → Tall (phone) · Start from? → Just my words")
+        self.assertTrue(wait_for(lambda: r.question is not None and "costs" in r.question["text"]))
         self.assertIn("$0.35", r.question["text"])
         self.assertIn("of $5.00", r.question["text"])
         self.assertNotIn("video_make", mcp.calls)                 # nothing spent before the tap
@@ -245,3 +247,60 @@ class ArtRoute(Base):
         b = Brain(["x"]); b.mcp = PicMCP()
         r = agent.Run(b, config.load({"mode": "connected"}), self.project, "openrouter", "m", "fix the login bug", ctypes=[])
         self.assertFalse(r.art_routed)
+
+
+class VideoPaths(Base):
+    def setUp(self):
+        super().setUp()
+        f = video._paths_file()
+        if f.exists():
+            f.unlink()
+
+    def test_picture_first_is_the_default(self):
+        ps = video.all_paths()
+        self.assertEqual([p["id"] for p in ps if p["star"]], ["picture_first"])
+        q = video.path_question(ps)
+        self.assertTrue(q[0][1][0].endswith("⭐"))
+
+    def test_default_run_makes_a_picture_first(self):
+        mcp = ArtMCP(vid_path=VideoRun.mp4(self))
+        b = Brain(["detail"]); b.mcp = mcp
+        r = agent.Run(b, config.load({"mode": "connected"}), self.project, "openrouter", "m", "x", ctypes=["video"])
+        t = threading.Thread(target=r.loop); t.start()
+        self.assertTrue(wait_for(lambda: r.question is not None))
+        self.assertIn("image_make", mcp.calls)                  # the first frame was drawn before the price card
+        r.answer(r.question["choices"][0]); t.join(5)
+        self.assertEqual(r.video_path, "picture_first")
+        self.assertTrue(mcp.args[mcp.calls.index("video_make")].get("image_b64"))
+
+    def test_toggle_star_and_custom_model_path(self):
+        video.set_path({"id": "words", "on": False})
+        self.assertNotIn("Just my words", video.path_question(video.all_paths())[0][1])
+        video.set_path({"star": "newest"})
+        self.assertEqual([p["id"] for p in video.all_paths() if p["star"]], ["newest"])
+        f = video._paths_file()
+        d = json.loads(f.read_text())
+        d["paths"].append({"id": "kling-words", "label": "Kling v4 from my words", "kind": "words", "model": "kling-v4-text-to-video", "on": True})
+        d["paths"].append({"id": "bad", "label": "x", "kind": "nope", "on": True})
+        f.write_text(json.dumps(d))
+        ids = [p["id"] for p in video.all_paths()]
+        self.assertIn("kling-words", ids)
+        self.assertNotIn("bad", ids)
+        with self.assertRaises(ValueError):
+            video.set_path({"id": "nope", "on": True})
+
+    def test_custom_path_model_reaches_hermes(self):
+        f = video._paths_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"star": "kling-words", "paths": [{"id": "kling-words", "label": "Kling v4 from my words", "kind": "words",
+                                                                    "model": "kling-v4-text-to-video", "on": True}]}))
+        mcp = ArtMCP(vid_path=VideoRun.mp4(self))
+        b = Brain(["detail"]); b.mcp = mcp
+        r = agent.Run(b, config.load({"mode": "connected"}), self.project, "openrouter", "m", "x", ctypes=["video"])
+        t = threading.Thread(target=r.loop); t.start()
+        self.assertTrue(wait_for(lambda: r.question is not None))
+        r.answer(r.question["choices"][0]); t.join(5)
+        a = mcp.args[mcp.calls.index("video_make")]
+        self.assertEqual(a["model"], "kling-v4-text-to-video")
+        self.assertNotIn("image_b64", a)
+        f.unlink()
