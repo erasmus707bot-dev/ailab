@@ -20,8 +20,7 @@ ailab 411 → all pass (unittest; pytest missing in the VM, run with `TMPDIR=/tm
 setting file, API.
 
 ## Not done / not verified
-- **3d Image Studio picker — not built.** Image Studio has no text-to-picture generator; no Hermes UI lists
-  `image_models`. Needs Scott's call (see menu).
+- **3d Image Studio picker — dropped** (Scott 20:40 "1"): pictures are made in the Lab; Image Studio stays an editor.
 - Juggernaut + Illustrious not yet made through `image_make` → `m3_route_proof.sh`.
 - Lab restart needed (server code). Argus touch check of the ⚙️ toggle owed.
 - Keep-model-loaded (option 2 from M2) parked — would make Iris wait longer for the card.
