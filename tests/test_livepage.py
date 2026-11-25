@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 import os
 import shutil
 import tempfile
@@ -122,7 +123,14 @@ class Ports(Base):
         self.assertEqual(seen["host"], f"127.0.0.1:{self.up.server_address[1]}")
         for marker in ("x-forwarded-for", "x-forwarded-host", "forwarded", "via", "x-real-ip"):   # must not add proxy markers…
             self.assertNotIn(marker, seen)
-        self.get("now", "/gaming.html", headers={"X-Forwarded-For": "100.1.2.3", "Tailscale-User-Login": "x@y"})
+        from ailab import gate                                       # 2026-11-24: previews are Scott-only — x@y is him here
+        gate._CACHE.update(at=time.time() + 3600, logins=frozenset({"x@y"}))
+        try:
+            self.get("now", "/gaming.html", headers={"X-Forwarded-For": "100.1.2.3", "Tailscale-User-Login": "x@y"})
+        finally:
+            gate._CACHE.update(at=0.0, logins=frozenset())
+        c2, b2, _ = self.get("now", "/gaming.html", headers={"X-Forwarded-For": "100.1.2.3", "Tailscale-User-Login": "z@y"})
+        self.assertEqual(c2, 403)                                                                   # a stranger is refused
         seen = Upstream.seen[-1][2]                                                                 # …and must never drop them
         self.assertEqual((seen["x-forwarded-for"], seen["tailscale-user-login"]), ("100.1.2.3", "x@y"))
 

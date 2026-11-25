@@ -95,15 +95,19 @@ class Repos(unittest.TestCase):
              mock.patch.object(agent, "approvals", return_value=[]):
             r = self._run()
             r._repo({"repo": "hermes", "do": "pull", "paths": ["forge/card.py"]})
-            same = r._repo({"repo": "hermes", "do": "propose", "paths": ["forge/card.py"]})
+            plain = {"what": "the status shows 2", "where": "status card", "risk": "how it works"}
+            self.assertIn("error", r._repo({"repo": "hermes", "do": "propose", "paths": ["forge/card.py"]}))  # no plain words
+            same = r._repo({"repo": "hermes", "do": "propose", "paths": ["forge/card.py"], "plain": plain})
             self.assertEqual(same["proposed"], [])                          # unchanged copy: nothing to propose
             (self.proj / "repos/hermes/forge/card.py").write_text("def status():\n    return 2\n")
             (self.proj / "repos/hermes/forge/new.py").write_text("x = 1\n")
-            out = r._repo({"repo": "hermes", "do": "propose", "note": "two",
+            out = r._repo({"repo": "hermes", "do": "propose", "note": "two", "plain": plain,
                            "paths": ["repos/hermes/forge/card.py", "forge/new.py", ".env", "forge/missing.py"]})
         self.assertEqual([p["path"] for p in out["proposed"]], ["forge/card.py", "forge/new.py"])
         self.assertEqual(len(out["skipped"]), 2)
         self.assertEqual(held[0][0][2], str(self.repo / "forge" / "card.py"))
+        self.assertEqual(held[0][1]["plain"]["what"], "the status shows 2")
+        self.assertEqual(len(held[0][1]["base"]), 64)                       # sha of the real file when proposed
         self.assertEqual((self.repo / "forge" / "card.py").read_text(), "def status():\n    return 1\n")   # untouched
         self.assertFalse((self.repo / "forge" / "new.py").exists())
 

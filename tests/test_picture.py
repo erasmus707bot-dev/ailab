@@ -67,7 +67,7 @@ class PictureRun(Base):
         self.assertIn("palm tree", mcp.args[mcp.calls.index("image_make")]["prompt"])
         self.assertAlmostEqual(r.usd, 0.0071 + 0.001, places=6)
         self.assertEqual(r.view()["stage"]["icon"], "✅")
-        self.assertEqual([s["action"] for s in r.steps], ["prompt", "picture"])
+        self.assertEqual([s["action"] for s in r.steps], ["prompt", "picture", "eyes"])   # 👁 M1: the look after the picture
 
     def test_choices_card_then_shape_becomes_aspect(self):
         mcp = PicMCP()
