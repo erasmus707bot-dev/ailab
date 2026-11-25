@@ -44,6 +44,7 @@ KINDS = {
     "newest": "your newest picture in this project is brought to life",
     "free": "🆓 slow pan-and-zoom of your newest picture, made on this computer (ffmpeg) — no AI motion, $0",
     "local": "🏠 a first picture, then real AI motion made on this computer's own graphics card — $0, private, slow",
+    "last_frame": "⛓ carries on from the last frame of your newest video in this project (chain clips into a longer one)",
 }
 DEFAULT_PATHS = [
     {"id": "picture_first", "label": "Make a picture first, then bring it to life", "kind": "picture_first", "on": True, "star": True,
@@ -58,6 +59,9 @@ DEFAULT_PATHS = [
     {"id": "local_14b", "label": "🏠 On this computer — Wan 2.2 14B adult-tuned ($0, very slow)", "kind": "local",
      "model": "local/wan22-14b-rapid-q4", "on": False, "locked": True,
      "why": "community adult-tuned model, unproven on this card — stays off until you unlock it"},
+    # ⛓ 2026-11-25 (Motion Presets M5; eyes+story+rip M2 plan: "switches, off by default"). Faces drift after a few links.
+    {"id": "last_frame", "label": "⛓ Carry on from my newest video's last frame", "kind": "last_frame", "on": False,
+     "why": "chains clips into a longer video; after 3–4 links start a fresh picture so faces don't drift"},
 ]
 PATH_KEYS = ("id", "label", "kind", "on", "star", "model", "why", "locked", "unlocked")
 LOCAL_WAIT_S = 65 * 60                          # Hermes gives a local clip 60 min on the 6 GB card
@@ -168,6 +172,11 @@ def _aspect(choice: str) -> str:
     return next((v for k, v in SHAPE_AR.items() if k in c), "9:16")
 
 
+def newest_video(root: Path) -> Path | None:
+    vids = [p for p in Path(root).glob("videos/**/*.mp4") if p.is_file() and "/run-" not in str(p)]
+    return max(vids, key=lambda p: p.stat().st_mtime) if vids else None
+
+
 def newest_picture(root: Path) -> Path | None:
     pics = [p for p in (root / "pictures").glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")] \
         if (root / "pictures").is_dir() else []
@@ -267,6 +276,17 @@ def run(run) -> None:
             return _fail(run, "There is no picture in this project yet — make one with 🖼, or use \"Make a picture first\".")
         if path["kind"] == "free":
             return _free(run, pic, secs, aspect, words)
+    elif path["kind"] == "last_frame":                           # ⛓ next clip starts where the newest one ended
+        from . import motion_make
+        clip = newest_video(run.root)
+        if not clip:
+            return _fail(run, "There is no video in this project yet — make one first, then ⛓ carry on from it.")
+        rel = picture.claim(run.root, f"pictures/{makers.stamp()}-last-frame.jpg")
+        (run.root / rel).parent.mkdir(parents=True, exist_ok=True)
+        if not motion_make.last_frame(clip, run.root / rel):
+            return _fail(run, f"Couldn't take the last frame of {clip.name} (ffmpeg).")
+        pic = run.root / rel
+        run._record({"action": "route", "why": f"⛓ starting from the last frame of {clip.name}", "result": {"from": clip.name}, "usd": 0.0})
     elif path["kind"] in ("picture_first", "local"):
         if not run.connected:
             return _fail(run, "🔌 Pictures are made by Hermes — switch the Lab to connected mode.")

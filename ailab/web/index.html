@@ -323,6 +323,24 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .lookbtn { min-height: 44px; }
   .lookwarn { color: var(--dim); }
   dialog.lookdlg { width: min(680px, 96vw); max-height: 88vh; }
+  .motrow .lchip { max-width: 100%; }
+  dialog.motdlg .motlist { display: flex; flex-direction: column; gap: 8px; }
+  .motcard { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--panel2); }
+  .motprev { width: 96px; height: 120px; object-fit: cover; border-radius: 8px; background: var(--calm); display: grid; place-items: center; }
+  .motprev.big { width: min(320px, 80vw); height: auto; max-height: 40vh; }
+  .motrole { display: flex; gap: 8px; align-items: center; min-height: 44px; } .motrole > span { min-width: 7em; color: var(--dim); }
+  .tl { display: flex; flex-direction: column; gap: 4px; overflow-x: auto; }
+  .tlrow { display: grid; grid-template-columns: 6.5em 1fr auto; gap: 6px; align-items: center; min-height: 48px; }
+  .tlname { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tllane { position: relative; height: 44px; background: var(--calm); border-radius: 8px; min-width: 240px; }
+  .tlruler .tllane { height: 22px; background: none; } .tltick { position: absolute; font-size: .8rem; color: var(--dim); transform: translateX(-50%); }
+  .tlblk { position: absolute; top: 3px; bottom: 3px; background: var(--me); border: 1px solid var(--accent); border-radius: 8px; color: var(--text);
+    display: flex; align-items: center; padding: 0 14px 0 6px; overflow: hidden; white-space: nowrap; font-size: .9rem; touch-action: none; cursor: grab; min-width: 28px; }
+  .tlblk.cam { border-style: dashed; background: var(--panel2); }
+  .tlgrip { position: absolute; right: 0; top: 0; bottom: 0; width: 14px; cursor: ew-resize; background: var(--accent); opacity: .5; border-radius: 0 7px 7px 0; }
+  dialog.tldlg { width: min(900px, 98vw); }
+  .motdraft input, .motdraft textarea { width: 100%; }
+  @media (max-width: 600px) { .motcard { grid-template-columns: 72px 1fr; } .motcard .runbar { grid-column: 1 / -1; } .motprev { width: 72px; height: 90px; } .tlrow { grid-template-columns: 4.5em 1fr; } .tlrow > select { grid-column: 1 / -1; } }
   dialog.lookdlg > form { display: flex; flex-direction: column; gap: 10px; max-height: 84vh; overflow: auto; }
   .lookhead { display: flex; justify-content: space-between; align-items: center; } .lookhead h3 { margin: 0; }
   .lookdlg input[type=search], .lookdlg input[type=text], .lookdlg select { min-height: 44px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg, var(--panel)); color: var(--text); }
@@ -1109,7 +1127,9 @@ function breakdownBox(p, hooks) {
         h("div", { class: "runbar" },
           h("button", { class: "btn pri", type: "button", disabled: !(hooks && hooks.make), title: "This shot's recipe as words, with your chosen cast in place of the people — a picture run you can watch in 🤖 Make",
             onclick: act("/api/breakdown/make", s.i, x => { hooks.make(x.task); note.textContent = `🎬 Started: ${x.task.slice(0, 90)}…${x.cast.length ? "" : " (no cast chosen — people stay as person A/B)"}`; }) }, "🎬 Make one like this"),
-          h("button", { class: "btn", type: "button", onclick: act("/api/breakdown/frame", s.i, x => { note.textContent = `📌 Frame copied to ${x.path} and pinned as a reference.`; }) }, "📌 Use frame as reference")))));
+          h("button", { class: "btn", type: "button", onclick: act("/api/breakdown/frame", s.i, x => { note.textContent = `📌 Frame copied to ${x.path} and pinned as a reference.`; }) }, "📌 Use frame as reference"),
+          h("button", { class: "btn", type: "button", disabled: !(hooks && hooks.motionFill), title: "This scene's movement becomes a motion preset (poses + camera on gandalf, $0)",
+            onclick: () => { hooks.motionFill({ mode: "pull", path: r.path, start: s.start, end: Math.min(s.end, s.start + 30), moments: 4 }); note.textContent = "🏃 Pulling the motion — watch 🤖 Make, then name it and save it."; } }, "🏃 Use this motion")))));
     sheet.replaceChildren(h("div", { class: "trow" }, h("b", {}, `🎞 ${r.title || r.name}`), h("span", { class: "note" }, `${r.count} scenes · ${Math.round(r.duration || 0)} s${r.private ? " · 🔒 private" : ""}${r.state !== "done" ? ` · ⏸ ${r.state}` : ""}`),
       h("button", { class: "btn", type: "button", onclick: () => sheet.replaceChildren() }, "✕ Close")), ...cards);
     const f = focus != null && document.getElementById(`bd-${id}-${focus}`); if (f) f.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1372,6 +1392,9 @@ function libraryBox(p, hooks) {
   bdFold.addEventListener("toggle", () => { if (bdFold.open) bdEnsure(); });
   const bdBtn = f => h("div", { class: "runbar" }, h("button", { class: "btn", type: "button", title: "Scenes, what is shown, what is said and a shot recipe for each — on gandalf, $0",
     onclick: () => { bdFold.open = true; bdEnsure().start(f.path); bdFold.scrollIntoView({ block: "start", behavior: "smooth" }); } }, "🎞 Break it down"));
+  const motBtn = (f, k) => h("div", { class: "runbar" }, h("button", { class: "btn", type: "button", disabled: !(hooks && hooks.motionFill),
+    title: k === "pic" ? "Save the pose in this picture as a motion preset (poses found on gandalf, $0)" : "Pick a time range — the movement becomes a motion preset (poses + camera found on gandalf, $0)",
+    onclick: () => k === "pic" ? hooks.motionFill({ mode: "result", path: f.path }) : motionPullForm(f.path, hooks, { url: url(f) }) }, "🏃 Save its motion"));
   const globalCast = h("details", { class: "libtoss", id: "libglobalcast" }, h("summary", {}, "🎭 Global cast — reuse a cast or make a new one"));
   globalCast.addEventListener("toggle", () => { if (globalCast.open && !globalCast.querySelector(".castpick")) globalCast.append(castPicker(p, hooks, { id: "libcastpick", importBtn: true })); }, { once: false });
   const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, globalCast, bdFold);
@@ -1390,7 +1413,7 @@ function libraryBox(p, hooks) {
     big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, `${LIB_ICON[k]} ${name}`), h("a", { class: "btn", href: u, download: name }, "⬇ Download"),
       h("a", { class: "btn", href: u, target: "_blank", rel: "noopener" }, "⤢ Full size"),
       h("button", { class: "btn", type: "button", onclick: () => { shut(); paint(); } }, "✖ Close")), pl.bar(),
-      h("div", { class: "note wherepath", title: "Where this file is in the project folder" }, `📍 ${f.path}`), body, k === "pic" ? refBar(f) : k === "vid" ? bdBtn(f) : null, changeBox2(f, k));
+      h("div", { class: "note wherepath", title: "Where this file is in the project folder" }, `📍 ${f.path}`), body, k === "pic" ? refBar(f) : k === "vid" ? bdBtn(f) : null, k === "pic" || k === "vid" ? motBtn(f, k) : null, changeBox2(f, k));
     pl.hook(body, k); paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
   function paint() {
@@ -1796,6 +1819,7 @@ function startView() {
     sheet: path => { if (ag) ag.startWith("Character sheet of the person in this picture", ["image"], false, { n: 5, sheet: path }); },
     make: task => { if (ag) ag.startWith(task, ["image"], false); },
     castDesign: (n, forWhat) => { if (ag) ag.startWith(`Design a cast of ${n} people` + (forWhat ? ` for: ${forWhat}` : ""), ["image"], false, { cast: { n } }); },
+    motionFill: fill => { if (ag) ag.startWith(fill.mode === "result" ? "🏃 Save the motion of this result" : "🏃 Pull a motion from a video", ["image"], false, { fill }); },
     story: (idea, opts) => { if (ag) ag.startWith(idea, ["image"], false, { story: opts }); }, ship: () => shipOpen(), where: showWhere, fresh: newProject };
   const lib = libraryBox(p, libHooks);
   let libKey = null;
@@ -1890,7 +1914,7 @@ function eyesBox(e, fix) {
     e.caption ? h("details", {}, h("summary", {}, "👁 What it saw"), h("p", {}, e.caption)) : null);
 }
 function batchGrid(pid, run, startWith) {
-  const b = run.batch; if (!b) return null;
+  const b = run.batch; if (!b || b.kind === "motionfill") return null;   /* 🏃 a fill run shows its draft card instead */
   const kept = new Set(b.kept || []);
   const base = run.task.split("\nChange:")[0].split("\nStyle:")[0].split("\nShape:")[0].split("\nVariation:")[0].trim();
   const pics = run.pictures || [], last = pics[pics.length - 1] || {};
@@ -1900,8 +1924,9 @@ function batchGrid(pid, run, startWith) {
     const url = `/preview/${pid}/${it.path}`, name = it.path.split("/").pop();
     const body = it.kind === "picture"
       ? h("a", { href: url, target: "_blank", rel: "noopener", title: "Full size" }, h("img", { src: url, alt: it.variation || "Batch picture", loading: "lazy" }))
+      : it.kind === "video" ? h("video", { src: url, controls: true, playsinline: true, preload: "metadata", "aria-label": it.variation || "Clip" })
       : h("div", { class: "docview short" }, "⏳");
-    if (it.kind !== "picture") fetch(url).then(r => r.ok ? r.text() : Promise.reject()).then(t => { body.textContent = t.length > 900 ? t.slice(0, 900) + "\n…" : t; }).catch(() => { body.textContent = "Open it with ⤢."; });
+    if (it.kind !== "picture" && it.kind !== "video") fetch(url).then(r => r.ok ? r.text() : Promise.reject()).then(t => { body.textContent = t.length > 900 ? t.slice(0, 900) + "\n…" : t; }).catch(() => { body.textContent = "Open it with ⤢."; });
     const star = h("button", { class: "btn", type: "button", "aria-pressed": String(kept.has(it.path)), title: "Keep this one — listed in kept.json in the project folder" }, kept.has(it.path) ? "⭐ Kept" : "☆ Keep");
     star.onclick = async () => { const on = star.getAttribute("aria-pressed") !== "true";
       const r = await api("/api/batch/keep", { project: pid, path: it.path, keep: on });
@@ -2347,6 +2372,259 @@ function lookPicker(pid) {
   };
 }
 
+/* ---------- 🏃 Motion Presets (2026-11-25, Scott: "saved presets of motions, movements and interactions between 2–10
+   participants … tap one and it goes into the prompt"). One line under the idea box, like 🎨 Look:
+   🏃 Motion: [Bench spot · Mara + Jun ✕] [High five · Mara + Jun ✕] [🏃 Add] [⏱ Timeline] — Add opens the library sheet
+   (search, shelves, tiny moving previews), then "Who does this?". The timeline: one row per person, drag a block to move
+   it, drag its edge to stretch it, "then" chains it to the one before; the words box underneath says the same thing —
+   change either and the other follows. Make: 🖼 one picture per motion ⭐ or 🎬 one video from chained clips. */
+const MOT_FEEL = f => f < 0.3 ? "😌 calm" : f > 0.7 ? "💥 explosive" : "🙂 natural";
+function motPreview(c, big) {
+  if (!c || !c.preview) return h("span", { class: "motprev empty" }, "🏃");
+  const src = `/api/motion/file?id=${encodeURIComponent(c.id)}&f=${encodeURIComponent(c.preview)}`;
+  if (c.preview.endsWith(".mp4")) {
+    const v = h("video", { class: "motprev" + (big ? " big" : ""), src, muted: true, loop: true, playsinline: true, preload: "metadata", "aria-label": `Preview of ${c.name}` });
+    v.muted = true;
+    const go = () => v.play().catch(() => {}), stop = () => { v.pause(); };
+    v.addEventListener("mouseenter", go); v.addEventListener("mouseleave", stop);
+    v.addEventListener("click", e => { e.preventDefault(); v.paused ? go() : stop(); });
+    if (big) setTimeout(go, 50);
+    return v;
+  }
+  return h("img", { class: "motprev" + (big ? " big" : ""), src, alt: `Preview of ${c.name}`, loading: "lazy" });
+}
+function motionPicker(p, ctl) {
+  let shown = false, view = null;
+  const row = h("div", { class: "lookrow motrow", id: "agmotion", role: "group", "aria-label": "Motion", hidden: true });
+  const note = h("span", { class: "note", role: "status" });
+  async function load() { const r = await api(`/api/motion/scene?project=${encodeURIComponent(p.id)}`); if (r.ok) view = r; paint(); }
+  async function send(body) {
+    const r = await api("/api/motion/scene", { project: p.id, ...body });
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message || "Not saved."}`; return null; }
+    view = r; paint(); return r;
+  }
+  function paint() {
+    row.hidden = !shown;
+    if (!shown) return;
+    const v = view || { resolved: [], presets: {}, warn: [] };
+    lookFill(row, h("span", { class: "tlead" }, "🏃 Motion:"),
+      ...(v.resolved.length ? v.resolved.map(b => { const c = v.presets[b.preset] || {};
+        return h("button", { class: "lchip", type: "button", title: `Take ${c.name} off`, "aria-label": `Take ${c.name || "this motion"} off`,
+          onclick: () => send({ scene: { ...v.scene, blocks: v.scene.blocks.filter(x => x.id !== b.id) } }) },
+          `${c.name || "?"} · ${Object.values(b.who).join(" + ") || "nobody yet"}`, h("span", { "aria-hidden": "true" }, " ✕")); })
+        : [h("span", { class: "note" }, "none yet")]),
+      h("button", { class: "btn lookbtn", type: "button", id: "agmotionadd", onclick: () => openLibrary() }, "🏃 Add a motion"),
+      v.resolved.length ? h("button", { class: "btn lookbtn", type: "button", id: "agmotiontl", onclick: () => openTimeline() }, "⏱ Timeline · make") : null,
+      v.warn && v.warn.length ? h("span", { class: "note lookwarn" }, `⚠️ ${v.warn[0][1]} actions at once`) : null, note);
+  }
+  /* ---- the library sheet */
+  async function openLibrary() {
+    let shelf = store.get("motshelf", ""), q = "";
+    const dlg = h("dialog", { class: "lookdlg motdlg", "aria-label": "Pick a motion" });
+    const search = h("input", { type: "search", placeholder: "🔎 Search motions — e.g. spot, dance, hug", "aria-label": "Search motions", maxlength: 40 });
+    const shelvesEl = h("div", { class: "looktabs", role: "tablist" }), list = h("div", { class: "motlist" }), msg = h("div", { class: "note", role: "status" });
+    async function paintLib() {
+      const r = await api(`/api/motions?q=${encodeURIComponent(q)}&shelf=${encodeURIComponent(shelf)}`);
+      if (!r.ok) { msg.textContent = "⚠️ Couldn't load the motions."; return; }
+      shelvesEl.replaceChildren(h("button", { class: "looktab" + (!shelf ? " on" : ""), type: "button", onclick: () => { shelf = ""; store.set("motshelf", ""); paintLib(); } }, "All"),
+        ...r.shelves.map(s => h("button", { class: "looktab" + (s === shelf ? " on" : ""), type: "button", onclick: () => { shelf = s; store.set("motshelf", s); paintLib(); } }, s)));
+      list.replaceChildren(...(r.motions.length ? r.motions.map(c => h("div", { class: "motcard" }, motPreview(c),
+        h("div", {}, h("b", {}, c.name), h("div", { class: "note" }, `${c.people[0] === c.people[1] ? c.people[0] : c.people.join("–")} people · ${c.seconds} s · 🎥 ${c.camera} · ${c.source === "video" ? "🎞 from a video" : c.source === "result" ? "⭐ from a result" : "✍️ written"}${c.poses ? " · 🦴 poses" : ""}`),
+          h("div", { class: "note" }, c.words)),
+        h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "button", onclick: () => { dlg.close(); whoDoes(c); } }, "Use ⭐"),
+          h("button", { class: "btn", type: "button", "aria-label": `Delete ${c.name}`, title: "Move to the motions trash (kept, not wiped)",
+            onclick: async () => { if (!confirm(`Delete “${c.name}”? It moves to the trash folder.`)) return; await api("/api/motion/delete", { id: c.id }); paintLib(); } }, "🗑"))))
+        : [h("p", { class: "note" }, "No motions here yet. ⭐ Pull one from a video (open a video in 📚 Library → 🏃 Save its motion, or a 🎞 breakdown scene → 🏃 Use this motion), or ✍️ write one below.")]));
+    }
+    search.oninput = () => { q = search.value; paintLib(); };
+    dlg.append(h("form", { method: "dialog", onsubmit: e => e.preventDefault() },
+      h("div", { class: "lookhead" }, h("h3", {}, "🏃 Motions"), h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => dlg.close() }, "✕")),
+      search, shelvesEl, list, msg,
+      h("div", { class: "runbar" }, h("button", { class: "btn", type: "button", onclick: () => { dlg.close(); writeForm(); } }, "✍️ Write a new motion"),
+        h("span", { class: "note" }, "⭐ Pull from a video: open the video in 📚 Library → 🏃 Save its motion"))));
+    dlg.addEventListener("close", () => dlg.remove());
+    document.body.append(dlg); paintLib(); dlg.showModal(); search.blur();
+  }
+  /* ---- "Who does this?" — one person per role; everyone else is in the background */
+  function whoDoes(c) {
+    const people = [...new Set([...(view ? view.cast : []), ...(view ? view.scene.people : [])])];
+    const dlg = h("dialog", { class: "lookdlg", "aria-label": `Who does ${c.name}?` });
+    const msg = h("div", { class: "note", role: "status" });
+    const extra = h("input", { type: "text", placeholder: "Add people (comma between names)", "aria-label": "Add people", maxlength: 120 });
+    const sels = c.roles.map((r, i) => h("select", { "aria-label": `Who is the ${r.label}?` }, h("option", { value: "" }, "— pick —"),
+      ...people.map((n, j) => h("option", { value: n, selected: j === i }, n))));
+    const all = () => [...new Set([...people, ...extra.value.split(",").map(s => s.trim()).filter(Boolean)])];
+    extra.oninput = () => { const ns = all(); sels.forEach(s => { const keep = s.value;
+      s.replaceChildren(h("option", { value: "" }, "— pick —"), ...ns.map(n => h("option", { value: n, selected: n === keep }, n))); }); };
+    const add = async () => {
+      const who = {}; c.roles.forEach((r, i) => { if (sels[i].value) who[r.key] = sels[i].value; });
+      if (Object.keys(who).length < c.roles.filter(r => r.min > 0).length) { msg.textContent = "👥 Pick someone for each part first."; return; }
+      if (new Set(Object.values(who)).size < Object.values(who).length) { msg.textContent = "👥 One person can't take two parts in the same motion."; return; }
+      await send({ people: all(), add: { preset: c.id, who } }); dlg.close();
+    };
+    dlg.append(h("form", { method: "dialog", onsubmit: e => { e.preventDefault(); add(); } },
+      h("div", { class: "lookhead" }, h("h3", {}, `👥 Who does “${c.name}”?`), h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => dlg.close() }, "✕")),
+      motPreview(c, true), h("p", { class: "note" }, c.words),
+      ...c.roles.map((r, i) => h("label", { class: "motrole" }, h("span", {}, `${r.key} · ${r.label}`), sels[i])),
+      people.length ? null : h("p", { class: "note" }, "No cast in this project yet — type names below, or pick a cast in 📚 Library → 🎭 Global cast."), extra,
+      h("p", { class: "note" }, "Everyone else in the scene carries on in the background (you can give them an idle motion on the ⏱ Timeline)."), msg,
+      h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "submit" }, "✅ Add to the scene ⭐"))));
+    dlg.addEventListener("close", () => dlg.remove());
+    document.body.append(dlg); dlg.showModal();
+  }
+  /* ---- ✍️ write a motion (the writer drafts the key moments; a test render is priced first, only if he taps it) */
+  function writeForm() {
+    const dlg = h("dialog", { class: "lookdlg", "aria-label": "Write a motion" });
+    const words = h("textarea", { rows: 3, placeholder: "{A} spots {B} on the bench — use {A}, {B}… for the people", "aria-label": "What happens", maxlength: 400 });
+    const name = h("input", { type: "text", placeholder: "Name (e.g. Bench spot)", "aria-label": "Name", maxlength: 40 });
+    const roles = h("input", { type: "text", placeholder: "Parts, comma between (e.g. lifter, spotter)", "aria-label": "Parts", maxlength: 200 });
+    const feel = h("input", { type: "range", min: 0, max: 100, value: 50, "aria-label": "Feel: calm to explosive" }), feelLab = h("span", { class: "note" }, MOT_FEEL(0.5));
+    feel.oninput = () => { feelLab.textContent = MOT_FEEL(feel.value / 100); };
+    const msg = h("div", { class: "note", role: "status" });
+    dlg.append(h("form", { method: "dialog", onsubmit: e => { e.preventDefault();
+        if (!words.value.trim()) { msg.textContent = "✍️ Say what happens first."; return; }
+        ctl.start(`🏃 Write a motion: ${name.value || words.value.slice(0, 40)}`, ["image"], false,
+          { fill: { mode: "write", words: words.value, name: name.value, roles: roles.value.split(",").map(s => s.trim()).filter(Boolean), feel: feel.value / 100 } });
+        dlg.close(); } },
+      h("div", { class: "lookhead" }, h("h3", {}, "✍️ Write a motion"), h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => dlg.close() }, "✕")),
+      name, words, roles, h("label", { class: "motrole" }, h("span", {}, "Feel"), feel, feelLab), msg,
+      h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "submit" }, "✍️ Draft the key moments ⭐ ($0–$0.01)"))));
+    dlg.addEventListener("close", () => dlg.remove());
+    document.body.append(dlg); dlg.showModal();
+  }
+  /* ---- ⏱ the timeline */
+  function openTimeline() {
+    const dlg = h("dialog", { class: "lookdlg tldlg", "aria-label": "Motion timeline" });
+    const body = h("div", { class: "tl" }), wordsBox = h("textarea", { rows: 3, "aria-label": "The timeline in words", maxlength: 2000 });
+    const msg = h("div", { class: "note", role: "status", "aria-live": "polite" });
+    const clipsSel = h("select", { "aria-label": "How the clips move" }, h("option", { value: "local" }, "🏠 AI motion on this computer ⭐ ($0, slow)"),
+      h("option", { value: "venice" }, "🔓 Venice AI motion (price first)"), h("option", { value: "free" }, "🆓 Pan-and-zoom ($0, no AI motion)"));
+    const shapeSel = h("select", { "aria-label": "Shape" }, ...["Tall (phone)", "Wide (screen)", "Square"].map(s => h("option", { value: s }, s)));
+    let wordsDirty = false;
+    wordsBox.oninput = () => { wordsDirty = true; };
+    const useWords = async () => { if (!wordsDirty) return; wordsDirty = false; const r = await send({ words: wordsBox.value }); if (r) { paintTl(); msg.textContent = (r.notes || []).join(" ") || "✅ Blocks updated from your words."; } };
+    wordsBox.addEventListener("blur", useWords);
+    const setBlock = async (id, patch) => { const sc = { ...view.scene, blocks: view.scene.blocks.map(b => b.id === id ? { ...b, ...patch } : b) }; if (await send({ scene: sc })) paintTl(); };
+    function paintTl() {
+      const v = view, L = Math.max(4, v.length || 0), pct = t => `${(t / L) * 100}%`;
+      const camRow = h("div", { class: "tlrow" }, h("span", { class: "tlname" }, "🎥 Camera"),
+        h("div", { class: "tllane" }, ...v.scene.camera.map(c => h("button", { class: "tlblk cam", type: "button", style: `left:${pct(c.start)};width:${pct(c.dur)}`,
+          title: `${c.move} — tap to take it off`, onclick: () => send({ scene: { ...v.scene, camera: v.scene.camera.filter(x => x.id !== c.id) } }).then(paintTl) }, c.move))),
+        h("select", { "aria-label": "Add a camera move", onchange: e => { if (!e.target.value) return;
+          send({ scene: { ...v.scene, camera: [...v.scene.camera, { move: e.target.value, start: 0, dur: L }] } }).then(paintTl); } },
+          h("option", { value: "" }, "＋ move"), ...["slow orbit", "low tracking", "slow push-in", "pull-out", "pan left", "pan right", "tracking", "handheld", "tilt up"].map(m => h("option", { value: m }, m))));
+      const lanes = v.scene.people.map(n => {
+        const lane = h("div", { class: "tllane", "aria-label": `${n}'s row` });
+        (v.rows[n] || []).forEach(b => {
+          const c = v.presets[b.preset] || {};
+          const blk = h("div", { class: "tlblk", style: `left:${pct(b.t0)};width:${pct(b.dur)}`, tabindex: 0, role: "button",
+            "aria-label": `${c.name} from ${b.t0} to ${b.t1} seconds — drag to move, drag the right edge to stretch, tap for options` },
+            h("span", {}, `${c.name}${b.after ? " ⛓" : b.start != null ? " 📌" : ""}`), h("span", { class: "tlgrip", "aria-hidden": "true" }));
+          let sx = 0, mode = "", moved = false;
+          blk.addEventListener("pointerdown", e => { sx = e.clientX; moved = false; mode = e.target.classList.contains("tlgrip") ? "dur" : "move"; blk.setPointerCapture(e.pointerId); });
+          blk.addEventListener("pointermove", e => { if (!mode) return; const dx = e.clientX - sx; if (Math.abs(dx) > 4) moved = true;
+            if (!moved) return; const w = lane.getBoundingClientRect().width || 1, dt = dx / w * L;
+            if (mode === "move") blk.style.left = pct(Math.max(0, b.t0 + dt)); else blk.style.width = pct(Math.max(0.5, b.dur + dt)); });
+          blk.addEventListener("pointerup", e => { const m = mode; mode = ""; if (!moved) return blockMenu(b, c);
+            const w = lane.getBoundingClientRect().width || 1, dt = Math.round((e.clientX - sx) / w * L * 2) / 2;
+            if (m === "move") setBlock(b.id, { start: Math.max(0, b.t0 + dt), after: null }); else setBlock(b.id, { dur: Math.max(0.5, b.dur + dt) }); });
+          blk.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); blockMenu(b, c); }
+            if (e.key === "ArrowRight") setBlock(b.id, { start: b.t0 + 0.5, after: null }); if (e.key === "ArrowLeft") setBlock(b.id, { start: Math.max(0, b.t0 - 0.5), after: null }); });
+          lane.append(blk);
+        });
+        const idle = h("select", { "aria-label": `${n}'s idle motion when not busy`, title: "What they do in the background", onchange: e => send({ scene: { ...v.scene, idle: { ...v.scene.idle, [n]: e.target.value } } }) },
+          h("option", { value: "" }, "idle: carry on"));
+        api("/api/motions").then(r => { if (r.ok) r.motions.filter(m => m.people[0] === 1).forEach(m => idle.append(h("option", { value: m.id, selected: v.scene.idle[n] === m.id }, `idle: ${m.name}`))); });
+        return h("div", { class: "tlrow" }, h("span", { class: "tlname" }, n), lane, idle);
+      });
+      const ruler = h("div", { class: "tlrow tlruler" }, h("span", { class: "tlname" }, ""), h("div", { class: "tllane" },
+        ...Array.from({ length: Math.floor(L) + 1 }, (_, i) => h("span", { class: "tltick", style: `left:${pct(i)}` }, `${i}s`))), h("span", {}));
+      const warn = v.warn && v.warn.length ? h("div", { class: "step lookwarn" }, `⚠️ ${v.warn[0][1]} separate actions at ${v.warn[0][0]} s — video models get shaky past about ${v.max_actions}. `,
+        h("button", { class: "btn pri", type: "button", onclick: () => send({ split: true }).then(paintTl) }, "✂️ Split into shots ⭐"),
+        h("span", { class: "note" }, " (the ~3 limit is a guess until tested)")) : null;
+      body.replaceChildren(ruler, camRow, ...lanes, warn,
+        h("div", { class: "note" }, `🖼 ${v.plan.pictures} picture${v.plan.pictures === 1 ? "" : "s"} · 🎬 ${v.plan.clips} clip${v.plan.clips === 1 ? "" : "s"} of ≤ ${v.plan.clip_max_s} s (${v.length} s in all) · ⛓ each clip starts from the last frame of the one before`));
+      if (!wordsDirty) wordsBox.value = v.words;
+    }
+    function blockMenu(b, c) {
+      const m = h("dialog", { class: "lookdlg", "aria-label": `${c.name} options` });
+      const feel = h("input", { type: "range", min: 0, max: 100, value: Math.round(b.feel * 100), "aria-label": "Feel: calm to explosive" }), fl = h("span", { class: "note" }, MOT_FEEL(b.feel));
+      feel.oninput = () => { fl.textContent = MOT_FEEL(feel.value / 100); };
+      const mom = h("select", { "aria-label": "Key moment for the picture" }, ...(c.moments || []).map(x => h("option", { value: x.star ? "" : x.name, selected: (b.moment || "") === (x.star ? "" : x.name) }, `${x.star ? "⭐ " : ""}${x.name}${x.pose ? " 🦴" : ""}`)));
+      const prev = view.resolved.filter(x => x.id !== b.id && x.t1 <= b.t0 + 0.01);
+      const after = h("select", { "aria-label": "Starts after" }, h("option", { value: "" }, "no chain"), ...prev.map(x => h("option", { value: x.id, selected: b.after === x.id }, `then — after ${(view.presets[x.preset] || {}).name} (${Object.values(x.who).join(" + ")})`)));
+      const at = h("input", { type: "number", min: 0, step: 0.5, value: b.start != null ? b.start : "", placeholder: "at … s", "aria-label": "Pin at seconds" });
+      const dur = h("input", { type: "number", min: 0.5, max: 30, step: 0.5, value: b.dur, "aria-label": "Seconds long" });
+      m.append(h("form", { method: "dialog", onsubmit: e => { e.preventDefault();
+          setBlock(b.id, { feel: feel.value / 100, moment: mom.value, after: after.value || null, start: at.value === "" ? null : +at.value, dur: +dur.value || b.dur }); m.close(); } },
+        h("div", { class: "lookhead" }, h("h3", {}, `🏃 ${c.name}`), h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => m.close() }, "✕")),
+        h("label", { class: "motrole" }, h("span", {}, "Feel"), feel, fl), h("label", { class: "motrole" }, h("span", {}, "Picture moment"), mom),
+        h("label", { class: "motrole" }, h("span", {}, "⛓ Then"), after), h("label", { class: "motrole" }, h("span", {}, "📌 At (s)"), at),
+        h("label", { class: "motrole" }, h("span", {}, "Seconds"), dur),
+        h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "submit" }, "✅ Done"),
+          h("button", { class: "btn", type: "button", onclick: () => { send({ scene: { ...view.scene, blocks: view.scene.blocks.filter(x => x.id !== b.id) } }).then(paintTl); m.close(); } }, "🗑 Take it off"))));
+      m.addEventListener("close", () => m.remove()); document.body.append(m); m.showModal();
+    }
+    const make = kind => { const idea = ctl.idea().trim() || "the scene";
+      ctl.start(idea, kind === "video" ? ["video"] : ["image"], false, { motion: { make: kind, clips: clipsSel.value, shape: shapeSel.value }, n: kind === "picture" ? Math.max(1, view.plan.pictures) : 1 });
+      dlg.close(); };
+    dlg.append(h("form", { method: "dialog", onsubmit: e => e.preventDefault() },
+      h("div", { class: "lookhead" }, h("h3", {}, "⏱ Timeline"), h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => dlg.close() }, "✕")),
+      body, h("label", { class: "note" }, "✍️ In words (e.g. “after the lift, Mara and Jun high five”) — change these or the blocks, the other follows:"), wordsBox,
+      h("div", { class: "runbar" }, h("button", { class: "btn", type: "button", onclick: useWords }, "↻ Use these words"), h("button", { class: "btn", type: "button", onclick: () => { dlg.close(); openLibrary(); } }, "🏃 Add a motion")),
+      msg, h("div", { class: "runbar" }, shapeSel, clipsSel),
+      h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "button", onclick: () => make("picture") }, "🖼 Make pictures ⭐"),
+        h("button", { class: "btn", type: "button", onclick: () => make("video") }, "🎬 Make the video"),
+        h("span", { class: "note" }, "Venice clips show one price card first; nothing spends without your tap."))));
+    dlg.addEventListener("close", () => dlg.remove());
+    document.body.append(dlg); paintTl(); dlg.showModal();
+  }
+  return { row, show(on) { if (shown !== !!on) { shown = !!on; if (shown && !view) load(); else paint(); } }, refresh: load, openLibrary };
+}
+/* 🏃 the draft card of a pull / write / save-from-result run: name it, pick the ⭐ moment, 💾 Save */
+function motionDraftCard(run, onSaved) {
+  const d = run.batch && run.batch.draft; if (!d || run.state !== "done") return null;
+  const name = h("input", { type: "text", value: d.name || "", placeholder: "Name this motion", "aria-label": "Motion name", maxlength: 40 });
+  const words = h("textarea", { rows: 2, "aria-label": "Motion words", maxlength: 400 }); words.value = d.words || "";
+  const shelf = h("select", { "aria-label": "Shelf" }, ...["sports", "lifting", "track", "dance", "everyday", "fight", "play", "romance", "work", "travel", "other"].map(s => h("option", { value: s, selected: (d.shelves || [])[0] === s }, s)));
+  let star = Math.max(0, (d.moments || []).findIndex(m => m.star));
+  const moms = h("div", { class: "runbar" }), msg = h("div", { class: "note", role: "status" });
+  const paintM = () => moms.replaceChildren(...(d.moments || []).map((m, i) => h("button", { class: "tchip" + (i === star ? " on" : ""), type: "button", "aria-pressed": String(i === star),
+    title: "The ⭐ moment is the default picture", onclick: () => { star = i; paintM(); } }, `${i === star ? "⭐ " : ""}${m.name}${m.pose ? " 🦴" : ""}`)));
+  paintM();
+  const pl = run.batch.pull || {};
+  return h("div", { class: "step motdraft" }, h("b", {}, "🏃 New motion — check it, name it, save it"),
+    pl.poses === false ? h("div", { class: "note lookwarn" }, `🦴 No poses: ${pl.poses_note || "the pose tools didn't answer"}. Saved as words; pictures follow the words only.`) : null,
+    name, words, h("div", { class: "note" }, "Key moments (tap the ⭐ default):"), moms, h("label", { class: "motrole" }, h("span", {}, "Shelf"), shelf), msg,
+    h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "button", onclick: async () => {
+      const r = await api("/api/motion/save", { run: run.id, name: name.value, words: words.value, star, shelves: [shelf.value] });
+      msg.textContent = r.ok ? `💾 Saved “${r.motion.name}” — it's in 🏃 Add a motion.` : `${r.icon || "⚠️"} ${r.message}`;
+      if (r.ok && onSaved) onSaved(r.motion); } }, "💾 Save ⭐")));
+}
+/* 🏃 ⭐ pull a motion from a video: pick the time range (one movement, ≤ 30 s); Hermes finds poses + camera ($0, gandalf) */
+function motionPullForm(path, hooks, dflt) {
+  const dlg = h("dialog", { class: "lookdlg", "aria-label": "Pull a motion from this video" });
+  const a = h("input", { type: "number", min: 0, step: 0.1, value: (dflt && dflt.start) || 0, "aria-label": "From (seconds)" });
+  const b = h("input", { type: "number", min: 0.5, step: 0.1, value: (dflt && dflt.end) || 5, "aria-label": "To (seconds)" });
+  const n = h("select", { "aria-label": "Key moments" }, ...[2, 3, 4, 5, 6].map(x => h("option", { value: x, selected: x === 4 }, `${x} key moments${x === 4 ? " ⭐" : ""}`)));
+  const vid = h("video", { class: "motprev big", src: dflt && dflt.url ? dflt.url : "", controls: true, muted: true, playsinline: true, hidden: !(dflt && dflt.url) });
+  const msg = h("div", { class: "note", role: "status" });
+  const setA = h("button", { class: "btn", type: "button", onclick: () => { a.value = vid.currentTime.toFixed(1); } }, "⏮ From here");
+  const setB = h("button", { class: "btn", type: "button", onclick: () => { b.value = vid.currentTime.toFixed(1); } }, "⏭ To here");
+  dlg.append(h("form", { method: "dialog", onsubmit: e => { e.preventDefault();
+      const s = +a.value, t = +b.value;
+      if (!(t > s)) { msg.textContent = "⏱ “To” must be after “From”."; return; }
+      if (t - s > 30) { msg.textContent = "⏱ Pick up to 30 seconds — one movement, not the whole video."; return; }
+      hooks.motionFill({ mode: "pull", path, start: s, end: t, moments: +n.value }); dlg.close(); } },
+    h("div", { class: "lookhead" }, h("h3", {}, "🏃 Pull a motion from this video"), h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => dlg.close() }, "✕")),
+    vid, dflt && dflt.url ? h("div", { class: "runbar" }, setA, setB) : null,
+    h("label", { class: "motrole" }, h("span", {}, "From (s)"), a), h("label", { class: "motrole" }, h("span", {}, "To (s)"), b), n,
+    h("p", { class: "note" }, "Hermes grabs the key moments, the poses (🦴) and the camera move on this computer — $0, nothing leaves it. Then the uncensored writer words it and you name it."), msg,
+    h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "submit" }, "🏃 Pull the motion ⭐ ($0)"))));
+  dlg.addEventListener("close", () => dlg.remove());
+  document.body.append(dlg); dlg.showModal();
+}
+
 function agentView(wb) {
   if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
   const p = curProject();
@@ -2440,6 +2718,7 @@ function agentView(wb) {
   function typePicked() { const st = tstate(); return st.manual ? st.ids : ctypeGuess(task.value); }
   const typeRow = h("div", { class: "typerow", id: "agtypes", role: "group", "aria-label": "What are you making?" });
   const look = lookPicker(p.id);                         /* 🎨 shows only while 🖼 Image is picked */
+  const motion = motionPicker(p, { start: (...a) => startWith(...a), idea: () => task.value });   /* 🏃 Motion Presets */
   let typesOpen = false;                                   /* phones: all chips shown only after ▾ All types */
   function paintTypes() {
     const st = tstate(), on = typePicked();
@@ -2456,6 +2735,7 @@ function agentView(wb) {
       h("button", { class: "tchip more", type: "button", "aria-expanded": String(typesOpen),
         onclick: () => { typesOpen = !typesOpen; paintTypes(); } }, typesOpen ? "▴ Fewer" : on.length ? "▾ More" : "▾ Pick what you're making"));
     look.show(on.includes("image") || on.includes("video"));   /* 🎬 2026-11-25 (Scott: "I need access to the mood/theme options") */
+    motion.show(on.includes("image") || on.includes("video"));
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
@@ -2585,6 +2865,7 @@ function agentView(wb) {
     const stage = [], put = el => { if (wb) stage.push(el); else steps.append(el); };
     if (!wb) steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
     if (run.batch) put(batchGrid(p.id, run, startWith));   /* 🎛 the batch grid fills in as each one lands */
+    const mdc = motionDraftCard(run, () => motion.refresh()); if (mdc) put(mdc);   /* 🏃 name + save a pulled/written motion */
     if (run.state !== "running") {                         /* 📦 + ✏️ right under it (2026-11-24) */
       if (run.gate) put(h("button", { class: "btn pri gatebtn", type: "button", title: "Carry on with the build prompt — it stops again at the next check-in",
         onclick: () => startWith(run.gate.next_task, run.ctypes && run.ctypes.length ? run.ctypes : null, false) }, `▶ Go on to ${run.gate.next_name} ⭐`));
@@ -2704,9 +2985,9 @@ function agentView(wb) {
     if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
   }
-  if (wb) return { startWith, typeRow, improve: impRow, censor: cenCard, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
+  if (wb) return { startWith, typeRow, improve: impRow, censor: cenCard, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, motion.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
   return [projectRow(), h("section", { class: "agent" },
-    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, impRow, look.row, hint, batchRow, repoRow, goals,
+    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, impRow, look.row, motion.row, hint, batchRow, repoRow, goals,
     h("div", { class: "runbar" }, startBtn, stopBtn, newBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     cenCard, liveRow, status, final, steps,

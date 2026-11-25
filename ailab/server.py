@@ -514,6 +514,66 @@ class App:
         return 200, styles.answer(root, proj["id"], str(b.get("sig") or ""), str(b.get("answer") or ""),
                                   str(b.get("name") or ""), proj.get("name") or proj["id"])
 
+    # ---------- 🏃 Motion Presets (2026-11-25) ----------
+    def motions_get(self, q: dict) -> tuple[int, dict]:
+        from . import motions as MO
+        one = lambda k: str((q.get(k) or [""])[0]) if isinstance(q.get(k), list) else str(q.get(k) or "")   # noqa: E731
+        return 200, MO.public(one("q"), one("shelf"))
+
+    def motion_scene_view(self, root, scene=None, notes=None) -> dict:
+        from . import motion_make as MM, motions as MO, timeline as TL
+        scene = TL.load(root) if scene is None else scene
+        P = MM.presets_for(scene)
+        cast = []
+        try:
+            from . import rip
+            cast = rip.cast_names(self._cast_mcp(), root)
+        except Exception:                                        # noqa: BLE001 — offline: people are typed by hand
+            pass
+        pic, vid = MM.plan(scene, "picture", "local", self.cfg), MM.plan(scene, "video", "local", self.cfg)
+        return {"ok": True, "scene": scene, "resolved": TL.resolve(scene), "rows": TL.rows(scene), "words": TL.to_words(scene, P),
+                "length": TL.length(scene), "warn": TL.too_busy(scene, self.cfg), "max_actions": TL.max_actions(self.cfg),
+                "presets": {k: MO.card(p) for k, p in P.items()}, "cast": cast, "notes": notes or [],
+                "plan": {"pictures": pic["n"], "clips": vid["n"], "clip_max_s": vid.get("max_s"), "seconds": vid.get("seconds", 0)}}
+
+    def motion_scene_get(self, q: dict) -> tuple[int, dict]:
+        _, root = self._style_ctx(q)
+        return 200, self.motion_scene_view(root)
+
+    def motion_scene_set(self, b: dict) -> tuple[int, dict]:
+        """Words box or blocks — whichever he changed; the other is rebuilt. {add: {preset, who}} taps a preset in."""
+        from . import motions as MO, timeline as TL
+        _, root = self._style_ctx(b)
+        old = TL.load(root)
+        notes = []
+        if isinstance(b.get("words"), str):
+            P = {p["id"]: p for p in MO.all_motions()}
+            people = [str(x) for x in (b.get("people") or old["people"])]
+            scene, notes = TL.from_words(b["words"], P, people, old)
+        elif isinstance(b.get("scene"), dict):
+            scene = b["scene"]
+        else:
+            scene = old
+        if isinstance(b.get("add"), dict) and MO.get(str(b["add"].get("preset") or "")):
+            p = MO.get(str(b["add"]["preset"]))
+            scene = TL.clean(scene)
+            prev = scene["blocks"][-1]["id"] if scene["blocks"] and b["add"].get("then", True) else None
+            scene["blocks"].append({"preset": p["id"], "who": b["add"].get("who") or {}, "after": prev, "dur": p["seconds"],
+                                    "feel": p["feel"], "moment": ""})
+        if b.get("split"):
+            scene = TL.split_busy(scene, self.cfg)
+        if isinstance(b.get("people"), list):
+            scene = {**TL.clean(scene), "people": [str(x)[:30] for x in b["people"]][:MO.MAX_PEOPLE]}
+        return 200, self.motion_scene_view(root, TL.save(root, scene), notes)
+
+    def motion_save(self, b: dict) -> tuple[int, dict]:
+        from . import motion_fill
+        return 200, motion_fill.save(str(b.get("run") or ""), b)
+
+    def motion_delete(self, b: dict) -> tuple[int, dict]:
+        from . import motions as MO
+        return 200, MO.delete(str(b.get("id") or ""))
+
     def shelf_done(self, b: dict) -> tuple[int, dict]:
         from . import shelf
         return 200, {"ok": True, "done_at": shelf.set_done(preview.ensure_site(self._pid(b.get("project"))), bool(b.get("done")))}
@@ -620,6 +680,8 @@ class App:
         nb = B.norm(req, ctypes)
         if nb["kind"] == "story":                                  # 📖 M3: a still per shot (words-only = a few writer replies)
             kind, req["n"] = "story", nb["n"]
+        if nb["kind"] in ("motion", "motionfill"):                 # 🏃 Motion Presets: priced by plan in the run (Venice card)
+            kind = nb["kind"]
         est = B.estimate(kind, max(1, min(B.MAX_N, int(req.get("n") or 1))), self.cfg, self.spend()["today_usd"] or 0.0)
         if not est["fits"]:
             return 200, {"ok": False, "code": "cap", "icon": "💲", "estimate": est,
@@ -1307,6 +1369,15 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.cast_get, q)
             if u.path == "/api/story":                     # 📖 M3 story bible + chapters of this project
                 return self._run(app.story_get, q)
+            if u.path == "/api/motions":                   # 🏃 Motion Presets library (search, shelves)
+                return self._run(app.motions_get, q)
+            if u.path == "/api/motion/scene":              # 🏃 this project's timeline (rows, words, plan)
+                return self._run(app.motion_scene_get, q)
+            if u.path == "/api/motion/file":               # 🏃 a preset's preview / frame / pose — only inside its folder
+                from . import motions as MOmod
+                fp = MOmod.asset(str((q.get("id") or [""])[0]), str((q.get("f") or [""])[0]))
+                ct = {".svg": "image/svg+xml", ".mp4": "video/mp4", ".png": "image/png", ".webp": "image/webp"}.get(fp.suffix.lower(), "image/jpeg") if fp else ""
+                return self._send(200, fp.read_bytes(), ct) if fp else self._send(404, b"Not a motion file.", "text/plain; charset=utf-8")
             if u.path == "/api/styles":                    # 🎨 R2 official styles + the project's choice + a proposal
                 return self._run(app.styles_get, q)
             if u.path == "/api/preview/files":
@@ -1445,6 +1516,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.story_bible, b)
             if p in ("/api/cast/choose", "/api/cast/import"):
                 return self._run(getattr(app, "cast_" + p.rsplit("/", 1)[1]), b)
+            if p in ("/api/motion/scene", "/api/motion/save", "/api/motion/delete"):   # 🏃 Motion Presets
+                return self._run(getattr(app, {"/api/motion/scene": "motion_scene_set", "/api/motion/save": "motion_save",
+                                               "/api/motion/delete": "motion_delete"}[p]), b)
             if p in ("/api/styles/make", "/api/styles/choose", "/api/styles/answer"):
                 return self._run(getattr(app, "styles_" + p.rsplit("/", 1)[1]), b)
             if p == "/api/looks/save":

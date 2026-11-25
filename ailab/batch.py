@@ -165,6 +165,18 @@ def norm(b, ctypes) -> dict | None:
         except (TypeError, ValueError):
             return None
         return {"kind": "cast", "n": cn, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
+    if isinstance(b.get("motion"), dict):                      # 🏃 Motion Presets: make the timeline (motion_make.run)
+        from . import motion_make
+        mk = motion_make.norm(b["motion"])
+        if not mk:
+            return None
+        return {"kind": "motion", "motion": mk, "n": 1, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
+    if isinstance(b.get("fill"), dict):                        # 🏃 Motion Presets: pull / write / save-from-result (motion_fill.run)
+        from . import motion_fill
+        fl = motion_fill.norm(b["fill"])
+        if not fl:
+            return None
+        return {"kind": "motionfill", "fill": fl, "n": 1, "dial": 0, "start": 0, "earlier": [], "items": [], "failed": 0, "now": 0}
     if isinstance(b.get("story"), dict):                       # 📖 M3 Story: one chapter, its own run (story.run)
         from . import story
         st = story.norm(b["story"])
@@ -190,6 +202,10 @@ CAST_PICTURES = 8          # per person: anchor + 5 sheet views + room for one r
 
 
 def price(kind: str, cfg: dict) -> float:
+    if kind == "motionfill":                                   # 🏃 the writer's one reply ($0 pulling on gandalf)
+        return float(cfg.get("batch_doc_usd", DOC_USD))
+    if kind == "motion":                                       # 🏃 pictures per block; Venice clips get their own price card
+        return float(cfg.get("batch_picture_usd", PICTURE_USD))
     if kind == "story":                                        # a still per shot + the writer's few replies
         return float(cfg.get("batch_picture_usd", PICTURE_USD)) * 1.5
     if kind == "cast":
@@ -214,13 +230,20 @@ def view(run) -> dict | None:
             "level_words": LEVEL_WORDS[level(b["dial"])], "items": b["items"], "earlier": b.get("earlier", []),
             "next_start": b["start"] + b["n"], "kept": kept(run.root),
             **({"briefs": b.get("briefs", []), "apart": b.get("apart", []), "saved": b.get("saved", [])} if b["kind"] == "cast" else {}),
-            **({"story": b.get("story"), "chapter": b.get("chapter"), "shots": b.get("shots", [])} if b["kind"] == "story" else {})}
+            **({"story": b.get("story"), "chapter": b.get("chapter"), "shots": b.get("shots", [])} if b["kind"] == "story" else {}),
+            **({"motion": b.get("motion"), "plan": b.get("plan")} if b["kind"] == "motion" else {}),
+            **({"fill": b.get("fill"), "draft": b.get("draft"), "pull": b.get("pull")} if b["kind"] == "motionfill" else {})}
 
 
 def stage_prefix(run) -> str:
     b = getattr(run, "batch", None)
     if b and b.get("kind") == "story":
         return f"📖 shot {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" and b.get("shots") else ""
+    if b and b.get("kind") == "motionfill":
+        return ""
+    if b and b.get("kind") == "motion":
+        n = (b.get("plan") or {}).get("n") or 1
+        return f"🏃 {min(b['now'] + 1, n)} of {n} · " if run.state == "running" and n > 1 else ""
     if b and b.get("kind") == "cast":
         return f"🎭 person {min(b['now'] + 1, b['n'])} of {b['n']} · " if run.state == "running" else ""
     return f"🎛 {min(b['now'] + 1, b['n'])} of {b['n']} · " if b and run.state == "running" else ""

@@ -302,6 +302,11 @@ def run(run) -> None:
             args["speed"] = speed
         else:
             args.pop("speed", None)
+        pose = (getattr(run, "batch", None) or {}).get("pose_abs") or ""     # 🏃 Motion Presets: a key moment's skeleton
+        if pose and pmodel.startswith("local/") and "flux" not in pmodel and not args.get("reference_images"):
+            args["pose_image"] = pose
+        else:
+            args.pop("pose_image", None)
         if tag_prompt.wants(pmodel):                         # 🏷 Illustrious / Pony read comma tags, not sentences
             if tagged is None:
                 t_names = look + ([style] if style and not (look and looks.has_look_style(look)) else [])
@@ -318,6 +323,13 @@ def run(run) -> None:
         try:
             start = run.lab.mcp.call("image_make", args)
         except HermesRefused as e:
+            if args.get("pose_image") and e.code in ("not_installed", "bad_path", "bad_args"):
+                run._record({"action": "pose", "why": f"🦴 pose not used — {e.message} Made from the words only.",
+                             "result": {"fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
+                run.batch.pop("pose_abs", None)
+                args.pop("pose_image", None)
+                queue.insert(0, pmodel)
+                continue
             if args.get("reference_images") and e.code in ("not_enabled", "bad_path", "bad_args", "too_big"):
                 run._record({"action": "refs", "why": f"🎭 references not used — {e.message}",   # Hermes: route off until its probe passes
                              "result": {"note": e.message, "fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
