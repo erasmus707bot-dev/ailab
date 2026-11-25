@@ -33,11 +33,22 @@ Anime missed the prompt (closed umbrella, no rain, park bench). Scott 20:46 "1" 
 - Fix (this commit): Look words were doubled in the tag list ("anime style, cel shading" twice) — now once each. Needs a Lab restart to load.
 - One picture each side — the "calm" → sign reading is likely, not proven.
 
+## Quality tags checked + doubling fixed (2026-11-25, Scott 1)
+- Found: Hermes already prepends a quality prefix + model negative on the card (`forge/studios/comfy/models.py` → `workflows.py`), so the Lab's own prefix made Pony's score chain appear twice and Illustrious "masterpiece, best quality" twice; Hermes's Pony negative `score_4, score_5, score_6` fought the score chain.
+- Checked (community guides — Civitai Pony + Illustrious pages, stable-diffusion-art.com, tensor.art; no single official card): Pony = full chain `score_9 … score_4_up` + `source_anime`, other `source_` tags in the negative. Illustrious = `masterpiece, best quality, good quality` / `worst quality, bad quality`. "amazing quality" was a fine-tune's trigger. Clip skip 2 already set by Hermes for both.
+- hermes `31860e36`: checked tags in `models.py` (the one place). ailab `4327e39`: Lab sends only scene tags + Scott's words; `negative()` passes the Lab's leave-out words through.
+- Tests: ailab picture/route/tags 61/61 · hermes `test_mcp_images_local` 12/12, `test_mcp_images_refs` + `test_mcp_images` 16/16.
+- Not yet live: needs `systemctl --user restart hermes-mcp` (image_make runs there, port 8790) + `systemctl --user restart ailab`.
+
 ## Still open
-- Quality/negative tags unchecked against the model cards. Writer doesn't say the umbrella's state ("open umbrella") though asked.
+- Writer doesn't say the umbrella's state ("open umbrella") though asked.
 - Argus touch check of ⚙️ "🖼 Pictures: which side first". Keep-model-loaded parked. Nothing pushed.
 
 ## Gandalf
-`systemctl --user restart ailab` (loads the doubled-Look-word fix).
+```
+systemctl --user restart hermes-mcp
+systemctl --user restart ailab
+```
+Then Claude re-runs the Anime picture in the Lab and checks the 🏷 step shows no quality tags (Hermes adds them on the card).
 
-Continue: `continue local image service — next step pick, from the 2026-11-24 M3 tags handoff`
+Continue: `continue local image service — live check after hermes-mcp + ailab restart, from the 2026-11-24 M3 tags handoff`
