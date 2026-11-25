@@ -454,6 +454,7 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .liball .libstrip { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .libtile .lp { position: absolute; right: 4px; bottom: 4px; max-width: calc(100% - 8px); font-size: .7rem; background: var(--panel); border-radius: 6px; padding: 0 4px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .liball .libbig .btn { min-height: 44px; min-width: 44px; justify-content: center; }
   .libfilt > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
   .cenline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 </style>
@@ -3040,7 +3041,10 @@ function libraryAllView() {
     paint();
   })();
   if (!S.flags.preview) return [offCard("preview", "📚", "Library")];
-  box.append(h("h2", { style: "margin:4px 0" }, "📚 Everything you've made"), projChips, filt, count, big, strip);
+  /* Argus 2026-11-25: on a phone 10 project chips pushed the first picture to y=450 of 738 — fold them there */
+  const projSum = h("summary", {}, "📁 Projects"), projFold = h("details", { class: "libfilt", open: matchMedia("(min-width: 700px)").matches }, projSum, projChips);
+  const paint0 = paint; paint = () => { paint0(); projSum.textContent = `📁 Projects — ${picked.length ? picked.map(pname).join(", ") : "all"}`; };
+  box.append(h("h2", { style: "margin:4px 0" }, "📚 Everything you've made"), projFold, filt, count, big, strip);
   return [box];
 }
 

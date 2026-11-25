@@ -9,3 +9,9 @@
 
 ## Not done
 - Argus phone touch test (TOUCH_TEST_STANDARD) — not run.
+
+## Argus touch test 2026-11-25 (Pixel 5, 402×738 CSS)
+- 🚪 Start screen: Continue tap → clean slate (empty box, "🧼 Clean slate"), Make tab; ▶ Start at y=344, ⚙️ Options y=534 — all above the fold. No sideways scroll (scrollWidth 402).
+- 📚 Library: 94 things, all projects; project chip tap narrows (60 of 94), multi-pick works (67 of 94 · 2 projects); tile → viewer; ✏️ Change this → switches project, Stage tab, file open in its Library.
+- Fixed: project chips pushed the first picture to y=450 → folded "📁 Projects — all" on phones (now y≈308); viewer buttons were 42 px / ⬇ 38 px → 44 px.
+- 0 console errors. Small targets left: 2 checkboxes (16 px) inside 44 px labels — OK.
