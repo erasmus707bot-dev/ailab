@@ -163,9 +163,9 @@ def identity_points(people: list[dict]) -> list[dict]:
                         "what": f"no swap ({people[0]['name']}'s hair with {people[1]['name']}'s clothes)", "kind": "swap"})
         pts.append({"q": "Are any arms, legs or bodies merged or fused together in an impossible way?", "want": False,
                     "what": "no merged limbs", "kind": "limbs"})
-    onl = eyes.onlooker_point([((c.get("traits") or {}).get("hair_colour", ""), (c.get("traits") or {}).get("outfit_colour", ""))
+    onl = eyes.onlooker_points([((c.get("traits") or {}).get("hair_colour", ""), (c.get("traits") or {}).get("outfit_colour", ""))
                                for c in people], len(people))          # R4 shot 7: the spectator copied Dina
-    return pts + ([onl] if onl else [])
+    return pts + onl
 
 
 def check_points(beat: dict, cast: list[dict]) -> list[dict]:

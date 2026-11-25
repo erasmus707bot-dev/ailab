@@ -126,19 +126,17 @@ def fix_words(rows: list[dict]) -> str:
     return "; ".join(out)
 
 
-def onlooker_point(people: list[tuple[str, str]], n: int | None = None) -> dict | None:
-    """👁 R4 live 2026-11-25: the standing spectator came out as a copy of a cast member (same grey hair, same red outfit) and
-    nothing caught it — the count point allows onlookers. people = [(hair, outfit)] of the cast in this shot. Want: no."""
+def onlooker_points(people: list[tuple[str, str]], n: int | None = None) -> list[dict]:
+    """👁 R4 live 2026-11-25: the standing spectator came out with Dina's grey hair + Mara's plum top, and nothing caught it —
+    the count point allows onlookers, and an "same hair AND clothes" question passes a mixed copy. One point per cast member:
+    anyone else with their hair OR their clothes? Want: no. people = [(hair, outfit)] of the cast in this shot."""
     looks = [(h.strip(), o.strip()) for h, o in people if h and o][:3]
-    if not looks:
-        return None
     n = n or len(looks)
     who = "person" if n == 1 else f"{n} people"
-    each = " or ".join(f"{h} hair and {o} clothes" for h, o in looks)
-    return {"q": f"Apart from the main {who} in the action, is there anyone else in the picture (someone watching, standing or in the "
-                 f"background) who has the same hair and clothes as a main person ({each})?", "want": False,
-            "what": "anyone else in the picture (onlookers, background people) wears plain dark clothes and has different hair "
-                    "from the main people", "kind": "onlooker"}
+    return [{"q": f"Apart from the main {who} in the action, is there anyone else in the picture (someone watching, standing or in "
+                  f"the background) who has {h} hair or wears {o} clothes?", "want": False,
+             "what": f"anyone else in the picture wears plain dark clothes (not {o}) and has hair that is not {h}", "kind": "onlooker"}
+            for h, o in looks]
 
 
 def fix_task(task: str, rows: list[dict]) -> str:

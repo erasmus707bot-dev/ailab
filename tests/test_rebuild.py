@@ -56,7 +56,7 @@ class Pure(Base):
     def test_identity_points_and_failures(self):
         pts = rebuild.identity_points([MARA, JUN])
         kinds = [p["kind"] for p in pts]
-        self.assertEqual(kinds, ["count", "identity", "identity", "swap", "limbs", "onlooker"])
+        self.assertEqual(kinds, ["count", "identity", "identity", "swap", "limbs", "onlooker", "onlooker"])
         self.assertIn("exactly 2 main people", pts[0]["q"])
         self.assertIn("watching in the background", pts[0]["q"])
         self.assertFalse(pts[3]["want"] or pts[4]["want"])
@@ -65,27 +65,31 @@ class Pure(Base):
         self.assertEqual(rebuild.identity_failed(rows), ["no swap"])
 
     def test_onlooker_copy_is_an_identity_miss_with_a_fix(self):
-        """R4 shot 7: the standing spectator wore Dina's grey hair + red outfit; the count point allowed it."""
+        """R4 shot 7: the spectator had Dina's grey hair + Mara's plum top; hair OR clothes, one point per cast member."""
         from ailab import eyes
-        onl = rebuild.identity_points([MARA, JUN])[-1]
-        self.assertFalse(onl["want"])
-        self.assertIn("copper red hair and forest green clothes", onl["q"])
-        self.assertIn("jet black hair and mustard yellow clothes", onl["q"])
-        self.assertIn("main 2 people", onl["q"])
-        row = {**onl, "ok": False}
-        self.assertEqual(rebuild.identity_failed([row]), [onl["what"]])
-        self.assertIn("plain dark clothes", eyes.fix_words([row]))
-        self.assertNotIn("clearly show", eyes.fix_words([row]))
-        self.assertIsNone(eyes.onlooker_point([("", "red")]))
-        self.assertEqual(rebuild.identity_points([{"name": "X"}]), [rebuild.identity_points([{"name": "X"}])[0]])
+        pts = rebuild.identity_points([MARA, JUN])
+        self.assertEqual([p["kind"] for p in pts][-2:], ["onlooker", "onlooker"])
+        a, b = pts[-2:]
+        self.assertFalse(a["want"] or b["want"])
+        self.assertIn("copper red hair or wears forest green clothes", a["q"])
+        self.assertIn("jet black hair or wears mustard yellow clothes", b["q"])
+        self.assertIn("main 2 people", a["q"])
+        row = {**a, "ok": False}
+        self.assertEqual(rebuild.identity_failed([row]), [a["what"]])
+        fix = eyes.fix_words([row])
+        self.assertIn("plain dark clothes (not forest green)", fix)
+        self.assertIn("not copper red", fix)
+        self.assertNotIn("clearly show", fix)
+        self.assertEqual(eyes.onlooker_points([("", "red")]), [])
+        self.assertEqual([p["kind"] for p in rebuild.identity_points([{"name": "X"}])], ["count"])
 
     def test_story_shot_gets_the_onlooker_point(self):
         from ailab import story
         cast_ = {"aria": {"name": "Aria", "brief": "Aria: a woman with copper red hair wearing a royal blue outfit"}}
-        pt = story.onlooker_pt({"who": ["Aria"]}, {"people": []}, cast_)
-        self.assertIn("copper red hair and royal blue clothes", pt["q"])
-        self.assertIn("main person", pt["q"])
-        self.assertIsNone(story.onlooker_pt({"who": ["Aria"]}, {"people": []}, {"aria": {"name": "Aria", "brief": "tall"}}))
+        pts = story.onlooker_pts({"who": ["Aria"]}, {"people": []}, cast_)
+        self.assertIn("copper red hair or wears royal blue clothes", pts[0]["q"])
+        self.assertIn("main person", pts[0]["q"])
+        self.assertEqual(story.onlooker_pts({"who": ["Aria"]}, {"people": []}, {"aria": {"name": "Aria", "brief": "tall"}}), [])
 
     def test_cast_for_maps_letters(self):
         b = rebuild.beats(SCENES)[0]

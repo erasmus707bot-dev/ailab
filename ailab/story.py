@@ -355,7 +355,7 @@ WRITING_PT = {"q": "Look closely at every sign, shop front, wall, the ground, ve
               "what": "no letters or words anywhere (signs, ground, walls)", "kind": "notext"}
 
 
-def onlooker_pt(shot: dict, b: dict, cast: dict[str, dict]) -> dict | None:
+def onlooker_pts(shot: dict, b: dict, cast: dict[str, dict]) -> list[dict]:
     """👁 the shot's cast as (hair, outfit) → a 'nobody else copies them' point (R4 live: a spectator wore Dina's look)."""
     from . import eyes
     ppl = []
@@ -367,7 +367,7 @@ def onlooker_pt(shot: dict, b: dict, cast: dict[str, dict]) -> dict | None:
         outfit = re.search(r"wearing an? (.+?) outfit", look) or re.search(r"wearing (.+?)(?:,\s*with\b|$)", look)   # 👕 wardrobe form
         if hair and outfit:
             ppl.append((hair.group(1), outfit.group(1)))
-    return eyes.onlooker_point(ppl, len(shot.get("who") or []) or None)
+    return eyes.onlooker_points(ppl, len(shot.get("who") or []) or None)
 
 
 def writing_check(run, raw: bytes, e: dict, task: str, k: int, extra: list[dict] | None = None) -> dict:
@@ -658,7 +658,7 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                                label=f"shot {s['k'] + 1}")          # 👁 grades what a picture can show, not the bracketed looks
                 eyes.record(run, f"shot {s['k'] + 1}", e)
                 picture._craft_seen(run, "story", e, shot_prompt(s, bib, cast, looks=False))
-                e = writing_check(run, (root / pic["path"]).read_bytes(), e, task, s["k"], [onlooker_pt(s, bib, cast)])
+                e = writing_check(run, (root / pic["path"]).read_bytes(), e, task, s["k"], onlooker_pts(s, bib, cast))
                 s["eyes"] = {x: e.get(x) for x in ("score", "missing", "error") if e.get(x) is not None}
                 if e.get("low") and e.get("fix_task") and tries < retries and not float(pic.get("usd") or 0):
                     tries += 1
