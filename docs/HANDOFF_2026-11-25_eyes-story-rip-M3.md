@@ -98,3 +98,10 @@ Continue: `continue video rebuild + cast + styles + R&D from the 2026-11-25 buil
 - `5931c71` 🔗 the checker now gets his idea as well as the plan, and each flag names the fact and the clash.
 - Seen, not fixed: the writer's ch3 plan re-told the race (shots 1–4) before reaching his idea (shots 5–6) — chapter plans
   drift back to the bible's premise. Lab restart needed for `a67e992` + the checker change; re-test the planted contradiction.
+
+## Night Short re-test — 2026-11-25 12:46–13:00 (story session, `c704d27` live)
+- “Midnight Neon Race” (new story, ⚡ Short, Aria & Ben): bible When = "midnight, neon light, rain on the stones" → in all 6 shot
+  lines; **all 6 stills are night + rain**; cast holds; 20 s film, $0. Slow (~2.5 min/shot) — an image-testing run shared the card.
+- 👁 writing check: no readable words; neon signs carry letter-like shapes it lets pass (acceptable for now).
+- Seen, not fixed: **props drift** — the motorbikes turned into bicycles in shots 3–5 (the vehicle is in the idea, not in each
+  shot line). Fix idea: bible `props` (key objects) carried into the shot line like `when`.
