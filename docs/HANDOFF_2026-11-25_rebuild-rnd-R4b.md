@@ -19,8 +19,17 @@ ailab full suite **719 pass** (3 new). Another session committed `30bf0b5` story
 ```bash
 systemctl --user restart ailab
 ```
-Then AI Lab → 🎬 Rebuild → ⚖️ Review (video-testing, `bd-f30682caee785320`) → shot 7 → **🔁 Retry this shot**. $0.
+Then (after `5ef1ac7`) AI Lab → 🎬 Rebuild → ⚖️ Review (video-testing, `bd-f30682caee785320`) → shot 7 → **🔁 Retry this shot**. $0.
 Pass: 👁 ≥ 70 %, no ⚠️ identity, the standing onlooker no longer grey-haired in red.
+
+## Shot 7 retry — 14:21–14:27, run `bc16a725b9`, $0.0002 (writer)
+- Ran via ⚖️ retry (resumed once after another session restarted the Lab). 👁 **100 %, no identity miss** — but **by eye it still
+  fails**: the standing onlooker has Dina's grey hair + Mara's plum top. The first check asked "same hair AND clothes" → a mixed
+  copy passes. (The 13:29 still was the same mix, not a pure Dina copy.)
+- Fix `5ef1ac7`: `eyes.onlooker_points()` — one point per cast member, "anyone else with {hair} hair **or** {outfit} clothes?",
+  fix line "anyone else wears plain dark clothes (not {outfit}) and has hair that is not {hair}". Rebuild + Story. Tests green.
+- **Not live yet:** the Lab (started 14:21) runs the old check; this shell can't restart it.
+- ⚠️ Not mine: `tests/test_eyes.py::test_switch_and_standalone_turn_it_off` red since `e5db841` (eyes.settings now has `retry`).
 
 ## Owed
 Shot-7 retry (above) · push ailab · Argus touch test of 🎬 Rebuild + ⚖️ Review · rung 2 (next clip).
