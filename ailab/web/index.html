@@ -428,6 +428,10 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .libtile.on { outline: 3px solid var(--accent); }
   .libbig { display: flex; flex-direction: column; gap: 8px; }
   .libbig img, .libbig video { max-width: 100%; max-height: 75vh; border-radius: 12px; background: #000; align-self: center; }
+  .libplay { flex-wrap: wrap; gap: 6px; }
+  .libplay .btn, .libplay .tchip, .libplay select { min-height: 44px; min-width: 44px; }
+  .libbig:fullscreen { background: var(--bg, #0d1520); padding: 12px; overflow: auto; justify-content: center; }
+  .libbig:fullscreen img, .libbig:fullscreen video { max-height: 82vh; }
   .libbig pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; margin: 0; }
   .starters[hidden], .finishbar[hidden], .impcard[hidden], .libbig[hidden], .finishbar [hidden] { display: none; }
   .libtile .lkept { position: absolute; right: 4px; top: 4px; font-size: .8rem; font-weight: 650; background: var(--accent); color: var(--accent-ink); border-radius: 6px; padding: 0 5px; }
@@ -1185,6 +1189,71 @@ function storyBox(p, hooks) {
   paint();
   return box;
 }
+/* ▶ Library player (Scott 2026-11-25: "click through the media or have it autoplay … slide-shows through and also plays videos
+   as they come … options to toggle on/off"). ◀ ▶ / swipe / ← → step through what the filters show; ▶ Slideshow moves on by itself
+   (loops); 🎬 Play videos = a video plays to the end then moves on (off = the slideshow skips videos); 📝 Writing & pages = include
+   them in the slideshow (off by default; ◀ ▶ always reaches them); ⏱ seconds per picture; ⛶ full screen. Shared by both Libraries. */
+function libPlayer(o) {   /* o: { list() → items, cur() → item, open(item), kind(item) → "pic"|"vid"|"doc"|"page", box } */
+  let on = !!store.get("libplay.on", false), vids = store.get("libplay.vids", true), docs = !!store.get("libplay.docs", false),
+    secs = +store.get("libplay.secs", 5) || 5, timer = 0, body = null, bk = "";
+  const ok = k => k === "pic" || (k === "vid" && vids) || ((k === "doc" || k === "page") && docs);
+  function step(dir, auto) {
+    clearTimeout(timer);
+    const L = o.list(); if (!L.length) return;
+    let i = L.indexOf(o.cur());
+    for (let n = 0; n < L.length; n++) {
+      i = (i + dir + L.length) % L.length;
+      if (!auto || ok(o.kind(L[i]))) return o.open(L[i]);
+    }
+    on = false; store.set("libplay.on", false); paintBar();   /* nothing the slideshow may show — stop */
+  }
+  const later = () => { clearTimeout(timer); const b = body; timer = setTimeout(() => { if (on && b && b.isConnected && !o.box.hidden) step(1, true); }, secs * 1000); };
+  function run() {
+    clearTimeout(timer);
+    if (!body) return;
+    if (bk === "vid") {
+      body.onended = () => { if (on && vids && body.isConnected) step(1, true); };
+      body.onerror = () => { if (on && body.isConnected) step(1, true); };
+      if (on && vids) { body.muted = false; body.play().catch(() => { body.muted = true; body.play().catch(() => later()); }); return; }
+    }
+    if (on && (bk !== "vid" || !vids)) later();
+  }
+  let bar = null;
+  const tog = (pressed, label, title, fn) => h("button", { class: "tchip" + (pressed ? " on" : ""), type: "button", "aria-pressed": String(pressed), title, onclick: fn }, label);
+  function paintBar() {
+    if (!bar) return;
+    const sel = h("select", { "aria-label": "Seconds per picture", title: "Seconds each picture stays up",
+      onchange: e => { secs = +e.target.value; store.set("libplay.secs", secs); run(); } },
+      ...[3, 5, 8, 12].map(s => h("option", { value: s, selected: s === secs }, `⏱ ${s} s`)));
+    bar.replaceChildren(
+      h("button", { class: "btn", type: "button", "aria-label": "Previous", title: "Previous (←)", onclick: () => step(-1, false) }, "◀"),
+      h("button", { class: "btn", type: "button", "aria-label": "Next", title: "Next (→)", onclick: () => step(1, false) }, "▶"),
+      tog(on, on ? "⏸ Slideshow on" : "▶ Slideshow", "Moves on by itself; loops at the end", () => { on = !on; store.set("libplay.on", on); paintBar(); run(); }),
+      tog(vids, vids ? "🎬 Play videos ✓" : "🎬 Play videos", "On: each video plays to the end, then the slideshow moves on. Off: the slideshow skips videos.",
+        () => { vids = !vids; store.set("libplay.vids", vids); paintBar(); run(); }),
+      tog(docs, docs ? "📝 Writing & pages ✓" : "📝 Writing & pages", "Include writing and web pages in the slideshow (◀ ▶ always reaches them)",
+        () => { docs = !docs; store.set("libplay.docs", docs); paintBar(); }),
+      sel,
+      h("button", { class: "btn", type: "button", "aria-label": "Full screen", title: "Full screen (Esc to leave)",
+        onclick: () => { document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : (o.box.requestFullscreen ? o.box.requestFullscreen().catch(() => {}) : null); } }, "⛶"));
+  }
+  /* swipe + arrow keys, wired once per box; the key listener drops itself when the view is gone */
+  let x0 = null, y0 = 0;
+  o.box.addEventListener("touchstart", e => { if (/^(VIDEO|INPUT|TEXTAREA|SELECT|PRE)$/.test(e.target.tagName)) { x0 = null; return; } const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { passive: true });
+  o.box.addEventListener("touchend", e => { if (x0 == null) return; const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) step(dx < 0 ? 1 : -1, false); }, { passive: true });
+  const key = e => {
+    if (!o.box.isConnected) { document.removeEventListener("keydown", key); return; }
+    if (o.box.hidden || e.altKey || e.ctrlKey || e.metaKey || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target || {}).tagName || "") || (e.target || {}).isContentEditable) return;
+    if (e.key === "ArrowRight") { e.preventDefault(); step(1, false); } else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1, false); }
+  };
+  document.addEventListener("keydown", key);
+  return {
+    bar() { bar = h("div", { class: "runbar libplay" }); paintBar(); return bar; },   /* fresh controls for each open() */
+    hook(b, k) { body = b; bk = k; run(); },
+    stop() { clearTimeout(timer); body = null; },
+  };
+}
 function libraryBox(p, hooks) {
   const KINDS = [["", "All"], ["pic", "🖼 Pictures"], ["vid", "🎬 Videos"], ["doc", "📝 Writing"], ["page", "🌐 Pages"]];
   let files = [], kind = store.get("libkind." + p.id, ""), all = false, cur = "", keptN = {}, tossed = [], cmp = false, picks = [];
@@ -1306,7 +1375,9 @@ function libraryBox(p, hooks) {
   globalCast.addEventListener("toggle", () => { if (globalCast.open && !globalCast.querySelector(".castpick")) globalCast.append(castPicker(p, hooks, { id: "libcastpick", importBtn: true })); }, { once: false });
   const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, globalCast, bdFold);
   const url = f => `/preview/${p.id}/${encodeURI(f.path)}`;
-  const shut = () => { cur = ""; big.hidden = true; big.replaceChildren(); };
+  const isKind = (f, k) => k === "kept" ? !!keptN[f.path] : LIB_KIND(f.path) === k;
+  const pl = libPlayer({ list: () => files.filter(f => !kind || isKind(f, kind)), cur: () => files.find(f => f.path === cur), open: f => open(f), kind: f => LIB_KIND(f.path), box: big });
+  const shut = () => { cur = ""; pl.stop(); big.hidden = true; big.replaceChildren(); };
   function open(f) {
     cur = f.path; const k = LIB_KIND(f.path), u = url(f), name = f.path.split("/").pop();
     const body = k === "pic" ? h("img", { src: u, alt: name }) : k === "vid" ? h("video", { src: u, controls: true, playsinline: true, preload: "metadata" })
@@ -1317,12 +1388,11 @@ function libraryBox(p, hooks) {
     big.hidden = false;
     big.replaceChildren(h("div", { class: "runbar" }, h("b", {}, `${LIB_ICON[k]} ${name}`), h("a", { class: "btn", href: u, download: name }, "⬇ Download"),
       h("a", { class: "btn", href: u, target: "_blank", rel: "noopener" }, "⤢ Full size"),
-      h("button", { class: "btn", type: "button", onclick: () => { shut(); paint(); } }, "✖ Close")),
+      h("button", { class: "btn", type: "button", onclick: () => { shut(); paint(); } }, "✖ Close")), pl.bar(),
       h("div", { class: "note wherepath", title: "Where this file is in the project folder" }, `📍 ${f.path}`), body, k === "pic" ? refBar(f) : k === "vid" ? bdBtn(f) : null, changeBox2(f, k));
-    paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    pl.hook(body, k); paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
   function paint() {
-    const isKind = (f, k) => k === "kept" ? !!keptN[f.path] : LIB_KIND(f.path) === k;
     const shown = files.filter(f => !kind || isKind(f, kind)), cutAt = all ? shown : shown.slice(0, 12);
     sum.textContent = `${doneAt ? "🏁 " : ""}📚 Library (${files.length})`; jump.textContent = `📚 ${files.length}`;
     none.hidden = files.length > 0;
@@ -3142,6 +3212,7 @@ function libraryAllView() {
         picked.length === 1 ? null : h("span", { class: "lp" }, pname(it.project))); }),
       ...(list.length > cutAt.length ? [h("button", { class: "libtile", type: "button", title: "Show more", onclick: () => { more += 96; paint(); } }, `+${list.length - cutAt.length}`)] : []));
   }
+  const pl = libPlayer({ list: () => shown(), cur: () => cur, open: it => open(it), kind: it => LIB_KIND(it.path), box: big });
   function goTo(it, msg) { store.set("libgo", { project: it.project, path: it.path }); store.set("libopen", true); store.set("wbtab", "code");
     store.set("project", it.project); trail = []; view = "start"; render(); if (msg) navNote(msg); }
   function open(it) {
@@ -3156,9 +3227,9 @@ function libraryAllView() {
         h("button", { class: "btn pri", type: "button", title: "Opens it in its project, ready to make the next version", onclick: () => goTo(it, "✏️ Opened in its project — use ✏️ Change this under it.") }, "✏️ Change this"),
         h("button", { class: "btn", type: "button", onclick: () => goTo(it) }, `↗ Go to ${pname(it.project)}`),
         h("a", { class: "btn", href: u, download: name }, "⬇"), h("a", { class: "btn", href: u, target: "_blank", rel: "noopener", title: "Full size" }, "⤢"),
-        h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => { cur = null; big.hidden = true; big.replaceChildren(); paint(); } }, "✖")),
+        h("button", { class: "btn", type: "button", "aria-label": "Close", onclick: () => { cur = null; pl.stop(); big.hidden = true; big.replaceChildren(); paint(); } }, "✖")), pl.bar(),
       h("div", { class: "note wherepath" }, `📁 ${pname(it.project)} · 📍 ${it.path}`), body);
-    paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    pl.hook(body, k); paint(); big.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
   (async () => {
     const all = await Promise.all(S.projects.map(async p => {
