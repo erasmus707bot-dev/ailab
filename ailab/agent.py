@@ -248,6 +248,11 @@ class Run:
         self.provider, self.model, self.task = provider, model, task.strip()[:4000]
         # 🧩 creation types Scott picked (chips above the task box, 2026-11-24) — steer the agent, robot test and ship
         self.ctypes = [t["id"] for t in creation.pick(ctypes)]
+        self.art_routed = False               # 🎨 an art idea with no chip → the uncensored art run (creation.art_route)
+        if not self.ctypes and root is None:
+            routed = creation.art_route(picture.picture_words(self.task), [])
+            if routed:
+                self.ctypes, self.art_routed = routed, True
         # 🖼 picture runs (2026-11-24): only the Image chip → ask style/shape → prompt → Hermes image_make → picture
         self.picture = creation.picture_mode(self.ctypes)
         self.pictures: list[dict] = []
@@ -1011,6 +1016,10 @@ class Run:
         msgs = self.msgs
         self.live = True
         try:
+            if getattr(self, "art_routed", False) and not self.steps:
+                kind = {"video": "🎬 video", "image": "🖼 picture", "text": "📝 writing"}.get(self.ctypes[0], "art")
+                self._record({"action": "route", "why": f"🎨 Art idea with no chip picked → made as {kind} with the uncensored "
+                              "writer + art models (not the coding agent)", "result": {"ctypes": self.ctypes}, "usd": 0.0})
             if getattr(self, "batch", None):                # 🎛 batch: N pictures / docs, its own short path
                 (batchmod.pictures if self.batch["kind"] == "picture" else batchmod.docs)(self)
                 return

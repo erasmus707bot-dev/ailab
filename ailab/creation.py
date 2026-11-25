@@ -137,6 +137,24 @@ def picture_mode(ids) -> bool:
     return "image" in ids and not any(t in ids for t in PAGE_TYPES + ("video",))
 
 
+ART_ONLY = ("image", "video", "text")
+
+
+def art_route(idea: str, ids) -> list[str]:
+    """2026-11-24 live (Scott: "the model … is not the right one … I need something more neutral and uncensored"): an
+    art idea with NO chip picked — often a 🧱 build prompt — went to the step-by-step coding agent, which refused,
+    "toned it down" and hand-drew an SVG. With no chip on and every ⭐ guess an art type, route it to the art run
+    (🎬 video → 🖼 picture → 📝 writing), where the uncensored writer + Lustify / Wan do the work. Chips Scott picked
+    always win; anything app-like in the guess leaves the run as it was."""
+    picked = [t["id"] for t in pick(ids)]
+    if picked:
+        return picked
+    g = guess(idea)
+    if not g or any(t not in ART_ONLY for t in g):
+        return picked
+    return ["video"] if "video" in g else ["image"] if "image" in g else ["text"]
+
+
 def video_mode(ids) -> bool:
     """🎬 on (🖼 may be on too), nothing page/app-like → a video run (video.py)."""
     ids = [t["id"] for t in pick(ids)]

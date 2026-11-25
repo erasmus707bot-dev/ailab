@@ -1696,6 +1696,12 @@ function agentView(wb) {
         const hosted = provs.find(x => !x.local && x.id === "claude") || provs.find(x => !x.local);
         hint.replaceChildren("💡 Changing real code in a linked folder needs a strong hosted model — local models got lost on this in testing (claude-sonnet-5-5 finished one for about $0.06). ",
           hosted ? h("button", { class: "btn", type: "button", onclick: () => { store.set("provider", hosted.id); if (hosted.id === "claude") store.set("model.claude", strong); render(); } }, `Switch to ${hosted.icon} ${hosted.id}`)
+    /* 🎨 2026-11-24 (Scott: "I need something more neutral and uncensored"): an art idea — also inside a 🧱 build prompt —
+       gets 🔓 uncensored models first, never the research/coding pick (it suggested a filtered model for an art prompt) */
+    const idea = (t.match(/idea \(scott'?s words\)\W*\s*(.+)/) || [null, t])[1];
+    const esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hits = (CTYPES || []).filter(ty => (ty.words || []).some(w => new RegExp(`(^|[^a-z0-9])${esc(w.toLowerCase())}([^a-z0-9]|$)`).test(idea)));
+    if (hits.length && hits.every(ty => ["image", "video", "text"].includes(ty.id))) return { use: "💬 general", why: "it's an art idea — 🔓 uncensored models first", art: true };
                  : h("span", { class: "note" }, "This project is 🔒 local-only, so expect to steer it step by step."));
         hint.hidden = false; return;
       }

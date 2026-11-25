@@ -90,7 +90,7 @@ def export(md_path, want: bool) -> tuple[list[str], str]:
 
 
 def run(run) -> None:
-    words = run.task.strip()
+    words = picture.picture_words(run.task).strip()       # from a 🧱 build prompt: only his idea line
     ch = makers.ask(run, "doc", makers.items_from(_questions()))
     length, tone = ch.get("how long", ""), ch.get("tone", "")
     pics_pick, files_pick = ch.get("pictures in it", "No"), ch.get("also save as", "Word")

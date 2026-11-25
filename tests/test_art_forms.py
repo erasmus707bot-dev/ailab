@@ -217,3 +217,31 @@ class PanZoom(Base):
         why = video.pan_zoom(src, d / "o.mp4", 3, "9:16")
         self.assertEqual(why, "")
         self.assertEqual((d / "o.mp4").read_bytes()[4:8], b"ftyp")
+
+
+class ArtRoute(Base):
+    BP = ("Follow this build prompt. Modules already done: 0. Do Module 1 next and stop at its gate.\n\n"
+          "# body-art — Build Prompt (2026-11-24)\n\n**Idea (Scott's words):** body art painting of a woman on a pink rug\n\n"
+          "## Module 0 — Audit (read-only) → GATE\nx\n## Module 1 — Build it\ny\n## Module 2 — Live proof + handoff\nz\n")
+
+    def test_no_chip_art_build_prompt_goes_to_picture_run(self):
+        b = Brain(["detail"]); b.mcp = PicMCP()
+        r = agent.Run(b, config.load({"mode": "connected"}), self.project, "openrouter", "m", self.BP, ctypes=[])
+        self.assertTrue(r.art_routed and r.picture)
+        self.assertEqual(r.ctypes, ["image"])
+        self.assertEqual(r.plan, [])                                # no modules / gates for art
+        r.loop()
+        self.assertEqual(r.state, "done", r.why)
+        self.assertEqual(r.steps[0]["action"], "route")
+        p = b.mcp.args[b.mcp.calls.index("image_make")]["prompt"]
+        self.assertTrue(p.startswith("body art painting of a woman on a pink rug"))
+        self.assertNotIn("Module", p)
+
+    def test_chips_and_app_words_win(self):
+        self.assertEqual(creation.art_route("a picture for my website", []), [])
+        self.assertEqual(creation.art_route("a short video clip of waves", []), ["video"])
+        self.assertEqual(creation.art_route("write a story", []), ["text"])
+        self.assertEqual(creation.art_route("art", ["game"]), ["game"])
+        b = Brain(["x"]); b.mcp = PicMCP()
+        r = agent.Run(b, config.load({"mode": "connected"}), self.project, "openrouter", "m", "fix the login bug", ctypes=[])
+        self.assertFalse(r.art_routed)
