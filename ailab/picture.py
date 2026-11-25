@@ -16,7 +16,7 @@ import base64
 import re
 import time
 
-from . import creation, looks, memory, picture_route
+from . import creation, looks, memory, picture_route, tag_prompt
 from .mcp_client import HermesRefused
 
 SHAPES = {"square": "1:1", "wide": "16:9", "tall": "9:16"}
@@ -219,6 +219,8 @@ def run(run) -> None:
     run._check_stop()
     prompt = write_prompt(run, words + extra)
     run._check_stop()
+    t_mine = own_words(words)                                # 🏷 kept for the anime models' tag prompt (M3 tags)
+    t_add = prompt[len(t_mine):].lstrip(" .") if prompt.startswith(t_mine) else ""
     if look:                                                 # 🎨 words → medium/style → detail → mood/light/colour/camera
         mine = own_words(words)
         add = prompt[len(mine):].lstrip(" .") if prompt.startswith(mine) else ""
@@ -243,8 +245,21 @@ def run(run) -> None:
     if asp:
         args["aspect_ratio"] = asp
     queue, res, out, model, est, t0, pmodel, venice_off, refused = list(plan["models"]), {}, {}, "?", 0.0, time.time(), "", None, None
+    base_prompt, base_neg, tagged = args["prompt"], args["negative_prompt"], None
     while queue:
         pmodel = args["model"] = queue.pop(0)
+        if tag_prompt.wants(pmodel):                         # 🏷 Illustrious / Pony read comma tags, not sentences
+            if tagged is None:
+                t_names = look + ([style] if style and not (look and looks.has_look_style(look)) else [])
+                t_look = [w for part in looks.parts(t_names) for w in part]
+                tagged = tag_prompt.write(run, writers(run), t_mine, t_look, t_add, stage)
+                run._record({"action": "tags", "why": "🏷 tag prompt for the anime model — your words kept at the end"
+                             + (" (simple rules — no writer helped)" if tagged[1] == "rules" else f" (tags by {tagged[1].split('/')[-1]})"),
+                             "result": {"tags": tagged[0], "by": tagged[1], "prompt": tag_prompt.build(pmodel, tagged[0], t_mine)}, "usd": 0.0})
+                run._check_stop()
+            args["prompt"], args["negative_prompt"] = tag_prompt.build(pmodel, tagged[0], t_mine), tag_prompt.negative(pmodel, base_neg)
+        else:
+            args["prompt"], args["negative_prompt"] = base_prompt, base_neg
         stage(run, "🎨", "Asking Hermes to make the picture")
         try:
             start = run.lab.mcp.call("image_make", args)
@@ -278,6 +293,7 @@ def run(run) -> None:
                      "picture model (it has content filters)", "result": {"note": venice_off.message, "fix": venice_off.fix}, "usd": 0.0})
         stage(run, "🔑", "Venice key not added yet — using the default picture model (filtered)")
         args.pop("model", None)
+        args["prompt"], args["negative_prompt"] = base_prompt, base_neg
         pmodel = ""
         try:
             start = run.lab.mcp.call("image_make", args)
