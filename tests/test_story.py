@@ -128,6 +128,19 @@ class Story(Base):
         self.assertEqual(story._json("no json here", list), [])
         self.assertEqual(story._json('x {"a": "b}"} y', dict), {"a": "b}"})
 
+    def test_the_eyes_words_have_no_names(self):
+        """Live 2026-11-25: 👁 "missing: Aria rides her bike through the rain" — a picture can't show a name."""
+        b = {"people": [{"name": "Aria", "who": "a 38-year-old woman, chestnut brown hair in a long braid, wearing a purple outfit"},
+                        {"name": "Ben", "who": "a 42-year-old man, teal-dyed hair, wearing a orange outfit"}]}
+        shot = {"who": ["Aria", "Ben"], "action": "Aria passes Ben's bike; aria waves", "where": "street", "camera": "", "when": "night"}
+        seen = story.shot_prompt(shot, b, {}, looks=False)
+        self.assertNotIn("Aria", seen)
+        self.assertNotIn("Ben", seen)
+        self.assertIn("the woman passes the man's bike; the woman waves", seen)
+        self.assertIn("a woman with chestnut brown hair in a purple outfit", seen)
+        self.assertIn("Aria passes Ben's bike", story.shot_prompt(shot, b, {}, looks=True))   # the picture model keeps the names
+        self.assertEqual(story.unname("Benjamin waves", b, {}), "Benjamin waves")
+
     def test_a_name_in_the_action_joins_the_shot(self):
         """Live 2026-11-25: who=[Ben] for "Ben looks back, seeing Aria…" → Aria got no reference and a stranger was drawn."""
         s = story.clean_shots([{"who": ["Ben"], "action": "Ben looks back, seeing Aria with the package", "where": "street"},

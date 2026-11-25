@@ -233,8 +233,24 @@ def shot_prompt(shot: dict, b: dict, cast: dict[str, dict], looks: bool = True) 
     if where and not where.lower().startswith(("in ", "at ", "on ", "by ", "inside ", "under ")):
         where = "in " + where
     when = shot.get("when") or b.get("when", "")                 # live 2026-11-25: a night market drifted to daylight
-    bits = [", ".join(who), shot["action"], where, when, shot["camera"]]
+    action = shot["action"] if looks else unname(shot["action"], b, cast)
+    bits = [", ".join(who), action, where, when, shot["camera"]]
     return ", ".join(x for x in bits if x)
+
+
+def unname(action: str, b: dict, cast: dict[str, dict]) -> str:
+    """👁 live 2026-11-25: "missing: Aria rides her bike through the rain" — the people were checked by look, but the action
+    still named them. Names in the action become what a picture shows: "the woman rides her bike through the rain"."""
+    out = str(action or "")
+    names = {str(p.get("name") or ""): (cast.get(str(p.get("name") or "").lower()) or {}).get("brief", "") or p.get("who", "")
+             for p in b.get("people", []) if p.get("name")}
+    names.update({str(c.get("name") or k): c.get("brief", "") for k, c in cast.items() if isinstance(c, dict)})
+    for name, look in sorted(names.items(), key=lambda kv: -len(kv[0])):
+        if not name.strip():
+            continue
+        role = re.search(r"\b(woman|man|person)\b", look or "")
+        out = re.sub(rf"\b{re.escape(name)}\b", "the " + (role.group(1) if role else "person"), out, flags=re.I)
+    return out
 
 
 def seen_as(look: str) -> str:
