@@ -128,6 +128,17 @@ class Story(Base):
         self.assertEqual(story._json("no json here", list), [])
         self.assertEqual(story._json('x {"a": "b}"} y', dict), {"a": "b}"})
 
+    def test_one_flag_per_fact(self):
+        """Live 2026-11-25: 2 facts × 2 phrasings = 4 flags on one card."""
+        t = json.dumps(["Fact (ch 2): Ben took the tunnel — but his idea says he never went near a tunnel.",
+                        "Fact (ch 2): Ben took the tunnel — but his idea says he took the bridge.",
+                        "Fact (ch 3): Ben came out of the tunnel — but his idea says he never went near a tunnel.",
+                        "Fact (ch 3): Ben came out of the tunnel — but his idea says he took the bridge.", ""])
+        self.assertEqual(story.check_flags(t), ["Fact (ch 2): Ben took the tunnel — but his idea says he never went near a tunnel.",
+                                                "Fact (ch 3): Ben came out of the tunnel — but his idea says he never went near a tunnel."])
+        self.assertEqual(len(story.check_flags(json.dumps([f"Fact {i}: x — but y" for i in range(6)]))), 3)
+        self.assertEqual(story.check_flags("no json"), [])
+
     def test_the_eyes_words_have_no_names(self):
         """Live 2026-11-25: 👁 "missing: Aria rides her bike through the rain" — a picture can't show a name."""
         b = {"people": [{"name": "Aria", "who": "a 38-year-old woman, chestnut brown hair in a long braid, wearing a purple outfit"},

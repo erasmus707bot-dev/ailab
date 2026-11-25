@@ -306,7 +306,18 @@ def bible_text(b: dict) -> str:
 
 
 def check_flags(text: str) -> list[str]:
-    return [re.sub(r"\s+", " ", str(x)).strip()[:240] for x in _json(text, list) if isinstance(x, str) and x.strip()][:8]
+    """One flag per fact (live 2026-11-25: 2 facts came back as 4 flags, each fact said twice), at most 3."""
+    out, seen = [], set()
+    for x in _json(text, list):
+        if not isinstance(x, str) or not x.strip():
+            continue
+        f = re.sub(r"\s+", " ", x).strip()[:240]
+        key = re.split(r"\s+[—–-]\s+but\b", f, maxsplit=1)[0].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(f)
+    return out[:3]
 
 
 def new_facts(text: str, ch: int) -> list[dict]:
