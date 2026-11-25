@@ -260,7 +260,11 @@ def pictures(run) -> None:
             k = b["start"] + i
             if b.get("sheet"):
                 from . import refs
-                (task_k, v), look = refs.sheet_task(base, k), []
+                if "who" not in b:                                # 🎭 name who she is + her art style before the views
+                    b["who"], b["look"] = refs.describe(run, b["sheet"])
+                    run._record({"action": "eyes", "why": "🎭 the sheet keeps: " + (b["who"] or "(couldn't describe the picture — the reference alone)")
+                                 + (f" · Look: {b['look']}" if b["look"] else ""), "result": {"who": b["who"], "look": b["look"]}, "usd": 0.0})
+                (task_k, v), look = refs.sheet_task(base, k, b["who"], b["look"]), []
             else:
                 task_k, v, look = picture_task(base, b["dial"], k)
             run.task, run.state, run.why = task_k, "running", ""
@@ -340,25 +344,36 @@ def same_faces(run) -> None:
         src = (run.root / b["sheet"]).read_bytes()
     except OSError:
         return
-    same, drift = 0, []
-    for i, it in enumerate(b["items"]):
-        if it.get("kind") != "picture" or it.get("eyes"):
-            continue
-        try:
-            raw = (run.root / it["path"]).read_bytes()
-        except OSError:
-            continue
-        e = refs.same_face(run, src, raw, f"view {i + 1} of {len(b['items'])} next to the original")
-        it["eyes"] = {k: e.get(k) for k in ("score", "missing", "caption", "error", "same", "refused") if e.get(k) is not None}
-        if e.get("error"):
-            eyes.record(run, "sheet", e)
-            break
-        same += bool(e.get("same"))
-        if not e.get("same"):
-            drift.append(it.get("variation") or f"view {i + 1}")
+    why_stop = ""
+    try:                                                         # live 2026-11-25: the check stopped after view 2 with no line
+        for i, it in enumerate(b["items"]):
+            if it.get("kind") != "picture" or (it.get("eyes") or {}).get("same") is not None:
+                continue
+            try:
+                raw = (run.root / it["path"]).read_bytes()
+            except OSError:
+                continue
+            e = refs.same_face(run, src, raw, f"view {i + 1} of {len(b['items'])} next to the original")
+            it["eyes"] = {k: e.get(k) for k in ("score", "missing", "caption", "error", "same", "refused") if e.get(k) is not None}
+            if e.get("error"):
+                why_stop = e["error"]
+                eyes.record(run, "sheet", e)
+                break
+            run.save()
+    except Exception as e:                                       # noqa: BLE001 — still say what was checked
+        why_stop = f"{type(e).__name__}: {e}"[:160]
+        if type(e).__name__ in ("Stopped", "SpendBlocked", "PrivacyRefused"):
+            raise
+    finally:
+        done = [it for it in b["items"] if (it.get("eyes") or {}).get("same") is not None]
+        same = sum(bool(it["eyes"]["same"]) for it in done)
+        drift = [it.get("variation") or f"view {it.get('k', 0) + 1}" for it in done if not it["eyes"]["same"]]
+        left = len(b["items"]) - len(done)
+        run._record({"action": "eyes", "why": f"🎭 same-face check: {same} of {len(done)} checked views match the original"
+                     + (f" — drifted: {', '.join(drift)}" if drift else "")
+                     + (f" · {left} not checked ({why_stop or 'stopped'})" if left else ""),
+                     "result": {"same": same, "checked": len(done), "drift": drift, "unchecked": left}, "usd": 0.0})
         run.save()
-    run._record({"action": "eyes", "why": f"🎭 same-face check: {same} of {len(b['items'])} views match the original"
-                 + (f" — drifted: {', '.join(drift)}" if drift else ""), "result": {"same": same, "drift": drift}, "usd": 0.0})
 
 
 def docs(run) -> None:

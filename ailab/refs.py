@@ -9,6 +9,7 @@ the reference, then 👁 compares each view with the original side by side ("sam
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 MAX_REFS = 4
@@ -19,9 +20,11 @@ SHEET_VIEWS = [
     "side view in profile, full body, plain light-grey background",
     "three-quarter view, upper body, plain light-grey background",
     "back view, full body, plain light-grey background",
-    "close-up of the face, a row of four expressions: happy, angry, surprised, sad, plain light-grey background",
+    "close-up of the face, head and shoulders, a gentle smile, plain light-grey background",
 ]
-SHEET_WORDS = "the same person as in the reference picture — same face, hair, body and clothes"
+# live 2026-11-25: with only "the person in this picture", 3 of 5 views of an anime girl came back as photo-real strangers
+# (and the four-expressions view as six different people). The sheet now names who she is and keeps the art style.
+SHEET_WORDS = "the same character as in the reference picture — same face, hair, body, clothes and the same art style"
 SAME_Q = ["Do the two pictures side by side show the same person — the same face, hair colour and hair style?",
           "Is the person on the right wearing the same clothes as the person on the left?"]
 
@@ -86,11 +89,58 @@ def queue(models: list[str], local_ok: bool, venice_ok: bool) -> list[str]:
 
 
 # ---------- 🎭 character sheet ----------
-def sheet_task(base: str, k: int) -> tuple[str, str]:
+def sheet_task(base: str, k: int, who: str = "", look: str = "") -> tuple[str, str]:
+    """One view's task. `who` (from describe()) replaces the run's own first line; `look` adds a Look: line."""
     v = SHEET_VIEWS[k % len(SHEET_VIEWS)]
     first, _, rest = (base or "").partition("\n")
-    who = first.strip() or "the character"
-    return f"{who}, {SHEET_WORDS}, {v}" + ("\n" + rest if rest else ""), v.split(",")[0]
+    who = (who or first).strip() or "the character"
+    lines = [x for x in rest.split("\n") if x.strip() and not (look and x.startswith("Look:"))]
+    if look:
+        lines.append(f"Look: {look}")
+    return f"{who}, {SHEET_WORDS}, {v}" + ("\n" + "\n".join(lines) if lines else ""), v.split(",")[0]
+
+
+_VERB = re.compile(r"\s+(?:who\s+)?(?:stands|sits|is|are|holds|holding|standing|sitting|walks|walking|lies|lying|leans|"
+                   r"leaning|poses|posing|kneels|kneeling|looks|looking)\b.*$", re.I)
+
+
+def from_caption(caption: str) -> str:
+    """"A single anime-style girl with dark hair stands under… She wears a white top and a black skirt." →
+    "a single anime-style girl with dark hair, wearing a white top and a black skirt"."""
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", str(caption or "")) if x.strip()]
+    if not sents:
+        return ""
+    who = _VERB.sub("", sents[0].rstrip(".")).strip(" ,")
+    who = re.sub(r"^(the|this) (image|picture|illustration) (shows|depicts|displays)\s+", "", who, flags=re.I)
+    wear = next((x for x in sents if re.search(r"\bwear(s|ing)\b", x, re.I)), "")
+    m = re.search(r"\bwear(?:s|ing)\s+(.+?)[.;]?$", wear, re.I)
+    out = who[:1].lower() + who[1:] + (f", wearing {m.group(1).strip()}" if m else "")
+    return out[:300]
+
+
+def describe(run, rel: str) -> tuple[str, str]:
+    """Who is in the sheet's source picture → (who, look). His own words + Look line when the picture was ✅ kept or
+    made by a run the shelf knows; otherwise the local eyes describe it ($0). ("", "") when neither works."""
+    from . import eyes, shelf                                     # noqa: PLC0415
+    root = Path(run.root)
+    try:
+        v = shelf.view(root)
+        rows = list(v.get("kept") or []) + list(v.get("tossed") or [])
+    except Exception:                                            # noqa: BLE001
+        rows = []
+    for x in reversed(rows):
+        if rel in (x.get("files") or []):
+            task = str(x.get("task") or "")
+            look = next((ln[5:].strip() for ln in task.split("\n") if ln.startswith("Look:")), "")
+            own = task.split("\n")[0].strip()
+            if own:
+                return own, look
+    try:
+        raw = (root / rel).read_bytes()
+    except OSError:
+        return "", ""
+    e = eyes.ask(run, raw, [], label="the source picture, to describe who is in it")
+    return from_caption(e.get("caption", "")), ""
 
 
 def side_by_side(a: bytes, b: bytes, h: int = 512) -> bytes:

@@ -279,6 +279,7 @@ def run(run) -> None:
     queue, res, out, model, est, t0, pmodel, venice_off, refused = list(plan["models"]), {}, {}, "?", 0.0, time.time(), "", None, None
     base_prompt, base_neg, tagged = args["prompt"], args["negative_prompt"], None
     ref_paths, ref_added = ([] if forced else _refs(run)), False   # 🎭 M2: the cast strip / a character sheet's source
+    strict = False                                           # True = a reference is in play: never make it without one
     if ref_paths:
         from . import refs as R
         local_ok = any(m.startswith("local/") for m in queue) and R.REF_MODELS[0] in picture_route.ready(run)
@@ -286,8 +287,12 @@ def run(run) -> None:
         ref_added = R.REF_MODELS[1] in q2 and R.REF_MODELS[1] not in queue
         queue = q2
         if any(m in R.REF_MODELS for m in queue):
+            # 🎭 live 2026-11-25: when the card dropped, a sheet view / pinned run fell to venice/lustify WITHOUT the reference
+            # and drew a stranger. With a reference in play only reference-capable models are tried — no silent fallback.
+            queue = [m for m in queue if m in R.REF_MODELS]
+            strict = True
             run._record({"action": "refs", "why": f"🎭 {len(ref_paths)} reference picture{'s' if len(ref_paths) > 1 else ''} sent so the face holds",
-                         "result": {"refs": [Path(x).name for x in ref_paths]}, "usd": 0.0})
+                         "result": {"refs": [Path(x).name for x in ref_paths], "models": list(queue)}, "usd": 0.0})
         else:
             run._record({"action": "refs", "why": "🎭 no picture model here can use reference pictures (start the local picture "
                          "service or turn Venice on) — made from your words only", "result": {"refs": []}, "usd": 0.0})
@@ -330,6 +335,16 @@ def run(run) -> None:
                 args.pop("pose_image", None)
                 queue.insert(0, pmodel)
                 continue
+            if strict and args.get("reference_images") and e.code in ("not_enabled", "bad_path", "bad_args", "too_big"):
+                if queue:                                    # another reference-capable model may still take it
+                    run._record({"action": "refs", "why": f"🎭 {pmodel.split('/')[-1]} can't take the reference — {e.message} Trying {queue[0].split('/')[-1]}.",
+                                 "result": {"note": e.message}, "usd": 0.0})
+                    continue
+                run._record({"action": "refs", "why": f"🎭 references not used — {e.message}",
+                             "result": {"note": e.message, "fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
+                run.state, run.why = "failed", (f"🎭 Nothing made: the reference picture can't be used right now — {e.message}"
+                                               + (f" 👉 {e.fix}" if getattr(e, "fix", "") else " 👉 Take the 📌 reference off to make it from your words only."))
+                return
             if args.get("reference_images") and e.code in ("not_enabled", "bad_path", "bad_args", "too_big"):
                 run._record({"action": "refs", "why": f"🎭 references not used — {e.message}",   # Hermes: route off until its probe passes
                              "result": {"note": e.message, "fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
@@ -364,6 +379,14 @@ def run(run) -> None:
         if queue:
             run._record({"action": "picture", "why": f"↪️ {pmodel.split('/')[-1]} failed — trying {queue[0].split('/')[-1]}",
                          "result": {"error": err}, "usd": 0.0})
+    if strict and not (res.get("state") == "done" and out.get("b64")):
+        msg = (res.get("error") or {}).get("message") or (refused.message if refused is not None else "no picture came back")
+        run._record({"action": "picture", "why": "🎭 the face-keeping model didn't make it — nothing made without your reference",
+                     "result": {"error": msg}, "usd": 0.0})
+        run.state, run.why = "failed", ("🎭 Nothing made: the picture model that keeps the face didn't answer "
+                                       f"({msg[:120]}). The graphics card may be busy with a video. 👉 Try again in a minute — "
+                                       "nothing was made without your reference, and no picture was paid for.")
+        return
     if venice_off is not None and not (res.get("state") == "done" and out.get("b64")):   # Venice not set up, nothing else made it
         run._record({"action": "picture", "why": "🔑 Venice isn't set up in Hermes yet — using Hermes's default "
                      "picture model (it has content filters)", "result": {"note": venice_off.message, "fix": venice_off.fix}, "usd": 0.0})

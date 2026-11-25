@@ -110,10 +110,12 @@ class Refs(Base):
         r = self._run(mcp)
         refs.pin(r.root, self._copy_pic(r.root))
         r.loop()
-        self.assertEqual(r.state, "done", r.why)
+        # 2026-11-25: with a 📌 reference in play nothing is made without it — the run stops and says why
         makes = [a for t, a in zip(mcp.calls, mcp.args) if t == "image_make"]
-        self.assertEqual([m["model"] for m in makes], ["local/flux2-klein-4b", "local/flux2-klein-4b"])
-        self.assertNotIn("reference_images", makes[1])
+        self.assertEqual([m["model"] for m in makes], ["local/flux2-klein-4b"])
+        self.assertEqual(r.state, "failed")
+        self.assertIn("Nothing made", r.why)
+        self.assertIn("Run the probe.", r.why)
         self.assertTrue(any("references not used" in s["why"] for s in r.steps))
 
     def test_no_ref_model_means_words_only_and_says_so(self):
@@ -132,8 +134,27 @@ class Refs(Base):
         self.assertEqual((n["n"], n["dial"], n["sheet"]), (5, 0, "pictures/p0.png"))
         self.assertIsNone(batch.norm({"n": 2, "sheet": "x.png"}, ["text"]))
         t, v = refs.sheet_task("Mara the knight", 1)
-        self.assertTrue(t.startswith("Mara the knight, the same person"))
+        self.assertTrue(t.startswith("Mara the knight, the same character"))
         self.assertEqual(v, "side view in profile")
+        t, _ = refs.sheet_task("Character sheet of the person in this picture\nLook: Photo", 4, "a girl with a red umbrella", "Anime · Serene")
+        self.assertTrue(t.startswith("a girl with a red umbrella, the same character as in the reference picture"))
+        self.assertIn("same art style", t)
+        self.assertTrue(t.endswith("\nLook: Anime · Serene") and "Look: Photo" not in t)
+
+    def test_caption_becomes_who_without_the_scene(self):
+        c = ("A single anime-style girl with dark hair stands under a red umbrella in a rain-soaked bus shelter at night. "
+             "She wears a white long-sleeve top and a short black skirt, facing slightly left. The scene is lit by blue light.")
+        self.assertEqual(refs.from_caption(c), "a single anime-style girl with dark hair, wearing a white long-sleeve top and a short black skirt, facing slightly left")
+        self.assertEqual(refs.from_caption("The image shows a red fox sitting in snow."), "a red fox")
+        self.assertEqual(refs.from_caption(""), "")
+
+    def test_describe_prefers_his_own_kept_words(self):
+        from ailab import shelf
+        r = self._run(RefMCP())
+        rel = self._copy_pic(r.root)
+        shelf.keep(r.root, "k1", "a girl with a red umbrella at a rainy bus stop\nLook: Anime · Serene", [{"path": rel}])
+        self.assertEqual(refs.describe(r, rel), ("a girl with a red umbrella at a rainy bus stop", "Anime · Serene"))
+        self.assertNotIn("vision_check", r.lab.mcp.calls if hasattr(r.lab.mcp, "calls") else [])
 
     def test_sheet_run_uses_source_as_reference_and_checks_same_face(self):
         self._local_up()
@@ -146,9 +167,10 @@ class Refs(Base):
         makes = [a for t, a in zip(mcp.calls, mcp.args) if t == "image_make"]
         self.assertEqual(len(makes), 5)
         self.assertTrue(all(a["reference_images"] == [str((r.root / "pictures/ref.png").resolve())] for a in makes))
-        self.assertEqual(mcp.calls.count("vision_check"), 5)
+        self.assertEqual(mcp.calls.count("vision_check"), 6)                     # 1 describe + 5 same-face looks
+        self.assertTrue(any(s["why"].startswith("🎭 the sheet keeps:") for s in r.steps))
         last = [s for s in r.steps if s["action"] == "eyes"][-1]
-        self.assertIn("0 of 5 views match", last["why"])
+        self.assertIn("0 of 5 checked views match", last["why"])
         self.assertIn("drifted", last["why"])
         self.assertFalse(r.view()["batch"]["items"][0]["eyes"]["same"])
 
@@ -159,3 +181,58 @@ class Refs(Base):
     def test_ui_wiring(self):
         for s in ("/api/refs/pin", "/api/refs/unpin", "📌 Use as reference", "🎭 Character sheet", "sheet: path"):
             self.assertIn(s, HTML)
+
+
+class Strict(Refs):
+    def test_card_down_never_falls_to_a_model_without_the_reference(self):
+        """Live 2026-11-25: ComfyUI reset → venice/lustify-v8 without the reference → a stranger in the sheet."""
+        self._local_up()
+        picture_route.plan = lambda run, look, style, vm, forced: {"kind": "photo", "first": "local",
+                                                                  "models": ["local/juggernaut-xl-v9", "venice/lustify-v8"]}
+
+        class Down(RefMCP):
+            def call(self, tool, args=None):
+                if tool == "job_wait" and (args or {}).get("key") == "img:1":
+                    self.calls.append(tool); self.args.append(args or {})
+                    return {"state": "failed", "finished": True, "error": {"message": "Picture failed: [Errno 104] Connection reset by peer"}}
+                return super().call(tool, args)
+        mcp = Down()
+        r = self._run(mcp)
+        refs.pin(r.root, self._copy_pic(r.root))
+        r.loop()
+        makes = [a for t, a in zip(mcp.calls, mcp.args) if t == "image_make"]
+        self.assertTrue(makes)
+        self.assertTrue(all(m["model"] in refs.REF_MODELS and m.get("reference_images") for m in makes), makes)   # no juggernaut, no lustify
+        self.assertEqual(r.state, "failed")
+        self.assertIn("nothing was made without your reference", r.why)
+        self.assertIn("Try again", r.why)
+        self.assertLess(r.usd, 0.01)                                          # only the prompt writer, no picture paid for
+
+    def test_no_reference_pinned_keeps_the_normal_fallback(self):
+        self._local_up()
+        picture_route.plan = lambda run, look, style, vm, forced: {"kind": "photo", "first": "local",
+                                                                  "models": ["local/juggernaut-xl-v9", "venice/lustify-v8"]}
+        mcp = RefMCP()
+        r = self._run(mcp)
+        r.loop()
+        self.assertEqual(r.state, "done", r.why)
+        self.assertEqual([a["model"] for t, a in zip(mcp.calls, mcp.args) if t == "image_make"], ["local/juggernaut-xl-v9"])
+
+    def test_same_face_line_is_written_even_when_the_check_breaks(self):
+        r = self._run(RefMCP(), task="Character sheet of the person in this picture", batch_req={"n": 5, "sheet": "pictures/ref.png"})
+        self._copy_pic(r.root)
+        r.batch["items"] = [{"path": "pictures/ref.png", "k": i, "kind": "picture", "variation": f"view {i}"} for i in range(3)]
+        calls = {"n": 0}
+        orig = refs.same_face
+
+        def flaky(run, src, raw, label):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ConnectionResetError("hermes-mcp restarted")
+            return {"score": 100, "same": True, "points": [{"ok": True}], "missing": []}
+        refs.same_face = flaky
+        self.addCleanup(lambda: setattr(refs, "same_face", orig))
+        batch.same_faces(r)
+        last = [s for s in r.steps if s["action"] == "eyes"][-1]
+        self.assertIn("1 of 1 checked views match", last["why"])
+        self.assertIn("2 not checked (ConnectionResetError: hermes-mcp restarted)", last["why"])
