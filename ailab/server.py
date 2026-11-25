@@ -506,6 +506,33 @@ class App:
         pid = self._pid(b.get("project"))
         return self._cast_do(lambda: cast.import_refs(self._cast_mcp(), preview.ensure_site(pid), pid))
 
+    # ---------- 🎬 R3 video rebuild ----------
+    def rebuild_get(self, q: dict) -> tuple[int, dict]:
+        """⚖️ The rebuild record for one breakdown (beats, scores, film, sync table), or the project's rebuild list."""
+        from . import rebuild
+        root = preview.ensure_site(self._pid(q.get("project"))).resolve()
+        bd = str((q.get("bd") or [""])[0])
+        if not bd:
+            return 200, {"ok": True, "rebuilds": rebuild.records(root)}
+        rec = rebuild.record(root, bd)
+        if not rec:
+            return 200, {"ok": False, "icon": "🎬", "message": "No rebuild of that video in this project yet."}
+        return 200, {"ok": True, **rec}
+
+    def rebuild_src(self, q: dict):
+        """The original video for the ⚖️ side-by-side — only the file this project's rebuild record names, inside Hermes's folders."""
+        from . import rebuild, rip
+        root = preview.ensure_site(self._pid(q.get("project"))).resolve()
+        rec = rebuild.record(root, str((q.get("bd") or [""])[0])) or {}
+        try:
+            p = Path(str(rec.get("source") or "")).resolve(strict=True)
+        except (OSError, RuntimeError):
+            return None
+        home = rip.data().resolve()
+        if home not in p.parents or p.suffix.lower() not in (".mp4", ".webm", ".mov", ".mkv", ".m4v") or p.stat().st_size > 400 * 1024 * 1024:
+            return None
+        return p
+
     # ---------- 🎞 M4 video breakdown (Hermes does the work) ----------
     def bd_list(self, q: dict) -> tuple[int, dict]:
         return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call("breakdown_list", {})})
@@ -530,7 +557,7 @@ class App:
         if not p or not p.is_file():
             return 200, {"ok": False, "icon": "🎞", "message": "Pick a video in this project first."}
         return self._cast_do(lambda: {"ok": True, **self._cast_mcp().call(
-            "video_breakdown", {"path": str(p), "title": p.stem, "private": bool(b.get("private"))})})
+            "video_breakdown", {"path": str(p), "title": p.stem, "private": bool(b.get("private")), "fresh": bool(b.get("fresh"))})})
 
     def bd_make(self, b: dict) -> tuple[int, dict]:
         from . import rip
@@ -664,6 +691,7 @@ class App:
                     except Exception:                           # noqa: BLE001 — one stuck undo must not block the rest
                         pass
             item = shelf.toss(r.root, r.id, r.task, made, sorted(set(undone)), self._seen(r))
+            self._craft_verdict(r.id, False)
             return 200, {"ok": True, "item": item, "run": r.view()}
         except (ValueError, KeyError) as e:
             return 200, {"ok": False, "code": "shelf", "icon": "🗄",
@@ -691,7 +719,6 @@ class App:
     def preview_save(self, b: dict) -> tuple[int, dict]:
         if not self.cfg["flags"]["preview"]:
             return _off("preview")
-            self._craft_verdict(r.id, False)
         return 200, preview.save_file(self._pid(b.get("project")), str(b.get("path") or ""), str(b.get("text") or ""))
 
     def preview_version(self, q: dict) -> tuple[int, dict]:
@@ -845,6 +872,12 @@ class App:
             pass
         return out
 
+    def _craft_verdict(self, run_id: str, keep: bool) -> None:
+        """📓 ✅ Keep / 🗑 Throw away counts on the craft notes that run used."""
+        if self.cfg["flags"].get("craft"):
+            from . import craft
+            craft.verdict(run_id, keep)
+
     @staticmethod
     def _seen(r) -> dict | None:
         from . import eyes
@@ -872,12 +905,6 @@ class App:
         """🪄 Help me say it: rough words → a clear change request Scott can edit before it runs."""
         if not self.cfg["flags"]["agent"]:
             return _off("agent")
-    def _craft_verdict(self, run_id: str, keep: bool) -> None:
-        """📓 ✅ Keep / 🗑 Throw away counts on the craft notes that run used."""
-        if self.cfg["flags"].get("craft"):
-            from . import craft
-            craft.verdict(run_id, keep)
-
         improve = b.get("mode") == "prompt"
         text = str(b.get("text") or "").strip()[:4000 if improve else 1500]
         if not text:
@@ -1413,6 +1440,10 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.shelf_source, q)
             if u.path == "/api/shelf":
                 return self._run(app.shelf_get, q)
+            if u.path == "/craft":                         # 📓 Craft Book page (2026-11-25)
+                return self._send(200, (WEB / "craft.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/api/craft":
+                return self._run(app.craft_get, q)
             if u.path == "/loop":                          # 🔁 Creative Loop page (2026-11-25)
                 return self._send(200, (WEB / "loop.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/loop/pic":                  # 🔁 a loop picture — only from Hermes pictures/ai-lab/
@@ -1423,6 +1454,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.loop_call, u.path.rsplit("/", 1)[1], q)
             if u.path == "/api/refs":                      # 🎭 M2 the project's reference pictures (cast strip)
                 return self._run(app.refs_get, q)
+            if u.path == "/api/rebuild":                   # 🎬 R3 ⚖️ review record / list
+                return self._run(app.rebuild_get, q)
+            if u.path == "/api/rebuild/src":               # 🎬 R3 the original, for the synced side-by-side
+                sp = app.rebuild_src(q)
+                if not sp:
+                    return self._send(404, b"Not this rebuild's source.", "text/plain; charset=utf-8")
+                ct = {".webm": "video/webm", ".mov": "video/quicktime", ".mkv": "video/x-matroska"}.get(sp.suffix.lower(), "video/mp4")
+                return self._send(200, sp.read_bytes(), ct)
             if u.path == "/api/breakdown/pic":             # 🎞 M4 a scene frame — only from Hermes's breakdowns folder
                 from . import rip as ripmod
                 fp = ripmod.frame_file(str((q.get("path") or [""])[0]))
@@ -1442,10 +1481,6 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.story_get, q)
             if u.path == "/api/motions":                   # 🏃 Motion Presets library (search, shelves)
                 return self._run(app.motions_get, q)
-            if u.path == "/craft":                         # 📓 Craft Book page (2026-11-25)
-                return self._send(200, (WEB / "craft.html").read_bytes(), "text/html; charset=utf-8")
-            if u.path == "/api/craft":
-                return self._run(app.craft_get, q)
             if u.path == "/api/motion/scene":              # 🏃 this project's timeline (rows, words, plan)
                 return self._run(app.motion_scene_get, q)
             if u.path == "/api/motion/file":               # 🏃 a preset's preview / frame / pose — only inside its folder
@@ -1561,6 +1596,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.prompt_post, p[len("/api/prompt/"):], b)
             if p.startswith("/api/memory/"):
                 return self._run(app.memory_post, p[len("/api/memory/"):], b)
+            if p.startswith("/api/craft/"):
+                return self._run(app.craft_post, p[len("/api/craft/"):], b)
             if p == "/api/compare/start":
                 return self._run(app.compare_start, b)
             if p == "/api/compare/stop":
@@ -1598,8 +1635,6 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                                                "/api/motion/delete": "motion_delete"}[p]), b)
             if p in ("/api/styles/make", "/api/styles/choose", "/api/styles/answer"):
                 return self._run(getattr(app, "styles_" + p.rsplit("/", 1)[1]), b)
-            if p.startswith("/api/craft/"):
-                return self._run(app.craft_post, p[len("/api/craft/"):], b)
             if p == "/api/looks/save":
                 return self._run(lambda: (200, looks.save(b.get("name"), b.get("look") if isinstance(b.get("look"), list) else [])))
             if p == "/api/looks/delete":

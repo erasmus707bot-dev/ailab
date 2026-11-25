@@ -1038,6 +1038,10 @@ class Run:
                     from . import story as storymod
                     storymod.run(self)
                     return
+                if self.batch["kind"] == "rebuild":         # 🎬 R3 Video Rebuild (2026-11-25)
+                    from . import rebuild as rebuildmod
+                    rebuildmod.run(self)
+                    return
                 if self.batch["kind"] in ("motion", "motionfill"):   # 🏃 Motion Presets (2026-11-25)
                     from . import motion_fill as fillmod, motion_make as makemod
                     (makemod if self.batch["kind"] == "motion" else fillmod).run(self)
