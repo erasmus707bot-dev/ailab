@@ -155,6 +155,32 @@ def picture_model(run, style: str) -> tuple[str, bool]:
     return (VENICE_PHOTO if "photo" in (style or "").lower() else VENICE_ART), False
 
 
+LOCAL_DRAWN = "local/sdxl-base-1.0"          # 2026-11-24 live: SDXL on gandalf's card paints watercolor/charcoal/storybook; Lustify v8 draws photos
+_LOCAL = {"at": 0.0, "ok": False}
+
+
+def local_ready(run) -> bool:
+    """True when Hermes lists local SDXL as installed, running and fitting the card (cached 60 s). Any error = False."""
+    if time.time() - _LOCAL["at"] < 60:
+        return _LOCAL["ok"]
+    ok = False
+    try:
+        rows = run.lab.mcp.call("image_models", {}).get("models") or []
+        ok = any(r.get("id") == LOCAL_DRAWN and r.get("fits", True) for r in rows)
+    except Exception:                                        # noqa: BLE001 — off is a normal state
+        ok = False
+    _LOCAL.update(at=time.time(), ok=ok)
+    return ok
+
+
+def drawn_local(run, look: list[str], style: str, forced: bool) -> bool:
+    """A drawn medium/style (not a photo) and local SDXL is up → use it ($0, nothing leaves gandalf). cfg local_drawn=false turns it off."""
+    if forced or run.cfg.get("local_drawn") is False or looks.photo(look):
+        return False
+    drawn = bool(looks.negative(look, "") ) if look else bool(style) and not any(w in style.lower() for w in ("photo", "realis"))
+    return drawn and local_ready(run)
+
+
 def run(run) -> None:
     """The whole picture run. Raises Stopped / SpendBlocked like the agent loop (handled by Run.loop)."""
     if not run.connected:
@@ -198,6 +224,9 @@ def run(run) -> None:
         prompt = (f"{m.rstrip('.')}. {style}. {prompt[len(m):].lstrip(' .')}" if prompt.startswith(m)
                   else f"{prompt.rstrip('.')}. {style}.").strip()
     pmodel, forced = picture_model(run, "photo" if looks.photo(look) else ("" if look and looks.has_look_style(look) else style))
+    if drawn_local(run, look, style, forced):
+        pmodel = LOCAL_DRAWN
+        run._record({"action": "route", "why": "🏠 drawn style → local SDXL on gandalf ($0)", "result": {"model": pmodel}, "usd": 0.0})
     args = {"prompt": prompt, "name": own_words(words)[:40], "task": f"lab-picture:{run.project['id']}", "model": pmodel,
             "negative_prompt": looks.negative(look, NO_TEXT)}
     asp = aspect_from(shape)
@@ -208,14 +237,21 @@ def run(run) -> None:
         try:
             start = run.lab.mcp.call("image_make", args)
         except HermesRefused as e:
-            if forced or not pmodel.startswith("venice/") or e.code not in ("not_enabled", "no_key"):
+            if pmodel == LOCAL_DRAWN and not forced:         # local went away between the check and the call → Lustify
+                _LOCAL.update(at=time.time(), ok=False)
+                run._record({"action": "picture", "why": "🏠 local picture service isn't ready — using Lustify v8",
+                             "result": {"note": e.message}, "usd": 0.0})
+                pmodel = args["model"] = VENICE_ART
+                start = run.lab.mcp.call("image_make", args)
+            elif forced or not pmodel.startswith("venice/") or e.code not in ("not_enabled", "no_key"):
                 raise
-            run._record({"action": "picture", "why": "🔑 Venice isn't set up in Hermes yet — using Hermes's default "
-                         "picture model (it has content filters)", "result": {"note": e.message, "fix": e.fix}, "usd": 0.0})
-            stage(run, "🔑", "Venice key not added yet — using the default picture model (filtered)")
-            args.pop("model")
-            pmodel = ""
-            start = run.lab.mcp.call("image_make", args)
+            else:
+                run._record({"action": "picture", "why": "🔑 Venice isn't set up in Hermes yet — using Hermes's default "
+                             "picture model (it has content filters)", "result": {"note": e.message, "fix": e.fix}, "usd": 0.0})
+                stage(run, "🔑", "Venice key not added yet — using the default picture model (filtered)")
+                args.pop("model")
+                pmodel = ""
+                start = run.lab.mcp.call("image_make", args)
     except HermesRefused as e:
         run._record({"action": "picture", "why": "🎨 make the picture", "result": {"error": f"Hermes refused ({e.code}): {e.message}"}, "usd": 0.0})
         run.state, run.why = "failed", f"🎨 Hermes couldn't make the picture: {e.message}" + (f" — {e.fix}" if e.fix else "")
@@ -237,6 +273,24 @@ def run(run) -> None:
             res = {"state": "failed", "error": {"message": f"no picture after {MAX_WAIT_TOTAL_S} s"}}
             break
     out = res.get("result") or {}
+    if (res.get("state") != "done" or not out.get("b64")) and pmodel == LOCAL_DRAWN and not forced:
+        _LOCAL.update(at=time.time(), ok=False)              # the card job failed (e.g. out of memory) → once more on Lustify
+        run._record({"action": "picture", "why": "🏠 local picture failed — trying Lustify v8",
+                     "result": {"error": (res.get("error") or {}).get("message") or "no picture"}, "usd": 0.0})
+        pmodel = args["model"] = VENICE_ART
+        start = run.lab.mcp.call("image_make", args)
+        key, model, est = start.get("key"), start.get("model", pmodel), float(start.get("est_usd") or 0)
+        t0 = time.time()
+        while True:
+            run._check_stop()
+            stage(run, "🎨", f"Making the picture with {model.split('/')[-1]} — {int(time.time() - t0)} s (about ${est:.3f})")
+            try:
+                res = run.lab.mcp.call("job_wait", {"key": key, "max_s": WAIT_S})
+            except HermesRefused as e:
+                res = {"state": "failed", "error": {"message": e.message}}
+            if res.get("finished") or res.get("state") in ("done", "failed", "cancelled") or time.time() - t0 > MAX_WAIT_TOTAL_S:
+                break
+        out = res.get("result") or {}
     if res.get("state") != "done" or not out.get("b64"):
         msg = (res.get("error") or {}).get("message") or "no picture came back"
         run._record({"action": "picture", "why": "🎨 make the picture", "result": {"error": msg}, "usd": 0.0})
