@@ -287,6 +287,14 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .madecard, .changebox { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px;
     border: 1px solid var(--accent); background: var(--panel); }
   .madecard h3, .changebox h3 { margin: 0; font-size: 1.08rem; }
+  .charform { display: grid; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--accent); background: var(--panel); }
+  .charform label { display: grid; gap: 4px; } .charform input[type=number] { width: 7em; }
+  .charshelf { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); margin-top: 8px; }
+  .charcard { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; text-align: left; color: inherit; font: inherit; }
+  .charcard.here { border-color: var(--accent); }
+  .charcard img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #000; }
+  .chardetail { grid-column: 1 / -1; display: grid; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--accent); background: var(--panel); }
+  .chardetail .sheet { display: flex; gap: 6px; flex-wrap: wrap; } .chardetail .sheet img { height: 90px; border-radius: 6px; }
   .mtiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
   .mtile { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); min-width: 0; }
   .wherepath { display: block; overflow-wrap: anywhere; font-size: .85em; opacity: .85; }
@@ -1084,6 +1092,84 @@ const LIB_KIND = f => /\.(png|jpe?g|webp|gif)$/i.test(f) ? "pic" : /\.(mp4|webm|
 const LIB_ICON = { pic: "🖼", vid: "🎬", doc: "📝", page: "🌐" };
 /* 🎭 R1 (Scott 2026-11-25): the global cast — one library every project pulls from. castPicker is also the start screen
    of 📖 Story and 🎬 Rebuild: "♻️ Reuse a cast" (pick list) · "🆕 Make a new one" (🎲 the Lab designs N distinct people). */
+/* ⭐ asset library M1 (Scott 2026-11-25): any picture → a character card in the global cast (Hermes). Adults only. */
+function charForm(pid, rel, onDone) {
+  const note = h("span", { class: "note", role: "status" });
+  const name = h("input", { type: "text", maxlength: "40", placeholder: "Name (e.g. Mara)", "aria-label": "Character name" });
+  const age = h("input", { type: "number", min: "18", max: "120", value: "25", "aria-label": "Age, 18 or over" });
+  const brief = h("textarea", { rows: "2", maxlength: "600", placeholder: "A few words — look, style, who they are (optional)", "aria-label": "Short description" });
+  const here = h("input", { type: "checkbox", checked: true });
+  const form = h("div", { class: "charform" });
+  const save = h("button", { class: "btn pri", type: "button" }, "⭐ Save character");
+  save.onclick = async () => {
+    if (!name.value.trim()) { note.textContent = "✏️ Give the character a name."; name.focus(); return; }
+    if (!(+age.value >= 18)) { note.textContent = "🔞 Characters are adults only — age 18 or over."; age.focus(); return; }
+    save.disabled = true; note.textContent = "💾 Saving to the global cast…";
+    const r = await api("/api/cast/character", { project: pid, path: rel, name: name.value, age: +age.value, brief: brief.value, use_here: here.checked });
+    save.disabled = false;
+    if (!r.ok) { note.textContent = `${r.icon || "⚠️"} ${r.message || "Not saved."}`; return; }
+    note.textContent = `⭐ ${r.name} saved to the global cast` + (r.joined ? " and added to this project's cast — new pictures keep this face." : r.note ? ` — ${r.note}` : ".");
+    form.querySelectorAll("input,textarea").forEach(x => { x.disabled = true; }); save.hidden = true;
+    if (onDone) onDone(r);
+  };
+  form.append(h("b", {}, "⭐ Make a character from this picture"), h("label", {}, "Name", name), h("label", {}, "Age (18+)", age),
+    h("label", {}, "Short description", brief), h("label", { class: "askrow" }, here, "Use in this project now"),
+    h("div", { class: "runbar" }, save, h("button", { class: "btn", type: "button", onclick: () => form.remove() }, "✕ Close"), note));
+  setTimeout(() => name.focus(), 0);
+  return form;
+}
+function charBtn(pid, rel, onDone) {
+  const b = h("button", { class: "btn", type: "button", title: "Save this person as a character card — reuse the face in any project" }, "⭐ Make a character");
+  b.onclick = () => {
+    const bar = b.closest(".runbar") || b.parentElement, nx = bar.nextElementSibling;
+    if (nx && nx.classList.contains("charform")) { nx.remove(); return; }
+    bar.after(charForm(pid, rel, onDone));
+  };
+  return b;
+}
+/* 📇 Characters shelf (asset library M1): every saved character as a small card — tap for details, 📌 use it here. */
+function charShelf(pid) {
+  const box = h("div", {}), grid = h("div", { class: "charshelf" }), note = h("span", { class: "note", role: "status" });
+  const find = h("input", { type: "search", placeholder: "🔎 Find a character", "aria-label": "Find a character" });
+  let chars = [], here = [], openId = "";
+  const pic = path => `/api/cast/pic?path=${encodeURIComponent(path)}`;
+  async function load() {
+    const x = await api(`/api/cast?project=${encodeURIComponent(pid)}`);
+    if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message || "The global cast isn't reachable."}`; return; }
+    chars = x.characters || []; here = (x.chosen && x.chosen.ids) || []; paint();
+  }
+  async function detail(c) {
+    const d = h("div", { class: "chardetail" }, "⏳");
+    const r = await api(`/api/cast/one?id=${encodeURIComponent(c.id)}`), full = r.ok ? r.character : c, on = here.includes(c.id);
+    const used = (full.used_by || []).map(u => u.project).filter(Boolean);
+    const act = async (path, msg) => { const a = await api(path, { project: pid, id: c.id });
+      note.textContent = a.ok ? (a.note || msg) : `${a.icon || "⚠️"} ${a.message}`; if (a.ok) { here = a.ids || here; paint(); } };
+    d.replaceChildren(h("b", {}, `${full.name} · ${full.age != null ? full.age : "age ?"}`), h("span", {}, full.brief || ""),
+      (full.sheet_paths || []).length ? h("div", { class: "sheet" }, ...full.sheet_paths.map(s => h("img", { src: pic(s), alt: "", loading: "lazy" }))) : h("span", { class: "note" }, "No character sheet yet."),
+      h("span", { class: "note" }, used.length ? `Used in: ${used.join(" · ")}` : "Not used in a project yet."),
+      h("div", { class: "runbar" }, on ? h("button", { class: "btn", type: "button", onclick: () => act("/api/cast/leave", `✕ ${c.name} is off this project's cast (the card stays).`) }, "✕ Take off this project")
+        : h("button", { class: "btn pri", type: "button", onclick: () => act("/api/cast/use", `📌 ${c.name} is in this project's cast — new pictures keep this face.`) }, "📌 Use in this project"),
+        h("button", { class: "btn", type: "button", onclick: () => { openId = ""; paint(); } }, "✕ Close")));
+    return d;
+  }
+  function paint() {
+    const q = find.value.trim().toLowerCase();
+    const xs = chars.filter(c => !q || `${c.name} ${c.brief || ""}`.toLowerCase().includes(q));
+    const cards = [];
+    xs.forEach(c => {
+      cards.push(h("button", { class: "charcard" + (here.includes(c.id) ? " here" : ""), type: "button", "aria-expanded": String(openId === c.id),
+        onclick: () => { openId = openId === c.id ? "" : c.id; paint(); } },
+        c.anchor_path ? h("img", { src: pic(c.anchor_path), alt: "", loading: "lazy" }) : h("span", {}, "🎭"),
+        h("b", {}, c.name), h("span", { class: "note" }, `${c.age != null ? c.age : "?"}${here.includes(c.id) ? " · 📌 here" : ""}${c.uses ? ` · ${c.uses} project${c.uses > 1 ? "s" : ""}` : ""}`)));
+      if (openId === c.id) { const slot = h("div", { class: "chardetail" }, "⏳"); cards.push(slot); detail(c).then(d => slot.replaceWith(d)); }
+    });
+    grid.replaceChildren(...(cards.length ? cards : [h("p", { class: "note" }, chars.length ? "No character matches." : "No characters yet — ⭐ Make a character on any picture.")]));
+  }
+  find.oninput = paint;
+  box.append(h("div", { class: "runbar" }, find, h("button", { class: "btn", type: "button", onclick: load }, "🔄"), note), grid);
+  box.refresh = load; load();
+  return box;
+}
 function castPicker(p, hooks, opts) {
   opts = opts || {};
   const box = h("div", { class: "castpick", id: opts.id || "castpick" }), note = h("span", { class: "note", role: "status" });
@@ -1358,7 +1444,7 @@ function libraryBox(p, hooks) {
         if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message || "Couldn't do that."}`; return; } refs = x.refs; paintCast(); open(f); } }, on ? "📌 Reference ✓" : "📌 Use as reference");
     const sheet = hooks && hooks.sheet ? h("button", { class: "btn", type: "button", title: "Front, side, three-quarter, back and face expressions of this person — 👁 checks each is the same face",
       onclick: () => { hooks.sheet(f.path); note.textContent = "🎭 Character sheet started — 5 views, watch 🤖 Make."; } }, "🎭 Character sheet") : null;
-    return h("div", { class: "runbar" }, pin, sheet, note);
+    return h("div", { class: "runbar" }, pin, sheet, charBtn(p.id, f.path, () => { if (shelfBox) shelfBox.refresh(); }), note);
   }
   /* 🎨 R2 (Scott 2026-11-25): official styles — 🔒 lock a kept result's Look + model + this project's lessons; choose one here. */
   const styleBox = h("details", { class: "libtoss", id: "libstyles", hidden: true });
@@ -1415,9 +1501,12 @@ function libraryBox(p, hooks) {
   const motBtn = (f, k) => h("div", { class: "runbar" }, h("button", { class: "btn", type: "button", disabled: !(hooks && hooks.motionFill),
     title: k === "pic" ? "Save the pose in this picture as a motion preset (poses found on gandalf, $0)" : "Pick a time range — the movement becomes a motion preset (poses + camera found on gandalf, $0)",
     onclick: () => k === "pic" ? hooks.motionFill({ mode: "result", path: f.path }) : motionPullForm(f.path, hooks, { url: url(f) }) }, "🏃 Save its motion"));
+  var shelfBox = null;   // var: refBar may run before this line on a restored open picture
+  const charFold = h("details", { class: "libtoss", id: "libchars" }, h("summary", {}, "📇 Characters — every saved person, tap for details"));
+  charFold.addEventListener("toggle", () => { if (charFold.open && !shelfBox) { shelfBox = charShelf(p.id); charFold.append(shelfBox); } });
   const globalCast = h("details", { class: "libtoss", id: "libglobalcast" }, h("summary", {}, "🎭 Global cast — reuse a cast or make a new one"));
   globalCast.addEventListener("toggle", () => { if (globalCast.open && !globalCast.querySelector(".castpick")) globalCast.append(castPicker(p, hooks, { id: "libcastpick", importBtn: true })); }, { once: false });
-  const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, globalCast, bdFold);
+  const el = h("details", { class: "libfold", id: "wblib", open: !!store.get("libopen", false), ontoggle: e => store.set("libopen", e.target.open) }, sum, chips, castStrip, big, strip, none, tossBox, styleBox, charFold, globalCast, bdFold);
   const url = f => `/preview/${p.id}/${encodeURI(f.path)}`;
   const isKind = (f, k) => k === "kept" ? !!keptN[f.path] : LIB_KIND(f.path) === k;
   const pl = libPlayer({ list: () => files.filter(f => !kind || isKind(f, kind)), cur: () => files.find(f => f.path === cur), open: f => open(f), kind: f => LIB_KIND(f.path), box: big });
@@ -1925,7 +2014,7 @@ function madeCard(pid, run) {
       body,
       run.folder ? h("div", { class: "note wherepath", title: "Where this file is" }, `📍 ${run.folder}/${m.path}`) : null,
       h("div", { class: "runbar" }, h("a", { class: "btn" + (m.kind === "page" ? " pri" : ""), href: url, target: "_blank", rel: "noopener" }, open),
-        h("a", { class: "btn", href: url, download: name }, "⬇ Download")));
+        h("a", { class: "btn", href: url, download: name }, "⬇ Download"), m.kind === "picture" ? charBtn(pid, m.path) : null));
   });
   return h("section", { class: "madecard", "aria-label": "What was made" }, h("h3", {}, `📦 What was made (${made.length})`), h("div", { class: "mtiles" }, tiles));
 }
@@ -1974,7 +2063,7 @@ function batchGrid(pid, run, startWith) {
       body, eyesBox(it.eyes, run.state !== "running" && startWith ? t => startWith(t, ids, false) : null), chg,
       run.folder ? h("div", { class: "note wherepath", title: "Where this file is" }, `📍 ${run.folder}/${it.path}`) : null,
       h("div", { class: "runbar" }, h("a", { class: "btn", href: url, download: name }, "⬇ Download"), pen, star,
-        it.kind === "picture" ? null : h("a", { class: "btn", href: url, target: "_blank", rel: "noopener", title: "Read all" }, "⤢")));
+        it.kind === "picture" ? charBtn(pid, it.path) : h("a", { class: "btn", href: url, target: "_blank", rel: "noopener", title: "Read all" }, "⤢")));
   };
   /* 👁 M1: once the vision model has checked them, best match first */
   const eyeScore = it => (it.eyes && it.eyes.score != null ? it.eyes.score : -1);

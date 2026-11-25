@@ -472,6 +472,34 @@ class App:
         ids = b.get("ids") if isinstance(b.get("ids"), list) else []
         return self._cast_do(lambda: cast.pull(self._cast_mcp(), preview.ensure_site(pid), pid, str(b.get("name") or ""), ids))
 
+    # ---------- ⭐ asset library M1: make a character from a result · 📇 Characters shelf (2026-11-25) ----------
+    def _char(self, fn) -> tuple[int, dict]:
+        from . import charcard
+        try:
+            return self._cast_do(fn)
+        except charcard.CharError as e:
+            return 200, {"ok": False, "icon": e.icon, "message": e.message}
+
+    def cast_character(self, b: dict) -> tuple[int, dict]:
+        from . import charcard
+        pid = self._pid(b.get("project"))
+        return self._char(lambda: charcard.make_from(self._cast_mcp(), preview.ensure_site(pid), pid, str(b.get("path") or ""),
+                                                     b.get("name"), b.get("age"), b.get("brief"), b.get("use_here", True) is not False))
+
+    def cast_use(self, b: dict) -> tuple[int, dict]:
+        from . import charcard
+        pid = self._pid(b.get("project"))
+        return self._char(lambda: charcard.use(self._cast_mcp(), preview.ensure_site(pid), pid, str(b.get("id") or "")))
+
+    def cast_leave(self, b: dict) -> tuple[int, dict]:
+        from . import charcard
+        pid = self._pid(b.get("project"))
+        return self._char(lambda: charcard.leave(preview.ensure_site(pid), str(b.get("id") or "")))
+
+    def cast_one(self, q: dict) -> tuple[int, dict]:
+        from . import charcard
+        return self._char(lambda: charcard.one(self._cast_mcp(), str((q.get("id") or [""])[0])))
+
     def cast_import(self, b: dict) -> tuple[int, dict]:
         """⬆ This project's 📌 references → the global cast (copies; originals stay)."""
         from . import cast
@@ -1406,6 +1434,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 from . import cast as castmod
                 b_, ct_ = castmod.picture(str((q.get("path") or [""])[0]))
                 return self._send(200, b_, ct_) if b_ else self._send(404, b"Not a cast picture.", "text/plain; charset=utf-8")
+            if u.path == "/api/cast/one":                  # 📇 asset library M1: one character card in full
+                return self._run(app.cast_one, q)
             if u.path == "/api/cast":                      # 🎭 R1 global cast + this project's chosen cast
                 return self._run(app.cast_get, q)
             if u.path == "/api/story":                     # 📖 M3 story bible + chapters of this project
@@ -1559,6 +1589,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(getattr(app, "bd_" + p.rsplit("/", 1)[1]), b)
             if p == "/api/story/bible":                    # 📖 M3 edit the story bible
                 return self._run(app.story_bible, b)
+            if p in ("/api/cast/character", "/api/cast/use", "/api/cast/leave"):   # ⭐ 📇 asset library M1
+                return self._run(getattr(app, "cast_" + p.rsplit("/", 1)[1]), b)
             if p in ("/api/cast/choose", "/api/cast/import"):
                 return self._run(getattr(app, "cast_" + p.rsplit("/", 1)[1]), b)
             if p in ("/api/motion/scene", "/api/motion/save", "/api/motion/delete"):   # 🏃 Motion Presets
