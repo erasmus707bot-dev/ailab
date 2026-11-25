@@ -29,7 +29,7 @@ class Spots(unittest.TestCase):
     def test_css_rule_selectors(self):
         diff = "@@ -1 +1,2 @@\n .a { x: 1; }\n+  .chg .hd b, .chg summary:hover, #guardline { font-size: 23px; }\n"
         s = shots.spots("index.html", diff)
-        self.assertEqual(s["after"][:3], [".chg .hd b", ".chg summary", "#guardline"])
+        self.assertEqual(s["after"][:3], ["#guardline", ".chg .hd b", ".chg summary"])      # an id is specific → first
 
     def test_quotes_escaped(self):
         self.assertEqual(shots._q('a"b\\c'), 'a\\"b\\\\c')
@@ -191,3 +191,21 @@ class Live(unittest.TestCase):
                                                                   for x in ("before", "after")] and {})
         self.assertFalse(m.get("live"))
         self.assertTrue(m["ran"])
+
+
+class Words(unittest.TestCase):
+    def test_text_only_change_is_found_by_its_words_not_a_generic_neighbour(self):
+        diff = ("@@ -1,4 +1,4 @@\n"
+                ' <section class="tile">\n  <div class="ic">🛟</div>\n'
+                "-  <p>Put the AI Lab or Hermes back the way it was. Works even when the Lab is down.</p>\n"
+                "+  <p>Put the AI Lab or Hermes back the way it was — even when the Lab won't open.</p>\n")
+        s = shots.spots("remote.html", diff)
+        self.assertTrue(s["after_text"][0].startswith("Put the AI Lab or Hermes back the way it was — even"))
+        self.assertIn("Works even when the Lab is down.", s["before_text"][0])
+        self.assertIn('section[class="tile"]', s["after"])                 # generic neighbours only as a fallback
+
+    def test_specific_selectors_before_generic_ones(self):
+        diff = ('@@ -1 +1,2 @@\n <div class="row">\n'
+                '+<button class="tile" onclick="openGuard()">🛟</button>\n')
+        s = shots.spots("index.html", diff)
+        self.assertIn('[onclick="openGuard()"]', s["after"][0])

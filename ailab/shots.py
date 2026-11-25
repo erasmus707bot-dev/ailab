@@ -72,15 +72,29 @@ def _css_sels(line: str) -> list[str]:
     return out
 
 
+def _text(line: str) -> str:
+    t = re.sub(r"<[^>]*>", " ", line)
+    t = re.sub(r"&[a-z]+;|&#\d+;", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t[:80] if len(t) >= 8 and not re.search(r"[{};=]|\$\{", t) else ""
+
+
+def _specific(sel: str) -> bool:
+    return bool(re.search(r"\[(id|onclick|aria-label|href|name|data-tab)=", sel)) or sel.startswith("#")
+
+
 def spots(rel: str, diff: str) -> dict:
-    """→ {"after": [selectors…], "before": [selectors…]} — new things first, their neighbours as the fallback."""
+    """→ {"after"/"before": [selectors…], "after_text"/"before_text": [texts…]} — the changed words first, then
+    specific new elements, then neighbours; generic class-only selectors last (2026-11-25: one matched the wrong tile)."""
     ext = Path(rel).suffix.lower()
-    added, near = [], []
+    added, near, removed = [], [], []
     for ln in (diff or "").splitlines():
         if ln.startswith(("+++", "---", "@@")):
             continue
         if ln.startswith("+"):
             added.append(ln[1:])
+        elif ln.startswith("-"):
+            removed.append(ln[1:])
         elif ln.startswith(" "):
             near.append(ln[1:])
     if ext in (".html", ".htm", ".svg"):
@@ -94,7 +108,10 @@ def spots(rel: str, diff: str) -> dict:
     seen = set()
     a = [s for s in a if not (s in seen or seen.add(s))][:30]
     n = [s for s in n if not (s in seen or seen.add(s))][:30]
-    return {"after": a + n, "before": n + a}
+    order = lambda xs: [s for s in xs if _specific(s)] + [s for s in xs if not _specific(s)]  # noqa: E731
+    texts = (lambda xs: [t for t in map(_text, xs) if t][:10]) if ext in (".html", ".htm", ".svg") else (lambda xs: [])
+    return {"after": order(a) + order(n), "before": order(n) + order(a),
+            "after_text": texts(added), "before_text": texts(removed)}
 
 
 # ------------------------------------------------------------------ the page to open
@@ -154,7 +171,17 @@ def _serve(root: Path, swap: dict[Path, str]) -> _Folder:
 
 _SHOW = """(a) => {
   let el = null;
-  for (const s of a.sels) { try { const e = document.querySelector(s); if (e) { el = e; break; } } catch (e) {} }
+  const norm = s => (s || '').replace(/\\s+/g, ' ').trim();
+  for (const t of a.texts || []) {                      // the smallest element holding the changed words
+    let best = null, bl = 1e12;
+    for (const e of document.body ? document.body.querySelectorAll('*') : []) {
+      if (/^(SCRIPT|STYLE|TEMPLATE)$/.test(e.tagName)) continue;
+      const tx = norm(e.textContent);
+      if (tx.length < bl && tx.includes(t)) { best = e; bl = tx.length; }
+    }
+    if (best) { el = best; break; }
+  }
+  if (!el) for (const s of a.sels) { try { const e = document.querySelector(s); if (e) { el = e; break; } } catch (e) {} }
   if (!el) return {found: false};
   for (let p = el; p && p !== document.documentElement; p = p.parentElement) {
     if (p.tagName === 'DETAILS') p.open = true;
@@ -187,7 +214,8 @@ def _real(page_rel: str, before_url: str, after_url: str, sels: dict, out: Path,
                 try:
                     page.goto(url + page_rel, wait_until="load", timeout=TIMEOUT_MS)
                     page.wait_for_timeout(900)
-                    f = page.evaluate(_SHOW, {"sels": sels[side], "mark": side == "after"})
+                    f = page.evaluate(_SHOW, {"sels": sels[side], "texts": sels.get(side + "_text") or [],
+                                              "mark": side == "after"})
                     page.wait_for_timeout(300)
                     shot = out.with_name(out.name + f"-{side}.png")
                     page.screenshot(path=str(shot), full_page=not f.get("found"),
@@ -271,7 +299,7 @@ def _proxy(base: str, page_path: str, target: Path, swap: str | None) -> _Folder
 
 def make(aid: str, target: Path, proposed: str, diff: str, store: Path, cfg: dict | None = None, driver=None) -> dict:
     """Pictures for one waiting change → meta {visual, ran, same, found, why, sha}. Cached by the proposal's sha."""
-    sha = hashlib.sha256(f"v2\0{proposed}".encode()).hexdigest()[:16]    # v2 = live mode (2026-11-25)
+    sha = hashlib.sha256(f"v3\0{proposed}".encode()).hexdigest()[:16]    # v3 = changed words first (2026-11-25)
     base = store / f"{aid}-shots"
     meta_f = store / f"{aid}-shots.json"
     try:
