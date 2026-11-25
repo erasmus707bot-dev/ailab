@@ -64,3 +64,14 @@ Continue phrase: `continue AI Lab eyes + story + rip from the 2026-11-25 build p
 - 🎨 fixed: "👁 What it saw" had lost its ▶ marker (summary was inline-flex). Live on page refresh.
 - ⚠️ ComfyUI went down between 07:38 and 07:43 (connection refused on 8188; it was up for the 07:38 picture). Cause unknown from this shell — check `journalctl --user -u hermes-comfy --since 07:35`.
 - ⚠️ With ComfyUI down, the pinned-reference test fell back to **venice/lustify-v8 without the reference, $0.01**. That fallback is the existing picture route; it means a 📌 reference silently stops working when the card is down. Reference test (M2 live step 3) still owed. Pin removed again; image-testing's cast strip is empty.
+
+## M4 🎞 live check 2026-11-25 11:45–11:50 (eyes session, Lab via the built-in browser)
+- Video `video-testing/videos/rebuild-test-R7oUAWXxP60.mp4` (29.5 s arm-wrestling clip) → **9 scenes in ~2 min, $0**, local qwen3.5:4b.
+  Each scene: caption, spoken words where there were any ("Let's see."), recipe in the fixed shape (subject · setting · motion ·
+  framing · camera · light), people as person A/B. Checked 4 frames by eye: captions right (white tee, green cap, red straps,
+  onlookers). One miss: scene 5 "seated on a wooden floor" (they're at a table). On-screen video titles are not mentioned.
+- 🔎 search "man in a green cap straining" → scenes 4, 2, 1 (meaning search works).
+- 🎬 Make one like this (scene 2) → task built from the recipe; no cast chosen in that project, so "person A / person B" stay in the words.
+- 📌 Use frame as reference → copied to `pictures/frame-f30682ca-s02.jpg` and pinned. Unpinned again (the file stays).
+- Not checked: the 🎞 Break it down button and sheet on screen (API only) — Argus touch test owed.
+- Also today: `~/hermes/scripts/safe_restart.sh` (hermes `a38ee152`, rule `faf8248a`) — live: waited for another session's cast run + ComfyUI job, then restarted the Lab. Today's two M2 fixes are live.
