@@ -24,6 +24,7 @@ from pathlib import Path
 
 from . import eyes, makers, picture
 from .mcp_client import HermesRefused
+from .transport import HttpError
 
 TARGETS = ("argus", "browser", "vm", "desktop")
 ICON = {"argus": "📱", "browser": "🌐", "vm": "🪟", "desktop": "🖥"}
@@ -178,13 +179,22 @@ def capture(run, s: dict, n: int, total: int, retry: bool = False) -> dict:
         start = run.lab.mcp.call(tool, _args(run, s, n, retry))
     except HermesRefused as e:
         return {"error": e.message, "fix": e.fix, "code": e.code}
-    t0 = time.time()
+    except HttpError as e:
+        return {"error": f"Hermes didn't answer: {e.body}", "fix": "Check hermes-mcp is running, then try again."}
+    t0, drops = time.time(), 0
     while True:
         run._check_stop()
         try:
             res = run.lab.mcp.call("job_wait", {"key": start["key"], "max_s": JOB_WAIT_S})
         except HermesRefused as e:
             return {"error": e.message, "fix": e.fix, "code": e.code}
+        except HttpError as e:                    # the job keeps running in Hermes — a dropped answer is asked again
+            drops += 1
+            if drops > 3:
+                return {"error": f"Hermes stopped answering: {e.body}", "fix": "Check hermes-mcp is running, then try again."}
+            picture.stage(run, "🔌", f"{n}/{total} · Hermes connection dropped — asking again")
+            time.sleep(2.0)
+            continue
         if res.get("finished") or res.get("state") in ("done", "failed", "cancelled"):
             break
         phase = (res.get("detail") or {}).get("phase") or "working"

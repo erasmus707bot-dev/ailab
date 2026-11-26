@@ -205,3 +205,25 @@ class LiveFixes(Run):
         t = threading.Thread(target=r.loop); t.start(); t.join(10)
         self.assertEqual(r.state, "done")
         self.assertFalse([c for c in mcp.calls if c.startswith("capture_")])
+
+    def test_dropped_hermes_answer_is_asked_again(self):
+        import http.client
+        from ailab import transport
+        tmp = Path(tempfile.mkdtemp())
+        one = json.dumps({"steps": [{"target": "vm", "shot": True, "label": "VM"}]})
+
+        class Drop(CapMCP):
+            dropped = 0
+            def call(self, tool, args=None):
+                if tool == "job_wait" and str((args or {}).get("key", "")).startswith("cap:") and not self.dropped:
+                    self.dropped = 1
+                    raise transport.HttpError(0, "http://127.0.0.1:8799/mcp", "the connection dropped mid-answer")
+                return super().call(tool, args)
+        mcp = Drop(tmp)
+        r, _ = self.make(mcp, replies=(one,))
+        t = threading.Thread(target=r.loop); t.start()
+        self.assertTrue(wait_for(lambda: r.question is not None))
+        r.answer("Go"); t.join(15)
+        self.assertEqual(r.state, "done", r.why)
+        self.assertEqual(len(r.view()["pictures"]), 1)
+        self.assertIsInstance(http.client.IncompleteRead(b""), http.client.HTTPException)

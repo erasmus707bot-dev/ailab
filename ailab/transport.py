@@ -1,6 +1,7 @@
 """Tiny stdlib HTTP JSON client. Errors never carry request headers (keys live there)."""
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import urllib.error
@@ -37,4 +38,7 @@ def http_json(method: str, url: str, headers: dict | None = None, body: dict | N
     except (TimeoutError, socket.timeout):
         raise HttpError(0, url, f"no answer within {timeout:.0f} s — a local model may still be loading; "
                                 "try again") from None
+    except (http.client.HTTPException, ConnectionError) as e:   # IncompleteRead / RemoteDisconnected / reset (2026-11-25 live)
+        raise HttpError(0, url, f"the connection dropped mid-answer ({type(e).__name__}) — the service may have "
+                                "restarted; try again") from None
     return json.loads(raw or b"{}")
