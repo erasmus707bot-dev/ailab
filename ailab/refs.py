@@ -164,6 +164,16 @@ def pick(rels: list[str], pool: dict, cap: int = MAX_REFS) -> list[str]:
     return out[:cap]
 
 
+def start_source(root) -> str:
+    """The 🖼 Start from picture in use, or ""."""
+    d, on = _load(root), set(get(root))
+    return next((k for k, v in d["pool"].items() if k in on and v.get("role") == "start"), "")
+
+
+EDIT_WORDS = ("Edit the given picture: keep the same subject, its shape, details, colours, light and layout. "
+              "Change only this: ")
+
+
 def note_made(root, rel: str, sources: list[str]) -> None:
     """🗂 Which sources made this picture — so a ⭐ from 📚 Library (no run on screen) still credits them."""
     f = Path(root) / ".shelf" / "made_from.json"
@@ -270,10 +280,13 @@ def for_run(run) -> list[str]:
     return [str((root / r).resolve()) for r in rels]
 
 
-def queue(models: list[str], local_ok: bool, venice_ok: bool) -> list[str]:
+def queue(models: list[str], local_ok: bool, venice_ok: bool, edit_first: bool = False) -> list[str]:
     """Reference-capable models first — local FLUX.2 only when the plan already has a local model (ComfyUI up), the
-    Venice edit model only when the plan already allows Venice. Neither → the plan unchanged (words only)."""
-    front = ([REF_MODELS[0]] if local_ok else []) + ([REF_MODELS[1]] if venice_ok else [])
+    Venice edit model only when the plan already allows Venice. Neither → the plan unchanged (words only).
+    edit_first (🖼 Start from in use, Scott 2026-11-25 pick 1): the Venice edit model changes the picture it is given,
+    FLUX.2 only takes it as a hint — so it goes first."""
+    loc, ven = ([REF_MODELS[0]] if local_ok else []), ([REF_MODELS[1]] if venice_ok else [])
+    front = ven + loc if edit_first else loc + ven
     return front + [m for m in models if m not in front]
 
 

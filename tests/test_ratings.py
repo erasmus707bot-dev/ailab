@@ -56,3 +56,18 @@ class MadeFrom(unittest.TestCase):
         r = ratings.rate(root, "pictures/out.png", 5)                     # no sources sent (📚 Library)
         self.assertEqual(r["row"]["sources"], ["pictures/src.png"])
         self.assertEqual(refs.avg(refs._load(root)["pool"]["pictures/src.png"]), 5.0)
+
+
+class EditFirst(unittest.TestCase):
+    """🖼 Start from in use → Venice's edit model first (Scott 2026-11-25 pick 1)."""
+    def test_queue_and_start(self):
+        q = ["local/juggernaut-xl-v9", "venice/lustify"]
+        self.assertEqual(refs.queue(q, True, True)[:2], list(refs.REF_MODELS))
+        self.assertEqual(refs.queue(q, True, True, edit_first=True)[:2], [refs.REF_MODELS[1], refs.REF_MODELS[0]])
+        root = Path(tempfile.mkdtemp()); (root / "pictures").mkdir()
+        (root / "pictures/s.png").write_bytes(PNG)
+        self.assertEqual(refs.start_source(root), "")
+        refs.pin(root, "pictures/s.png", role="start")
+        self.assertEqual(refs.start_source(root), "pictures/s.png")
+        refs.unpin(root, "pictures/s.png")
+        self.assertEqual(refs.start_source(root), "", "off = not used")

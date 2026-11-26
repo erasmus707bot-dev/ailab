@@ -172,6 +172,17 @@ def _rel(run, x: str) -> str:
         return Path(x).name
 
 
+def _start_src(run) -> str:
+    b = getattr(run, "batch", None) or {}
+    if b.get("sheet") or isinstance(b.get("refs_abs"), list):
+        return ""
+    try:
+        from . import refs
+        return refs.start_source(run.root)
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
 def _refs(run) -> list[str]:
     """🎭 M2: absolute reference-picture paths for this run (empty = words only, the old path)."""
     try:
@@ -322,7 +333,13 @@ def run(run) -> None:
     style, shape = style or inline.get("style", ""), shape or inline.get("shape", "")
     extra = (f"\nStyle: {style}" if style and "style" not in inline else "") + (f"\nShape: {shape}" if shape and "shape" not in inline else "")
     run._check_stop()
-    prompt = write_prompt(run, words + extra)
+    edit_src = _start_src(run) if not run.cfg.get("picture_model") else ""
+    if edit_src:                                             # 🖼 editing his picture: no writer re-describing the subject
+        prompt = f"{own_words(words).rstrip('.')}.{(' ' + style + '.') if style else ''}"
+        run._record({"action": "prompt", "why": f"✍️ your words only — 🖼 editing your Start from picture ({Path(edit_src).name}), so no writer re-describes it",
+                     "result": {"text": prompt, "yours": own_words(words), "edit": edit_src}, "usd": 0.0})
+    else:
+        prompt = write_prompt(run, words + extra)
     run._check_stop()
     t_mine = own_words(words)                                # 🏷 kept for the anime models' tag prompt (M3 tags)
     t_add = prompt[len(t_mine):].lstrip(" .") if prompt.startswith(t_mine) else ""
@@ -370,7 +387,13 @@ def run(run) -> None:
     if ref_paths:
         from . import refs as R
         local_ok = any(m.startswith("local/") for m in queue) and R.REF_MODELS[0] in picture_route.ready(run)
-        q2 = R.queue(queue, local_ok, any(m.startswith("venice/") for m in queue))
+        q2 = R.queue(queue, local_ok, any(m.startswith("venice/") for m in queue), edit_first=bool(edit_src))
+        if edit_src:                                         # 🖼 edit: the Start from goes first, told to keep it
+            ref_paths = sorted(ref_paths, key=lambda x: _rel(run, x) != edit_src)
+            args["prompt"] = base_prompt = R.EDIT_WORDS + base_prompt
+            if not any(m.startswith("venice/") for m in queue):
+                run._record({"action": "refs", "why": "🖼 Venice's edit model isn't in this plan (Venice off or not set up) — the local model takes your picture as a strong hint only",
+                             "result": {}, "usd": 0.0})
         ref_added = R.REF_MODELS[1] in q2 and R.REF_MODELS[1] not in queue
         queue = q2
         if any(m in R.REF_MODELS for m in queue):
@@ -396,7 +419,7 @@ def run(run) -> None:
         else:
             args.pop("reference_images", None)
         if pmodel.startswith("local/"):
-            args["speed"] = speed
+            args["speed"] = "full" if args.get("reference_images") else speed      # ⚡ 8 steps washes a source out
         else:
             args.pop("speed", None)
         pose = (getattr(run, "batch", None) or {}).get("pose_abs") or ""     # 🏃 Motion Presets: a key moment's skeleton
