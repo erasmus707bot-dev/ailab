@@ -1291,10 +1291,14 @@ function castPicker(p, hooks, opts) {
     const rows = [];
     if (ch.ids && ch.ids.length) rows.push(h("div", { class: "trow" }, h("span", {}, `This project uses: 🎭 ${ch.cast}`), ...ch.ids.map(i => byId[i]).filter(Boolean).map(thumb)));
     const picks = casts.map(c => ({ name: c.name, ids: c.ids }));
-    const sel = h("select", { "aria-label": "Saved casts" }, ...(picks.length ? picks.map((c, i) => h("option", { value: String(i) }, `🎭 ${c.name} (${c.ids.length})`)) : [h("option", { value: "" }, "— no saved casts yet —")]));
+    /* live 2026-11-25: the list opened on the first saved cast ("Mara & Dina") while the project used Aria & Ben — it now opens on the one in use */
+    const inUse = c => ch.cast === c.name && (ch.ids || []).join() === c.ids.join();
+    const sel = h("select", { "aria-label": "Saved casts" }, ...(picks.length ? picks.map((c, i) => h("option", { value: String(i), selected: inUse(c) }, `🎭 ${c.name} (${c.ids.length})${inUse(c) ? " ✓ in use" : ""}`)) : [h("option", { value: "" }, "— no saved casts yet —")]));
     const reuse = h("button", { class: "btn pri", type: "button", disabled: !picks.length, onclick: async () => {
       const c = picks[+sel.value]; if (!c) return; const r = await api("/api/cast/choose", { project: p.id, name: c.name, ids: c.ids });
       note.textContent = r.ok ? `♻️ Using ${c.name} in this project.` : `${r.icon || "⚠️"} ${r.message}`; if (r.ok) { paint(); if (opts.onPick) opts.onPick(r); } } }, "♻️ Reuse a cast");
+    const mark = () => { const c = picks[+sel.value]; const u = !!c && inUse(c); reuse.disabled = !c || u; reuse.textContent = u ? "✓ In use" : "♻️ Reuse a cast"; };
+    sel.addEventListener("change", mark); mark();
     const n = h("select", { "aria-label": "How many people" }, ...[2, 3, 4].map(k => h("option", { value: String(k), selected: k === 2 }, `${k} people`)));
     const make = h("button", { class: "btn", type: "button", disabled: !(hooks && hooks.castDesign), title: "The Lab designs them — different hair, build and outfit colours on purpose — then 👁 checks it can tell them apart and makes a character sheet each",
       onclick: () => { hooks.castDesign(+n.value, opts.forWhat || ""); note.textContent = "🎲 Designing a new cast — watch 🤖 Make."; } }, "🆕 Make a new one");
@@ -1308,6 +1312,13 @@ function castPicker(p, hooks, opts) {
   box.refresh = paint;
   paint();
   return box;
+}
+/* "130/24 steps" (live 2026-11-25): the step limit is the coding agent's. Story, batch, picture, video and doc runs
+   log many steps and never stop on that limit, so they show a plain count. */
+function stepsWords(run) {
+  const n = run.real_steps != null ? run.real_steps : (run.steps || []).length;
+  const own = run.picture || run.batch || run.video || run.docmode;
+  return own ? `${n} step${n === 1 ? "" : "s"}` : `${n}/${run.step_cap} steps`;
 }
 /* 🎞 M4 (Scott 2026-11-25): video breakdown — scenes with what is shown, what is said and a shot recipe; ask across
    videos; 🎬 Make one like this (his cast swapped in) · 📌 Use frame as reference. Hermes does the work, $0 on gandalf. */
@@ -2329,7 +2340,7 @@ function stageCard(run) {
     h("span", { class: "si", "aria-hidden": "true" }, st.icon),
     h("div", {}, h("div", { class: "st" }, st.text),
       h("div", { class: "sm" }, `⏱ ${fmtTime(run.elapsed_s || 0)} · 💲 $${(run.usd || 0).toFixed(4)} so far` +
-        (run.picture ? " · 🖼 picture run" : ` · step ${run.real_steps != null ? run.real_steps : run.steps.length} of up to ${run.step_cap}`))));
+        (run.picture ? " · 🖼 picture run" : run.batch || run.video || run.docmode ? ` · ${stepsWords(run)}` : ` · step ${run.real_steps != null ? run.real_steps : run.steps.length} of up to ${run.step_cap}`))));
 }
 /* 🧩 creation types (2026-11-24): the chips, the ⭐ guess (same rule as ailab/creation.py guess) and hand-off buttons */
 let CTYPES = null;
@@ -3389,7 +3400,7 @@ function agentView(wb) {
 
   function paint(run) {
     if (run && run.state !== "running") lastShown = run;
-    status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${run.real_steps != null ? run.real_steps : run.steps.length}/${run.step_cap} steps · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
+    status.textContent = `${run.stuck ? `🟠 Stuck — nothing new for ${Math.round(run.quiet_s / 60)} min` : STATE[run.state] || run.state} · ${stepsWords(run)} · $${run.usd.toFixed(4)} / $${run.cap_usd.toFixed(2)}`;
     steps.innerHTML = "";
     const stage = [], put = el => { if (wb) stage.push(el); else steps.append(el); };
     if (!wb) steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
