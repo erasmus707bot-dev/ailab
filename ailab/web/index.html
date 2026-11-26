@@ -2869,23 +2869,29 @@ function sourcePicker(p, onAdd) {
   const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", hidden: true });
   const note = h("span", { class: "note", role: "status" });
   const strip = h("div", { class: "srcstrip", id: "agsrc", hidden: true });
+  const btn = h("button", { class: "btn", type: "button", id: "agsrcbtn", onclick: () => file.click() }, "📥 Source");
   let refs = [];
   const pic = r => `/preview/${p.id}/${encodeURI(r)}`;
   function paint() {
+    btn.textContent = refs.length ? `📥 Source ✓ ${refs.length}` : "📥 Source";
+    btn.classList.toggle("pri", !!refs.length);
+    btn.title = refs.length ? `${refs.length} picture${refs.length > 1 ? "s" : ""} of yours will be used by the next 🖼 picture — tap to add another` : "Upload your own picture to work on — the next 🖼 picture starts from it";
     strip.hidden = !refs.length && !note.textContent;
-    strip.replaceChildren(file, ...(refs.length ? [h("span", {}, `📥 Source (${refs.length}/4) — your next 🖼 picture starts from:`)] : []),
+    strip.replaceChildren(file, ...(refs.length ? [h("span", {}, `✅ In use (${refs.length}/4) — your next 🖼 picture in this project starts from:`)] : []),
       ...refs.map(r => h("span", { class: "chip" }, h("img", { src: pic(r), alt: r.split("/").pop(), style: "height:56px;border-radius:6px;vertical-align:middle" }),
         h("button", { class: "btn", type: "button", "aria-label": `Take ${r.split("/").pop()} off`, onclick: async () => {
           const x = await api("/api/refs/unpin", { project: p.id, path: r }); if (x.ok) { refs = x.refs; note.textContent = ""; paint(); } } }, "✕"))), note);
   }
   async function load() { const x = await api(`/api/refs?project=${encodeURIComponent(p.id)}`); refs = x.ok ? (x.refs || []) : []; paint(); }
   function shrink(f) {
-    return new Promise((ok, bad) => { const img = new Image(), u = URL.createObjectURL(f);
+    /* the page's CSP allows data: pictures, not blob: — read the file as data first (live 2026-11-25: blob: was refused) */
+    return new Promise((ok, bad) => { const img = new Image(), rd = new FileReader();
       img.onload = () => { const k = Math.min(1, 2048 / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
         ok(f.type === "image/png" && k === 1 && f.size < 6e6 ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.92)); };
-      img.onerror = () => { URL.revokeObjectURL(u); bad(new Error("not a picture")); }; img.src = u; });
+      img.onerror = () => bad(new Error("not a picture"));
+      rd.onload = () => { img.src = rd.result; }; rd.onerror = () => bad(new Error("unreadable")); rd.readAsDataURL(f); });
   }
   file.onchange = async () => {
     const f = file.files[0]; file.value = ""; if (!f) return;
@@ -2897,7 +2903,6 @@ function sourcePicker(p, onAdd) {
         : `${x.icon || "⚠️"} ${x.message || "Couldn't add it."}`; paint(); return; }
     refs = x.refs; note.textContent = `✅ ${f.name} is your source — say what to change, then ▶ Start.`; paint(); if (onAdd) onAdd(x.path);
   };
-  const btn = h("button", { class: "btn", type: "button", id: "agsrcbtn", title: "Upload your own picture to work on — the next 🖼 picture starts from it", onclick: () => file.click() }, "📥 Source");
   load();
   return { btn, strip, load };
 }
