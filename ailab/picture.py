@@ -165,6 +165,13 @@ def _style_note(run) -> str:
 _REF_MODELS = ("local/flux2-klein-4b", "venice/qwen-edit-uncensored")
 
 
+def _rel(run, x: str) -> str:
+    try:
+        return Path(x).resolve().relative_to(Path(run.root).resolve()).as_posix()
+    except (ValueError, OSError):
+        return Path(x).name
+
+
 def _refs(run) -> list[str]:
     """🎭 M2: absolute reference-picture paths for this run (empty = words only, the old path)."""
     try:
@@ -371,8 +378,13 @@ def run(run) -> None:
             # and drew a stranger. With a reference in play only reference-capable models are tried — no silent fallback.
             queue = [m for m in queue if m in R.REF_MODELS]
             strict = True
-            run._record({"action": "refs", "why": f"🎭 {len(ref_paths)} reference picture{'s' if len(ref_paths) > 1 else ''} sent so the face holds",
-                         "result": {"refs": [Path(x).name for x in ref_paths], "models": list(queue)}, "usd": 0.0})
+            if R.REF_MODELS[0] not in queue:                 # 🗂 Venice's edit model takes ≤ 3 (Hermes VENICE_REF_MAX)
+                ref_paths = ref_paths[:3]
+            roles = getattr(run, "src_roles", None) or {}
+            named = [f"{R.ROLE_NAME.get(roles.get(_rel(run, x), ''), '📌').split(' ')[0]} {Path(x).name}" for x in ref_paths]
+            run._record({"action": "refs", "why": f"🎭 {len(ref_paths)} source picture{'s' if len(ref_paths) > 1 else ''} sent: " + ", ".join(named),
+                         "result": {"refs": [Path(x).name for x in ref_paths], "paths": [_rel(run, x) for x in ref_paths],
+                                    "roles": {_rel(run, x): roles.get(_rel(run, x), "") for x in ref_paths}, "models": list(queue)}, "usd": 0.0})
         else:
             run._record({"action": "refs", "why": "🎭 no picture model here can use reference pictures (start the local picture "
                          "service or turn Venice on) — made from your words only", "result": {"refs": []}, "usd": 0.0})
@@ -506,6 +518,8 @@ def run(run) -> None:
         pic = {"path": rel, "prompt": prompt, "model": out.get("model", model), "usd": round(usd, 4),
                "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape,
                "look": look, "keys": picture_route.keys_line(run, pmodel or "")}
+        if args.get("reference_images"):                     # 🗂 M4: which sources made it — ⭐ ratings credit them
+            pic["sources"] = [_rel(run, x) for x in args["reference_images"]]
         if out.get("timing"):                                # ⏱ where a local picture's seconds went (2026-11-25 probe)
             pic["timing"] = out["timing"]
         run.pictures.append(pic)

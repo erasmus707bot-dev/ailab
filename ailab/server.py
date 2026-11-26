@@ -420,7 +420,7 @@ class App:
 
     def refs_pin(self, b: dict) -> tuple[int, dict]:
         from . import refs
-        return 200, refs.pin(preview.ensure_site(self._pid(b.get("project"))), str(b.get("path") or ""))
+        return 200, refs.pin(preview.ensure_site(self._pid(b.get("project"))), str(b.get("path") or ""), str(b.get("role") or ""))
 
     def refs_upload(self, b: dict) -> tuple[int, dict]:                 # 📥 Source: his own picture, pinned
         from . import refs
@@ -681,6 +681,59 @@ class App:
             return 200, {"ok": False, "code": "shelf", "icon": "🗄",
                          "message": "Can't find that run — it may be from before a Lab restart." if isinstance(e, KeyError) else str(e)}
 
+    # ---------- ⭐ ratings · 🔁 change verdicts · ✅ accept · 🗂 source pool (Scott 2026-11-25) ----------
+    def _root(self, v):
+        return preview.ensure_site(self._pid(v))
+
+    def rate_get(self, q: dict) -> tuple[int, dict]:
+        from . import ratings, refs
+        root = self._root(q.get("project"))
+        return 200, {"ok": True, **ratings.view(root), "pool": refs.pool_view(root), "roles": refs.ROLE_NAME}
+
+    def rate_set(self, b: dict) -> tuple[int, dict]:
+        from . import ratings
+        r = ratings.rate(self._root(b.get("project")), b.get("path"), b.get("stars"), b.get("reasons"),
+                         str(b.get("run") or ""), str(b.get("task") or ""), b.get("sources"))
+        if r.get("ok") and b.get("run") and int(r["row"].get("stars") or 0) in (1, 2, 4, 5):
+            try:                                                   # 📓 a clear rating counts like ✅ / 🗑 on the craft notes
+                self._craft_verdict(str(b["run"]), int(r["row"]["stars"]) >= 4)
+            except Exception:                                      # noqa: BLE001 — a bonus, never a blocker
+                pass
+        return 200, r
+
+    def rate_change(self, b: dict) -> tuple[int, dict]:
+        from . import ratings
+        return 200, ratings.verdict(self._root(b.get("project")), str(b.get("run") or ""), str(b.get("parent") or ""),
+                                    str(b.get("change") or ""), b.get("before"), b.get("after"), str(b.get("verdict") or ""),
+                                    str(b.get("kind") or ""))
+
+    def shelf_accept(self, b: dict) -> tuple[int, dict]:
+        """✅ Accept: kept with a number (if the run is still known), marked ✅, and — for a picture — made the 🖼 Start
+        from source. Nothing on screen is cleared."""
+        from . import ratings, refs, shelf
+        root, path = self._root(b.get("project")), str(b.get("path") or "")
+        task, item = str(b.get("task") or ""), None
+        try:
+            r = self._shelf_run(b)
+            task = task or r.task
+            from . import styles
+            item = shelf.keep(r.root, r.id, r.task, r.made_view(), self._seen(r), styles.facts(r))
+            self._craft_verdict(r.id, True)
+        except (ValueError, KeyError):
+            pass                                                   # an older Library item — still accepted below
+        a = ratings.accept(root, path, str(b.get("run") or ""), task, b.get("sources"))
+        if not a.get("ok"):
+            return 200, a
+        out = {"ok": True, "item": item, "row": a["row"]}
+        if b.get("as_source", True) and Path(path).suffix.lower() in refs.PIC:
+            p = refs.pin(root, path, role="start", frm="accept")
+            out.update(refs=p.get("refs"), source=bool(p.get("ok")), note=p.get("message", ""))
+        return 200, out
+
+    def pool_role(self, b: dict) -> tuple[int, dict]:
+        from . import refs
+        return 200, refs.set_role(self._root(b.get("project")), str(b.get("path") or ""), str(b.get("role") or ""))
+
     def shelf_toss(self, b: dict) -> tuple[int, dict]:
         from . import shelf
         try:
@@ -867,6 +920,11 @@ class App:
                 out["style"] = {"name": st["name"], "lessons": st["prompt_lessons"][-10:]}
         except Exception:                                        # noqa: BLE001
             pass
+        try:                                                     # ⭐ 2026-11-25: his star ratings + which changes worked
+            from . import ratings
+            out.update(ratings.taste(root))
+        except Exception:                                        # noqa: BLE001
+            pass
         try:                                                     # 🎞 M4: shot recipes he made from video scenes (recipe shelf)
             from . import rip
             rs = [x.get("words") for x in rip.shelf(root)[-5:] if x.get("words")]
@@ -899,6 +957,14 @@ class App:
             user += "\n\nPrompts he threw away (do not steer toward these): " + " || ".join(taste["tossed"])
         if taste and taste.get("style"):
             user += f"\n\nLessons from his official style “{taste['style']['name']}”: " + " || ".join(taste["style"]["lessons"])
+        if taste and taste.get("loved"):
+            user += "\n\nPrompts behind results he rated 4–5 stars or ✅ accepted (lean toward this): " + " || ".join(taste["loved"])
+        if taste and taste.get("low"):
+            user += "\n\nPrompts behind results he rated 1–2 stars, with why (avoid this): " + " || ".join(taste["low"])
+        if taste and taste.get("good_changes"):
+            user += "\n\nChanges he said made it better: " + " || ".join(taste["good_changes"])
+        if taste and taste.get("bad_changes"):
+            user += "\n\nChanges he said made it worse: " + " || ".join(taste["bad_changes"])
         if taste and taste.get("recipes"):
             user += "\n\nShot recipes he took from videos in this project (framing, camera and light that he liked): " + " || ".join(taste["recipes"])
         if prev:
@@ -1456,6 +1522,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._send(200, b_, ct_) if b_ else self._send(404, b"Not a loop picture.", "text/plain; charset=utf-8")
             if u.path in ("/api/loop/job", "/api/loop/jobs", "/api/loop/estimate", "/api/loop/trust"):
                 return self._run(app.loop_call, u.path.rsplit("/", 1)[1], q)
+            if u.path == "/api/rate":                      # ⭐ ratings + 🔁 verdicts + 🗂 pool
+                return self._run(lambda: app.rate_get(q))
             if u.path == "/api/refs":                      # 🎭 M2 the project's reference pictures (cast strip)
                 return self._run(app.refs_get, q)
             if u.path == "/api/rebuild":                   # 🎬 R3 ⚖️ review record / list
@@ -1624,6 +1692,14 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_reject, b)
             if p == "/api/review/shots":                   # 📸 Before | After pictures (2026-11-25)
                 return self._run(app.review_shots, b)
+            if p == "/api/rate":
+                return self._run(app.rate_set, b)
+            if p == "/api/rate/change":
+                return self._run(app.rate_change, b)
+            if p == "/api/shelf/accept":
+                return self._run(app.shelf_accept, b)
+            if p == "/api/refs/role":
+                return self._run(app.pool_role, b)
             if p in ("/api/refs/pin", "/api/refs/unpin", "/api/refs/upload"):
                 return self._run(getattr(app, "refs_" + p.rsplit("/", 1)[1]), b)
             if p in ("/api/breakdown/start", "/api/breakdown/make", "/api/breakdown/frame"):

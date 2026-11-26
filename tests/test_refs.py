@@ -61,7 +61,8 @@ class Refs(Base):
         for i in range(4):
             self.assertTrue(refs.pin(self.root, f"pictures/p{i}.png")["ok"])
         self.assertTrue(refs.pin(self.root, "pictures/p0.png")["ok"], "pinning twice is fine")
-        self.assertFalse(refs.pin(self.root, "pictures/p4.png")["ok"], "5th refused")
+        self.assertTrue(refs.pin(self.root, "pictures/p4.png")["ok"], "🗂 M4: up to MAX_ACTIVE in use; each run sends ≤ 4")
+        refs.unpin(self.root, "pictures/p4.png")
         self.assertFalse(refs.pin(self.root, "notes.md")["ok"])
         self.assertFalse(refs.pin(self.root, "../outside.png")["ok"])
         self.assertEqual(refs.unpin(self.root, "pictures/p1.png")["refs"], ["pictures/p0.png", "pictures/p2.png", "pictures/p3.png"])
@@ -254,3 +255,28 @@ class SourceUploadTest(unittest.TestCase):
         self.assertEqual(R.get(d), [r["path"]])
         self.assertFalse(R.upload(d, "data:image/png;base64," + base64.b64encode(b"<html>").decode())["ok"])
         self.assertFalse(R.upload(d, "data:text/html;base64,AAAA")["ok"])
+
+
+class PoolTest(unittest.TestCase):
+    """🗂 M4: roles, one Start from, ★ credit, smart pick ≤ 4."""
+    def test_pool(self):
+        import tempfile
+        from pathlib import Path
+        from ailab import refs as R
+        root = Path(tempfile.mkdtemp())
+        (root / "pictures").mkdir()
+        for i in range(6):
+            (root / f"pictures/p{i}.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 20)
+            R.pin(root, f"pictures/p{i}.png")
+        R.set_role(root, "pictures/p0.png", "start"); R.set_role(root, "pictures/p1.png", "start")
+        roles = {r["path"]: r["role"] for r in R.pool_view(root)}
+        self.assertEqual(roles["pictures/p1.png"], "start"); self.assertEqual(roles["pictures/p0.png"], "auto")
+        for p, role in (("pictures/p2.png", "who"), ("pictures/p3.png", "who"), ("pictures/p4.png", "style")):
+            R.set_role(root, p, role)
+        R.credit(root, ["pictures/p3.png"], 5); R.credit(root, ["pictures/p2.png"], 1)
+        R.credit(root, ["pictures/p2.png"], 2, old=1)                      # re-rate replaces
+        self.assertEqual(R.avg(R._load(root)["pool"]["pictures/p2.png"]), 2.0)
+        got = R.pick(R.get(root), R._load(root)["pool"])
+        self.assertEqual(got, ["pictures/p1.png", "pictures/p3.png", "pictures/p2.png", "pictures/p4.png"])
+        R.unpin(root, "pictures/p5.png")
+        self.assertIn("pictures/p5.png", [r["path"] for r in R.pool_view(root)], "off ≠ gone")
