@@ -189,6 +189,29 @@ def note_made(root, rel: str, sources: list[str]) -> None:
     tmp.replace(f)
 
 
+def note_model(root, rel: str, model: str) -> None:
+    """⭐ → model: which picture model made this file, so ratings can steer the route."""
+    f = Path(root) / ".shelf" / "made_by.json"
+    try:
+        d = json.loads(f.read_text())
+    except (OSError, ValueError):
+        d = {}
+    d = d if isinstance(d, dict) else {}
+    d[str(rel)] = str(model)[:120]
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d))
+    tmp.replace(f)
+
+
+def made_by(root, rel: str) -> str:
+    try:
+        d = json.loads((Path(root) / ".shelf" / "made_by.json").read_text())
+    except (OSError, ValueError):
+        return ""
+    return str(d.get(str(rel)) or "") if isinstance(d, dict) else ""
+
+
 def made_from(root, rel: str) -> list[str]:
     try:
         d = json.loads((Path(root) / ".shelf" / "made_from.json").read_text())

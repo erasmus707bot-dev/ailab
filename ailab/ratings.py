@@ -69,6 +69,8 @@ def rate(root, path: str, stars: int, reasons=None, run: str = "", task: str = "
         row["run"] = str(run)[:40]
     if task:
         row["task"] = str(task)[:600]
+    if not row.get("model"):
+        row["model"] = refs.made_by(root, path)
     d["files"][path] = row
     _save(root, d)
     if srcs and (stars or old):
@@ -134,3 +136,42 @@ def taste(root) -> dict:
     good = uniq(c.get("change") for c in d["changes"] if c.get("verdict") == "better")[-5:]
     bad = uniq(c.get("change") for c in d["changes"] if c.get("verdict") == "worse")[-5:]
     return {k: v for k, v in (("loved", loved), ("low", low), ("good_changes", good), ("bad_changes", bad)) if v}
+
+
+MIN_N = 3
+
+
+def model_stats(root) -> dict:
+    """{model: {"avg", "n"}} from his star ratings in this project (only rated files with a known model)."""
+    acc: dict = {}
+    for r in _load(root)["files"].values():
+        m, st = str(r.get("model") or ""), int(r.get("stars") or 0)
+        if m and st:
+            a = acc.setdefault(m, [0, 0])
+            a[0] += st
+            a[1] += 1
+    return {m: {"avg": round(t / n, 1), "n": n} for m, (t, n) in acc.items()}
+
+
+def steer(models: list[str], stats: dict) -> tuple[list[str], str]:
+    """⭐ ratings steer the route, inside the same side only (local stays local, Venice stays Venice):
+    ≥ MIN_N ratings and ≥ 4.0★ → tried first on its side; ≤ 2.0★ → tried last on its side. Returns (order, why)."""
+    side = lambda m: m.split("/")[0]                                                  # noqa: E731
+    def score(m):
+        s = stats.get(m) or stats.get(m.split("/")[-1]) or {}
+        if int(s.get("n") or 0) < MIN_N:
+            return 0
+        return 1 if s["avg"] >= 4.0 else -1 if s["avg"] <= 2.0 else 0
+    out, why = list(models), []
+    for sd in dict.fromkeys(side(m) for m in models):
+        idx = [i for i, m in enumerate(out) if side(m) == sd]
+        group = [out[i] for i in idx]
+        new = sorted(group, key=lambda m: -score(m))
+        for i, m in zip(idx, new):
+            out[i] = m
+        for m in group:
+            sc = score(m)
+            if sc:
+                s = stats.get(m) or stats.get(m.split("/")[-1])
+                why.append(f"{m.split('/')[-1]} {s['avg']}★ ×{s['n']} → {'first' if sc > 0 else 'last'}")
+    return out, ("⭐ your ratings here: " + " · ".join(why)) if why and out != models else ""

@@ -370,6 +370,15 @@ def run(run) -> None:
                      "result": {"plan": plan}, "usd": 0.0})
         run.state, run.why = "failed", "🦴 Study pictures are made on gandalf only, and the local picture service is off. Start it and try again."
         return
+    if not forced and plan.get("first") not in ("study", "forced"):   # ⭐ his ratings steer the route (same side only)
+        try:
+            from . import ratings as RT
+            order, why = RT.steer(plan["models"], RT.model_stats(run.root))
+            if why:
+                plan["models"] = order
+                run._record({"action": "route", "why": why, "result": {"models": order}, "usd": 0.0})
+        except Exception:                                    # noqa: BLE001 — a nudge, never a blocker
+            pass
     speed = picture_route.speed(run)                         # ⚡ fast / 🎨 full for local SDXL (2026-11-25)
     if plan["models"][0].startswith("local/"):
         run._record({"action": "route", "why": f"🏠 {picture_route.WORDS[plan['kind']]} → {plan['models'][0].split('/')[-1]} on gandalf ($0)"
@@ -563,6 +572,11 @@ def run(run) -> None:
         pic = {"path": rel, "prompt": prompt, "model": out.get("model", model), "usd": round(usd, 4),
                "seconds": int(time.time() - t0), "library": out.get("library") or "", "style": style, "shape": shape,
                "look": look, "keys": picture_route.keys_line(run, pmodel or "")}
+        try:                                                 # ⭐ which model made it — ratings steer the route
+            from . import refs as _Rm
+            _Rm.note_model(run.root, rel, pic["model"])
+        except Exception:                                    # noqa: BLE001
+            pass
         if args.get("reference_images"):                     # 🗂 M4: which sources made it — ⭐ ratings credit them
             pic["sources"] = [_rel(run, x) for x in args["reference_images"]]
             try:

@@ -71,3 +71,19 @@ class EditFirst(unittest.TestCase):
         self.assertEqual(refs.start_source(root), "pictures/s.png")
         refs.unpin(root, "pictures/s.png")
         self.assertEqual(refs.start_source(root), "", "off = not used")
+
+
+class Steer(unittest.TestCase):
+    """⭐ ratings steer the picture route, inside one side only."""
+    def test_steer(self):
+        root = Path(tempfile.mkdtemp()); (root / "pictures").mkdir()
+        for i in range(6):
+            (root / f"pictures/{i}.png").write_bytes(PNG)
+            refs.note_model(root, f"pictures/{i}.png", "local/juggernaut-xl-v9" if i < 3 else "local/flux2-klein-4b")
+            ratings.rate(root, f"pictures/{i}.png", 1 if i < 3 else 5)
+        st = ratings.model_stats(root)
+        self.assertEqual(st["local/juggernaut-xl-v9"], {"avg": 1.0, "n": 3})
+        order, why = ratings.steer(["local/juggernaut-xl-v9", "local/flux2-klein-4b", "venice/lustify"], st)
+        self.assertEqual(order, ["local/flux2-klein-4b", "local/juggernaut-xl-v9", "venice/lustify"])
+        self.assertIn("first", why); self.assertIn("last", why)
+        self.assertEqual(ratings.steer(["venice/lustify", "local/flux2-klein-4b"], {}), (["venice/lustify", "local/flux2-klein-4b"], ""))
