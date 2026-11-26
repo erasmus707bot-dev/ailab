@@ -51,3 +51,9 @@ why: the Lab's CSP is img-src 'self' data: — blob: pictures never load, so eve
 5. **Ratings steer models:** `1a49447` made_by.json per picture; ≥3 ratings at ≥4★ → first on its side, ≤2★ → last; Steps "⭐ your ratings here: …". Backfilled the whale project's 7 pictures (all flux2-klein-4b).
 
 **Owed on gandalf:** restart the Lab + Hermes (MCP) · `bash ~/hermes/forge/studios/comfy/install_style.sh` (optional) · run edit_compare --go (~$0.08–0.20).
+
+## Round 4 (19:00) — 1+2+3
+- edit_compare ran (Scott, $0.08): all three kept the whale; qwen-edit cleanest ring, Klein faithful but smaller ring, firered double ring. Old judge gave everyone 95 → Hermes `fe96d60f` strict keeps/change scores + one side-by-side ranking + Venice live list with skip reasons.
+- Venice reference route armed: `~/hermes-data/settings/image_ref_flags.json` = {local, venice} (backup `.bak-20261125`). Local Klein first, qwen-edit fallback.
+- 🎨 Style live in test-3: whale as 🎨 Style + "lighthouse on a rocky cliff at night, Look: Photo" → Juggernaut + IP-Adapter carried the whale's navy/gold swirls into the scene ($0, fits the 6 GB card). Before the ComfyUI restart it failed and fell to Venice without the style → Hermes `aa329577` refuses up front ("restart hermes-comfy"). Lab `5c9556a` shows "🎨 Style from …" on the picture.
+- test-3 keeps the whale source (🎨 Style) + two lighthouse test pictures.
