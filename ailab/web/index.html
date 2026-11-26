@@ -3080,7 +3080,8 @@ function captureTools(pid, it) {
   function result(n) {
     const u = x => `/preview/${pid}/${encodeURI(x)}`;
     box.replaceChildren(h("section", { class: "verdict ba", "aria-label": "Before and after" }, h("h3", {}, "↔️ Before | After"),
-      n.before_after ? h("img", { src: u(n.before_after), alt: "The capture before and after the polish" }) : null,
+      n.before_after ? h("a", { href: u(n.before_after), target: "_blank", rel: "noopener", title: "Open full size" },
+        h("img", { src: u(n.before_after), alt: "The capture before and after the polish — tap for full size" })) : null,
       clip ? h("video", { src: u(n.path), controls: true, playsinline: true, preload: "metadata" }) : (n.before_after ? null : h("img", { src: u(n.path), alt: "The polished picture" })),
       ...(n.notes || []).map(t => h("div", { class: "note" }, t)),
       h("div", { class: "runbar vbtns" },
