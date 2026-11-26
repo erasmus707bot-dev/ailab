@@ -2207,12 +2207,15 @@ function batchGrid(pid, run, startWith) {
     const chgGo = () => { const t = chg.value.trim(); if (!t || !startWith) return;
       const txt = it.kind === "picture" ? `${base}${it.variation ? `\nVariation: ${it.variation}` : ""}\nChange: ${t}${keep}`
         : `Change ${it.path}: ${t}\nRead it first, change only what this asks, keep everything else the same, then done.`;
-      startWith(txt, ids, false); };
+      chgHint = [it.path]; startWith(txt, ids, false); };
     chg.onkeydown = e => { if (e.key === "Enter") chgGo(); };
     const pen = h("button", { class: "btn", type: "button", onclick: () => { if (chg.hidden) { chg.hidden = false; chg.focus(); } else chgGo(); } }, "✏️ Change it");
     return h("div", { class: "mtile btile" + (kept.has(it.path) ? " kept" : "") },
       h("div", { class: "mhd" }, h("b", {}, `#${it.k + 1}${it.best ? " ⭐ best match" : ""}`), h("span", { class: "note" }, it.variation || "your words as typed")),
-      body, eyesBox(it.eyes, run.state !== "running" && startWith ? t => startWith(t, ids, false) : null), chg,
+      body, eyesBox(it.eyes, run.state !== "running" && startWith ? t => startWith(t, ids, false) : null),
+      it.path && run.state !== "running" ? rateRow(pid, { path: it.path, kind: it.kind === "picture" ? "pic" : it.kind === "video" ? "vid" : LIB_KIND(it.path) || "doc", run: run.id,
+        task: `${base}${it.variation ? `\nVariation: ${it.variation}` : ""}${keep}`, sources: (pics.find(x => x.path === it.path) || {}).sources || [] },
+        startWith ? (t, i) => startWith(t, i, false) : null) : null, chg,
       run.folder ? h("div", { class: "note wherepath", title: "Where this file is" }, `📍 ${run.folder}/${it.path}`) : null,
       h("div", { class: "runbar" }, h("a", { class: "btn", href: url, download: name }, "⬇ Download"), pen, star,
         it.kind === "picture" ? charBtn(pid, it.path) : h("a", { class: "btn", href: url, target: "_blank", rel: "noopener", title: "Read all" }, "⤢")));
