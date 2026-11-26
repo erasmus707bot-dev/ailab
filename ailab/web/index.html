@@ -413,6 +413,9 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
     header .projsel { min-width: 4rem; flex: 1 1 4rem; max-width: none; width: 0; text-overflow: ellipsis; }
     #spend .cap { display: none; }                          /* phone: today's spend only; tap ⚙️ for the cap */
     header .chip { padding: 4px 6px; } header .chips { gap: 2px; flex-shrink: 0; }
+    /* 2026-11-25 Argus: 📓 + 🔁 made the bar 494 px on a 393 px phone (⚙️ ☀️ off screen, page scrolled sideways).
+       Phone: no ⛶ (the phone is full screen already), no title text, and the bar wraps instead of overflowing. */
+    header { flex-wrap: wrap; row-gap: 2px; } header #full, header .title { display: none; }
     .wb[data-tab="files"] > .wbfiles, .wb[data-tab="code"] > .wbcode, .wb[data-tab="agent"] > .wbagent { display: flex; }
     .wbcode .code { min-height: 46vh; }
     .wbcode .frame { min-height: 56vh; }
