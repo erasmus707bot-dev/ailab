@@ -87,3 +87,16 @@ class Steer(unittest.TestCase):
         self.assertEqual(order, ["local/flux2-klein-4b", "local/juggernaut-xl-v9", "venice/lustify"])
         self.assertIn("first", why); self.assertIn("last", why)
         self.assertEqual(ratings.steer(["venice/lustify", "local/flux2-klein-4b"], {}), (["venice/lustify", "local/flux2-klein-4b"], ""))
+
+
+class Strength(unittest.TestCase):
+    def test_strength(self):
+        root = Path(tempfile.mkdtemp()); (root / "pictures").mkdir()
+        (root / "pictures/s.png").write_bytes(PNG)
+        refs.pin(root, "pictures/s.png", role="style")
+        self.assertEqual(refs.strength(root, "pictures/s.png"), refs.STYLE_DEFAULT)
+        self.assertEqual(refs.set_strength(root, "pictures/s.png", 5)["strength"], refs.STYLE_MAX)
+        self.assertEqual(refs.set_strength(root, "pictures/s.png", "0.35")["strength"], 0.35)
+        self.assertEqual(refs.strength(root, "pictures/s.png"), 0.35)
+        self.assertFalse(refs.set_strength(root, "pictures/x.png", 1)["ok"])
+        self.assertFalse(refs.set_strength(root, "pictures/s.png", "abc")["ok"])

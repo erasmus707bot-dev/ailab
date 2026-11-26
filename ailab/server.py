@@ -730,6 +730,10 @@ class App:
             out.update(refs=p.get("refs"), source=bool(p.get("ok")), note=p.get("message", ""))
         return 200, out
 
+    def pool_strength(self, b: dict) -> tuple[int, dict]:
+        from . import refs
+        return 200, refs.set_strength(self._root(b.get("project")), str(b.get("path") or ""), b.get("strength"))
+
     def pool_role(self, b: dict) -> tuple[int, dict]:
         from . import refs
         return 200, refs.set_role(self._root(b.get("project")), str(b.get("path") or ""), str(b.get("role") or ""))
@@ -1700,6 +1704,8 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.shelf_accept, b)
             if p == "/api/refs/role":
                 return self._run(app.pool_role, b)
+            if p == "/api/refs/strength":
+                return self._run(app.pool_strength, b)
             if p in ("/api/refs/pin", "/api/refs/unpin", "/api/refs/upload"):
                 return self._run(getattr(app, "refs_" + p.rsplit("/", 1)[1]), b)
             if p in ("/api/breakdown/start", "/api/breakdown/make", "/api/breakdown/frame"):

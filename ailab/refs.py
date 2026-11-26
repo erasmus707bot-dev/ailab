@@ -116,6 +116,31 @@ def set_role(root, rel: str, role: str) -> dict:
     return {"ok": True, "refs": get(root), "pool": pool_view(root)}
 
 
+STYLE_DEFAULT, STYLE_MIN, STYLE_MAX = 0.8, 0.2, 1.2
+
+
+def set_strength(root, rel: str, v) -> dict:
+    """🎨 How strongly a 🎨 Style picture's look is applied (Hermes style_weight, local SDXL). 0.2 subtle … 1.2 strong."""
+    try:
+        v = round(max(STYLE_MIN, min(STYLE_MAX, float(v))), 2)
+    except (TypeError, ValueError):
+        return {"ok": False, "icon": "❓", "message": "Strength is a number from 0.2 to 1.2."}
+    d = _load(root)
+    if rel not in d["pool"]:
+        return {"ok": False, "icon": "🗂", "message": "That picture isn't in the source pool."}
+    d["pool"][rel]["strength"] = v
+    _save(root, get(root), d["pool"])
+    return {"ok": True, "strength": v, "pool": pool_view(root)}
+
+
+def strength(root, rel: str) -> float:
+    e = _load(root)["pool"].get(rel) or {}
+    try:
+        return float(e.get("strength") or STYLE_DEFAULT)
+    except (TypeError, ValueError):
+        return STYLE_DEFAULT
+
+
 def credit(root, rels: list[str], stars: int, old: int = 0) -> None:
     """⭐ → the sources that made it: a re-rate replaces the old stars, never counts twice."""
     d, hit = _load(root), False
@@ -142,6 +167,7 @@ def avg(e: dict) -> float | None:
 def pool_view(root) -> list[dict]:
     d, on = _load(root), set(get(root))
     rows = [{"path": k, "role": v.get("role") or "auto", "by": v.get("by") or "", "from": v.get("from") or "",
+             "strength": float(v.get("strength") or STYLE_DEFAULT),
              "on": k in on, "avg": avg(v), "n": int(v.get("stars_n") or 0), "at": v.get("at") or 0}
             for k, v in d["pool"].items() if _ok(root, k)]
     return sorted(rows, key=lambda r: (not r["on"], -(r["at"] or 0)))

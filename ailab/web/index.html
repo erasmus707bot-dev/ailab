@@ -47,6 +47,7 @@
   .srccard { display: inline-flex; gap: 8px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: 12px; }
   .srccard.off { opacity: .75; } .srccard img { height: 64px; width: 64px; object-fit: cover; border-radius: 8px; }
   .srcmeta { display: flex; flex-direction: column; gap: 4px; } .srcmeta select { min-height: 44px; font-size: 17px; }
+  .srcstrength { display: flex; flex-direction: column; gap: 2px; } .srcstrength input[type=range] { width: 150px; min-height: 36px; accent-color: #d4af37; }
   .raterow { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
   .raterow .rtop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .stars { display: inline-flex; gap: 2px; border-radius: 10px; }
@@ -3027,8 +3028,21 @@ function sourcePicker(p, onAdd) {
       onchange: async () => { const r = await api("/api/refs/role", { project: p.id, path: x.path, role: sel.value }); if (r.ok) { rateNotify(p.id); load(); } } },
       ...ROLE_OPTS.map(([v, n]) => h("option", { value: v, selected: x.role === v }, n)));
     const rec = x.n ? ` · ${x.avg}★ ×${x.n}` : "";
+    let strong = null;                                     /* 🎨 Style: how strongly its look is applied (local SDXL) */
+    if (x.role === "style") {
+      const lab = h("span", { class: "note" }), v0 = +x.strength || 0.8;
+      const word = v => v <= 0.4 ? "subtle" : v <= 0.7 ? "light" : v <= 0.95 ? "medium" : "strong";
+      const rng = h("input", { type: "range", min: "0.2", max: "1.2", step: "0.1", value: String(v0), "aria-label": `Style strength of ${x.path.split("/").pop()}`,
+        title: "How strongly this picture's look is applied — subtle keeps your Look (e.g. Photo), strong paints everything in its style" });
+      const say = v => { lab.textContent = `🎨 ${(+v).toFixed(1)} · ${word(+v)}`; };
+      say(v0);
+      rng.oninput = () => say(rng.value);
+      rng.onchange = async () => { const r = await api("/api/refs/strength", { project: p.id, path: x.path, strength: +rng.value });
+        if (r.ok) { say(r.strength); rateNotify(p.id); } else note.textContent = `${r.icon || "⚠️"} ${r.message}`; };
+      strong = h("label", { class: "srcstrength" }, lab, rng);
+    }
     return h("span", { class: "srccard" + (on ? "" : " off") }, h("img", { src: pic(x.path), alt: x.path.split("/").pop(), loading: "lazy" }),
-      h("span", { class: "srcmeta" }, sel, h("span", { class: "note" }, `${x.from === "accept" ? "✅ accepted" : x.from === "upload" ? "📥 yours" : "📌"}${rec}`)),
+      h("span", { class: "srcmeta" }, sel, h("span", { class: "note" }, `${x.from === "accept" ? "✅ accepted" : x.from === "upload" ? "📥 yours" : "📌"}${rec}`), strong),
       on ? h("button", { class: "btn", type: "button", "aria-label": `Stop using ${x.path.split("/").pop()}`, title: "Stop using it (stays in 🗂 Pool)", onclick: async () => {
           const r = await api("/api/refs/unpin", { project: p.id, path: x.path }); if (r.ok) { note.textContent = ""; rateNotify(p.id); load(); } } }, "✕")
         : h("button", { class: "btn", type: "button", title: "Use it again", onclick: async () => {

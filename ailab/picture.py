@@ -396,7 +396,12 @@ def run(run) -> None:
     roles0 = getattr(run, "src_roles", None) or {}
     if ref_paths and roles0 and all(roles0.get(_rel(run, x)) == "style" for x in ref_paths):
         style_abs, ref_paths = ref_paths[0], []
-        run._record({"action": "refs", "why": f"🎨 style picture {Path(style_abs).name} rides with the picture model (SDXL: IP-Adapter style transfer · FLUX.2: as a reference)",
+        try:
+            from . import refs as _Rs
+            _sw = _Rs.strength(run.root, _rel(run, style_abs))
+        except Exception:                                    # noqa: BLE001
+            _sw = 0.8
+        run._record({"action": "refs", "why": f"🎨 style picture {Path(style_abs).name} at strength {_sw} rides with the picture model (SDXL: IP-Adapter style transfer · FLUX.2: as a reference, strength not used)",
                      "result": {"style": _rel(run, style_abs)}, "usd": 0.0})
     strict = False                                           # True = a reference is in play: never make it without one
     if ref_paths:
@@ -440,8 +445,14 @@ def run(run) -> None:
             args.pop("reference_images", None)
         if style_abs and pmodel.startswith("local/") and "flux" not in pmodel:
             args["style_image"] = style_abs
+            try:
+                from . import refs as _Rs
+                args["style_weight"] = _Rs.strength(run.root, _rel(run, style_abs))
+            except Exception:                                # noqa: BLE001
+                args.pop("style_weight", None)
         else:
             args.pop("style_image", None)
+            args.pop("style_weight", None)
         if pmodel.startswith("local/"):
             args["speed"] = "full" if args.get("reference_images") else speed      # ⚡ 8 steps washes a source out
         else:
