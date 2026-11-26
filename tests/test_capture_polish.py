@@ -94,3 +94,47 @@ class ArgusDuring(unittest.TestCase):
         self.assertNotIn("steps", a)
         b = capturerun._args(run, {"target": "argus", "shot": True, "label": "x", "do": [{"wait": 1}]}, 1, False)
         self.assertIn("steps", b)
+
+
+class Recipes(unittest.TestCase):
+    """🧭 C4: the Lab only relays to Hermes; thumbnails only from ~/hermes-data/captures."""
+
+    def setUp(self):
+        self.calls = []
+        test = self
+
+        class M:
+            def call(self, tool, args=None):
+                test.calls.append((tool, args))
+                if tool == "capture_recipes":
+                    return {"recipes": [{"id": "portfolio"}], "portfolio": {"run": [], "desktop": [], "unknown": []}}
+                if tool == "capture_apps":
+                    raise HermesRefused("not_enabled", "The Argus test phone isn't running.", "Start it.")
+                return {"key": "cap:9", "state": "running"}
+        self.app = mock.Mock(cfg={"mode": "connected"})
+        self.app.lab.mcp = M()
+
+    def test_listing_survives_a_stopped_phone(self):
+        from ailab import capturerecipes as CR
+        code, r = CR.listing(self.app, {})
+        self.assertEqual(code, 200)
+        self.assertIsNone(r["apps"])
+        self.assertIn("isn't running", r["apps_note"])
+
+    def test_run_passes_only_known_fields(self):
+        from ailab import capturerecipes as CR
+        CR.run(self.app, {"recipe": "demo", "app": "dev.scott.horae", "evil": "x"})
+        self.assertEqual(self.calls[-1], ("capture_recipe", {"recipe": "demo", "app": "dev.scott.horae"}))
+        self.assertEqual(CR.job(self.app, {"key": ["nope"]})[0], 400)
+
+    def test_thumb_only_from_captures(self):
+        from ailab import capturerecipes as CR
+        self.assertIsNone(CR.thumb_bytes({"path": ["/etc/passwd"]}))
+
+    def test_norm_keeps_an_app_package_for_argus(self):
+        from ailab import capturerun
+        s = capturerun.norm([{"target": "argus", "app": "dev.scott.horae", "shot": True, "label": "x"},
+                             {"target": "argus", "app": "rm -rf /", "shot": True, "label": "y"}], {"a": "http://127.0.0.1:8850/"})
+        self.assertEqual(s[0]["app"], "dev.scott.horae")
+        self.assertNotIn("app", s[1])
+        self.assertEqual(s[1]["url"], "http://127.0.0.1:8850/")

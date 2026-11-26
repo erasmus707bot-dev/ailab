@@ -1572,6 +1572,13 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.preview_read, q)
             if u.path == "/api/preview/version":
                 return self._run(app.preview_version, q)
+            if u.path in ("/api/capture/recipes", "/api/capture/job"):   # 🧭 Lab capture C4 (2026-11-25)
+                from . import capturerecipes as CR         # noqa: PLC0415
+                return self._run(lambda: (CR.listing if u.path.endswith("recipes") else CR.job)(app, q))
+            if u.path == "/api/capture/thumb":
+                from . import capturerecipes as CR         # noqa: PLC0415
+                img = CR.thumb_bytes(q)
+                return self._send(200, img, "image/jpeg") if img else self._send(404, b"No such picture.", "text/plain; charset=utf-8")
             if u.path == "/api/agent/live":
                 return self._run(app.agent_live, q)
             if u.path == "/api/agent/run":
@@ -1656,6 +1663,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.batch_estimate, b)
             if p == "/api/batch/keep":
                 return self._run(app.batch_keep, b)
+            if p in ("/api/capture/recipe", "/api/capture/use"):     # 🧭 Lab capture C4 (2026-11-25)
+                from . import capturerecipes as CR         # noqa: PLC0415
+                return self._run(lambda: (CR.run if p.endswith("recipe") else CR.use)(app, b))
             if p in ("/api/capture/polish", "/api/capture/drop"):   # ✨ Lab capture C3.3 (2026-11-25)
                 from . import capturepolish as CP          # noqa: PLC0415
                 return self._run(lambda: (CP.polish if p.endswith("polish") else CP.drop)(app, b))

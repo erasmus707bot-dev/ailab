@@ -2146,6 +2146,8 @@ function startView() {
       h("summary", {}, "📖 Story — short video, long chapters, or words")) : null,
     ag ? h("details", { class: "optfold", id: "wbrebuild", ontoggle: e => { if (e.target.open && !e.target.querySelector(".rbbox")) e.target.append(rebuildBox(p, libHooks)); } },
       h("summary", {}, "🎬 Rebuild a video with my cast")) : null,
+    ag ? h("details", { class: "optfold", id: "wbrecipes", ontoggle: e => { if (e.target.open && !e.target.querySelector(".captools")) e.target.append(recipesBox()); } },
+      h("summary", {}, "🧭 Capture recipes — portfolio shots, demo clips")) : null,
     ag ? h("details", { class: "optfold" }, h("summary", {}, "🎯 More ways to start"), ag.repoRow, ag.goals) : null);
   /* 🧹 remodel M2 (Scott 2026-11-25, pick 1): the loop — ✅ Keep & start new (gets a number in 📚 Library) ·
      🗑 Throw away (hidden, ↩ back for 30 days) · 🆕 Just clear (decide later). All three leave a clean slate in the same project. */
@@ -3052,6 +3054,67 @@ function rateRow(pid, it, start) {
     box.replaceChildren(...[h("div", { class: "rtop" }, stars, acc, ...(row.accepted || it.kind === "pic" ? build : [])), reasons, note].filter(Boolean));
   }
   rateLoad(pid).then(d => { row = d.files[it.path] || {}; paint(); });
+  return box;
+}
+/* 🧭 Lab capture C4 (2026-11-25): saved shot plans that run on the test surfaces through Hermes — 🖼 Refresh my portfolio
+   shots (never publishes: ✋ Use this copies one into the portfolio inbox) · 🎬 Demo clip of a build (app or page). */
+function recipesBox() {
+  const box = h("div", { class: "captools" }), thumb = x => `/api/capture/thumb?path=${encodeURIComponent(x)}`;
+  let data = null, demoApp = "", running = "", msg = "";
+  async function load() { box.replaceChildren(h("div", { class: "note" }, "🧭 Asking Hermes what the recipes would take…"));
+    data = await api("/api/capture/recipes"); paint(); }
+  function list(title, rows, why) {
+    return rows && rows.length ? h("details", {}, h("summary", {}, `${title} (${rows.length})`),
+      h("ul", {}, ...rows.map(r => h("li", {}, `${r.id} ${r.title}${why ? " — " + why : ""}`)))) : null;
+  }
+  function paint() {
+    if (!data || !data.ok) { box.replaceChildren(h("div", { class: "note" }, `⚠️ ${(data && data.message) || "Hermes didn't answer."}${data && data.fix ? " 👉 " + data.fix : ""}`),
+      h("button", { class: "btn", type: "button", onclick: load }, "🔄 Try again")); return; }
+    const pf = data.portfolio || { run: [], desktop: [], unknown: [] }, apps = data.apps || [];
+    box.replaceChildren(
+      h("section", { class: "verdict" }, h("h3", {}, "🖼 Refresh my portfolio shots"),
+        h("p", { class: "note" }, `${pf.run.length} shot${pf.run.length === 1 ? "" : "s"} the test surfaces can take now · nothing is published — you pick which go to the portfolio inbox.`),
+        list("✋ Need your desktop (not automatic)", pf.desktop, "take these in HIL"),
+        list("📍 Hermes doesn't know where these are", pf.unknown, "name the app or page in ~/hermes-data/captures/recipes.json"),
+        h("div", { class: "runbar" }, h("button", { class: "btn pri yours", type: "button", disabled: !!running || !pf.run.length, onclick: () => go("portfolio", {}) },
+          running === "portfolio" ? "🧭 Capturing…" : `▶ Take ${pf.run.length} shot${pf.run.length === 1 ? "" : "s"} ⭐`))),
+      h("section", { class: "verdict" }, h("h3", {}, "🎬 Demo clip of a build"),
+        h("p", { class: "note" }, "Opens the app on the test phone, records ~10 s, frames it 9:16. Night Shift does this by itself after a green build."),
+        apps.length ? h("div", { class: "opts" }, ...apps.slice(0, 12).map(a => h("button", { class: "opt", type: "button", "aria-pressed": demoApp === a ? "true" : "false",
+          onclick: () => { demoApp = a; paint(); } }, `📱 ${a.split(".").pop()}`))) : h("div", { class: "note" }, `📱 ${data.apps_note || "No apps found on the test phone."}`),
+        h("div", { class: "runbar" }, h("button", { class: "btn pri", type: "button", disabled: !!running || !demoApp, onclick: () => go("demo", { app: demoApp, title: demoApp.split(".").pop() }) },
+          running === "demo" ? "🎬 Recording…" : "▶ Make the demo clip"))),
+      msg ? h("div", { class: "note", role: "status" }, msg) : null, out);
+  }
+  const out = h("div", { class: "captools" });
+  async function go(rid, extra) {
+    running = rid; msg = "🧭 Running on gandalf's test surfaces ($0)…"; out.replaceChildren(); paint();
+    const s = await api("/api/capture/recipe", { recipe: rid, ...extra });
+    if (!s.ok) { running = ""; msg = `⚠️ ${s.message}${s.fix ? " 👉 " + s.fix : ""}`; paint(); return; }
+    let j = {}; for (let i = 0; i < 600; i++) { await new Promise(r => setTimeout(r, 2000));
+      j = await api(`/api/capture/job?key=${encodeURIComponent(s.key)}`);
+      if (!j.ok || j.state !== "running") break;
+      msg = `🧭 ${(j.detail && j.detail.phase) || "working"} — ${(j.detail && j.detail.elapsed) || 0} s`; paint(); }
+    running = "";
+    if (!j.ok || j.state !== "done") { msg = `⚠️ ${(j.error && j.error.message) || j.message || "The recipe didn't finish."}${j.error && j.error.fix ? " 👉 " + j.error.fix : ""}`; paint(); return; }
+    msg = ""; paint(); result(j.result || {});
+  }
+  function result(r) {
+    if (r.recipe === "demo") { const p = (r.polished && r.polished.path) || (r.clip && r.clip.path) || "";
+      out.replaceChildren(h("section", { class: "verdict" }, h("h3", {}, "🎬 Demo clip"), p ? h("img", { src: thumb(p), alt: "Demo clip poster" }) : null,
+        h("div", { class: "note" }, p ? `Saved: ${p.split("/").pop()} · in Hermes's Media library` : "No clip came out."),
+        r.polish_error ? h("div", { class: "note" }, `⚠️ ${r.polish_error}`) : null)); return; }
+    const used = {};
+    out.replaceChildren(h("section", { class: "verdict" }, h("h3", {}, `🖼 ${(r.captured || []).length} new portfolio shot${(r.captured || []).length === 1 ? "" : "s"}`),
+      h("div", { class: "pics" }, ...(r.captured || []).map(c => h("figure", {}, h("a", { href: thumb(c.path), target: "_blank", rel: "noopener" }, h("img", { src: thumb(c.path), alt: `${c.id} ${c.title}`, loading: "lazy" })),
+        h("figcaption", {}, `${c.id} ${c.title}${c.kind === "clip" ? " · 🎥 clip" : ""}`),
+        h("button", { class: "btn", type: "button", onclick: async e => { const b = e.target; b.disabled = true;
+          const u = await api("/api/capture/use", { path: c.path, shot: c.id });
+          b.textContent = u.ok ? "✅ In the portfolio inbox" : `⚠️ ${u.message || "Couldn't copy it"}`; used[c.id] = u.ok; } }, "✋ Use this")))),
+      ...(r.failed || []).map(f => h("div", { class: "note" }, `⚠️ ${f.id} ${f.title}: ${f.error}${f.fix ? " 👉 " + f.fix : ""}`)),
+      h("div", { class: "note" }, "Nothing is published. Shots you ✋ Use go to the portfolio inbox; Website Studio swaps them in only after your OK.")));
+  }
+  load();
   return box;
 }
 /* ✨ Lab capture C3.3 (2026-11-25): one tap from a 🎥 capture to Hermes Quick Cut, or ✨ Polish here

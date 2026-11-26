@@ -42,10 +42,11 @@ PLAN_SYS = (
     "\"shot\": true OR \"record\": <seconds 3-60>, \"expect\": \"what the picture must show, in plain words\", "
     "\"label\": \"3-6 word step name\"}.\n"
     "Rules: phone shots that need clicks → browser with viewport phone (clicks by visible text: \"text=…\"). "
-    "argus = the real test phone: open + scroll only. vm = the Windows test VM (no url). desktop = Scott's real screen — "
+    "argus = the real test phone: open + scroll only (\"app\": \"<package>\" opens an installed app instead of a url). vm = the Windows test VM (no url). desktop = Scott's real screen — "
     "only when he asks for his desktop or a window by name. Use only the pages listed below; never invent a host. "
-    "Give exactly the number of shots and clips he asks for. \"expect\" = only what is visible on the screen "
-    "(\"the AI Lab home page\"), never the device, length or shot number. Prefer a page he names.")
+    "Give exactly the number of shots and clips he asks for. \"expect\" = words or things you can SEE on the screen "
+    "(\"a page titled 'What are we making?'\", \"a list of books\"), never the app's name unless it is printed on "
+    "the screen, never the device, length or shot number. Prefer a page he names.")
 
 
 # ---------------------------------------------------------------- plan
@@ -101,7 +102,10 @@ def norm(steps, known: dict[str, str]) -> list[dict]:
         st = {"target": t, "label": str(s.get("label") or s.get("expect") or t)[:60],
               "expect": str(s.get("expect") or "")[:160]}
         url = str(s.get("url") or "")
-        if t in ("argus", "browser"):
+        app = str(s.get("app") or "")
+        if t == "argus" and re.match(r"^[A-Za-z]\w*(\.[A-Za-z]\w*)+$", app):   # 🧭 C4: an installed app on the test phone
+            st["app"] = app
+        elif t in ("argus", "browser"):
             if not url.startswith(("http://127.0.0.1", "http://localhost")):
                 url = next(iter(known.values()), "")
             st["url"] = url
@@ -157,7 +161,7 @@ def make_plan(run, words: str, change: str = "", old: list[dict] | None = None) 
 
 def _args(run, s: dict, n: int, retry: bool) -> dict:
     a = {"target": s["target"], "project": run.project["id"], "what": s.get("label", "")}
-    for k in ("url", "viewport", "theme", "window_id", "box", "display", "sound"):
+    for k in ("url", "app", "viewport", "theme", "window_id", "box", "display", "sound"):
         if k in s:
             a[k] = s[k]
     steps = [dict(d) for d in s.get("do") or []]
