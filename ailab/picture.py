@@ -387,7 +387,10 @@ def run(run) -> None:
     if ref_paths:
         from . import refs as R
         local_ok = any(m.startswith("local/") for m in queue) and R.REF_MODELS[0] in picture_route.ready(run)
-        q2 = R.queue(queue, local_ok, any(m.startswith("venice/") for m in queue), edit_first=bool(edit_src))
+        # live 2026-11-25 (whale + golden ring): local FLUX.2 Klein made a true edit (same whale, pose, background, ring
+        # added, 👁 100%, $0) once the Start from was a Lab picture — so local stays first; config edit_route "venice" flips it.
+        q2 = R.queue(queue, local_ok, any(m.startswith("venice/") for m in queue),
+                     edit_first=bool(edit_src) and str(run.cfg.get("edit_route") or "local") == "venice")
         if edit_src:                                         # 🖼 edit: the Start from goes first, told to keep it
             ref_paths = sorted(ref_paths, key=lambda x: _rel(run, x) != edit_src)
             args["prompt"] = base_prompt = R.EDIT_WORDS + base_prompt
