@@ -42,6 +42,7 @@
   .ib:hover, .ib:focus-visible { background: var(--panel2); outline: none; }
   .title { font-weight: 650; font-size: 1rem; white-space: nowrap; }
   .chips { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .srcstrip[hidden] { display: none; }
   .srcstrip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; font-size: 17px; }
   .chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px;
     background: var(--panel2); border: 1px solid var(--line); font-size: .85rem; white-space: nowrap; }
@@ -2890,8 +2891,10 @@ function sourcePicker(p, onAdd) {
     const f = file.files[0]; file.value = ""; if (!f) return;
     note.textContent = `📥 Adding ${f.name}…`; paint();
     let data; try { data = await shrink(f); } catch (e) { note.textContent = "🖼 That file isn't a picture the browser can open."; paint(); return; }
-    const x = await api("/api/refs/upload", { project: p.id, data });
-    if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message || (x.status === 413 ? "That picture is too big." : "Couldn't add it.")}`; paint(); return; }
+    let x; try { x = await api("/api/refs/upload", { project: p.id, data }); } catch (e) { x = { status: 0 }; }
+    if (!x.ok) { note.textContent = x.status === 404 || x.status === 413 || x.status === 0
+        ? "🔄 The Lab needs a restart to take pictures (desktop icon) — then 📥 Source again."
+        : `${x.icon || "⚠️"} ${x.message || "Couldn't add it."}`; paint(); return; }
     refs = x.refs; note.textContent = `✅ ${f.name} is your source — say what to change, then ▶ Start.`; paint(); if (onAdd) onAdd(x.path);
   };
   const btn = h("button", { class: "btn", type: "button", id: "agsrcbtn", title: "Upload your own picture to work on — the next 🖼 picture starts from it", onclick: () => file.click() }, "📥 Source");
