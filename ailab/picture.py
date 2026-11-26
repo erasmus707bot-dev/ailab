@@ -520,6 +520,11 @@ def run(run) -> None:
                "look": look, "keys": picture_route.keys_line(run, pmodel or "")}
         if args.get("reference_images"):                     # 🗂 M4: which sources made it — ⭐ ratings credit them
             pic["sources"] = [_rel(run, x) for x in args["reference_images"]]
+            try:
+                from . import refs as _R
+                _R.note_made(run.root, rel, pic["sources"])
+            except Exception:                                # noqa: BLE001 — a record, never a blocker
+                pass
         if out.get("timing"):                                # ⏱ where a local picture's seconds went (2026-11-25 probe)
             pic["timing"] = out["timing"]
         run.pictures.append(pic)

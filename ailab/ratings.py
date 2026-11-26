@@ -63,7 +63,7 @@ def rate(root, path: str, stars: int, reasons=None, run: str = "", task: str = "
     d = _load(root)
     row = d["files"].get(path) or {}
     old = int(row.get("stars") or 0)
-    srcs = _paths(root, sources) or row.get("sources") or []
+    srcs = _paths(root, sources) or row.get("sources") or _paths(root, refs.made_from(root, path))
     row.update(stars=stars, reasons=[r for r in (reasons or []) if r in REASONS][:5], at=time.time(), sources=srcs)
     if run:
         row["run"] = str(run)[:40]
@@ -86,7 +86,8 @@ def accept(root, path: str, run: str = "", task: str = "", sources=None) -> dict
     row.update(accepted=time.time(), run=str(run or row.get("run") or "")[:40])
     if task:
         row["task"] = str(task)[:600]
-    srcs = _paths(root, sources)
+    from . import refs
+    srcs = _paths(root, sources) or _paths(root, refs.made_from(root, path))
     if srcs:
         row["from"] = srcs
         row.setdefault("sources", srcs)

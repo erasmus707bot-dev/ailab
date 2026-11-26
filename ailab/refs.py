@@ -164,6 +164,30 @@ def pick(rels: list[str], pool: dict, cap: int = MAX_REFS) -> list[str]:
     return out[:cap]
 
 
+def note_made(root, rel: str, sources: list[str]) -> None:
+    """🗂 Which sources made this picture — so a ⭐ from 📚 Library (no run on screen) still credits them."""
+    f = Path(root) / ".shelf" / "made_from.json"
+    try:
+        d = json.loads(f.read_text())
+    except (OSError, ValueError):
+        d = {}
+    d = d if isinstance(d, dict) else {}
+    d[str(rel)] = [str(x) for x in sources][:MAX_REFS]
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d))
+    tmp.replace(f)
+
+
+def made_from(root, rel: str) -> list[str]:
+    try:
+        d = json.loads((Path(root) / ".shelf" / "made_from.json").read_text())
+    except (OSError, ValueError):
+        return []
+    xs = d.get(str(rel)) if isinstance(d, dict) else None
+    return [x for x in xs or [] if isinstance(x, str)]
+
+
 GUESS_PTS = [{"q": "Is one person or character the clear main subject, shown large?", "what": "person", "kind": "role", "want": True},
              {"q": "Is this mostly a place, room or landscape?", "what": "place", "kind": "role", "want": True}]
 

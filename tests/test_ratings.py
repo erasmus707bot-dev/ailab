@@ -44,3 +44,15 @@ class Ratings(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MadeFrom(unittest.TestCase):
+    def test_library_rating_credits_recorded_sources(self):
+        root = Path(tempfile.mkdtemp()); (root / "pictures").mkdir()
+        for n in ("out", "src"):
+            (root / f"pictures/{n}.png").write_bytes(PNG)
+        refs.pin(root, "pictures/src.png")
+        refs.note_made(root, "pictures/out.png", ["pictures/src.png"])
+        r = ratings.rate(root, "pictures/out.png", 5)                     # no sources sent (📚 Library)
+        self.assertEqual(r["row"]["sources"], ["pictures/src.png"])
+        self.assertEqual(refs.avg(refs._load(root)["pool"]["pictures/src.png"]), 5.0)
