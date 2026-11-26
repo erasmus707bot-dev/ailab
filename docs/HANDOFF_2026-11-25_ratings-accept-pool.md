@@ -35,3 +35,10 @@ when: a Lab page reads a file the user picked (upload, drag-in)
 do: read it with FileReader.readAsDataURL, never URL.createObjectURL
 why: the Lab's CSP is img-src 'self' data: — blob: pictures never load, so every upload looked like "not a picture" (live 2026-11-25, whale jpg)
 ```
+
+## Follow-up (same evening) — live whale test + 🖼 edit route
+- Commits: `85fa9f4` batch tiles get the rate row · `14fe92f` made_from.json (Library ★ credits sources) · `d8cc6c4` 🖼 Start from = an edit.
+- Live finding: "same whale, cosmic nebula style" on FLUX.2 Klein 4B at ⚡ fast with a writer-expanded prompt → generic purple whale, 👁 67% "missing: same whale".
+- `d8cc6c4`: when a 🖼 Start from is in use → Venice `qwen-edit-uncensored` first, then local; no writer (his words + Style only); "Edit the given picture: keep… change only:" prefix; local runs at 🎨 full speed when a source is sent. Venice off → a Steps line says so.
+- Not verified: the edit route on a real run (needs a Lab restart + Venice on).
+- Research (sources in chat 2026-11-25): Klein 4B has a dedicated edit workflow in ComfyUI (style transforms, multi-reference); Qwen-Image-Edit-2511 is the strongest open edit model but Q4 ≈ 11.5 GB, so not practical on the 6 GB RTX 2060; Venice /image/multi-edit now lists newer edit models (firered, qwen-image-2-edit, flux-2-max-edit, seedream) worth a Hermes probe; Flux Redux / SDXL IP-Adapter are the style-only tools for a real 🎨 Style job.
