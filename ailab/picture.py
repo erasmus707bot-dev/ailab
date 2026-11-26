@@ -584,6 +584,8 @@ def run(run) -> None:
                 _R.note_made(run.root, rel, pic["sources"])
             except Exception:                                # noqa: BLE001 — a record, never a blocker
                 pass
+        if out.get("style_used"):                            # 🎨 Hermes says the style picture was applied (IP-Adapter)
+            pic["style_from"] = _rel(run, args.get("style_image") or "")
         if out.get("timing"):                                # ⏱ where a local picture's seconds went (2026-11-25 probe)
             pic["timing"] = out["timing"]
         run.pictures.append(pic)

@@ -1765,6 +1765,7 @@ function startView() {
           eyesBox(pc.eyes, !running && ag && ag.startWith ? t => ag.startWith(t, run.ctypes && run.ctypes.length ? run.ctypes : ["image"], false) : null),
           running ? null : rateRow(p.id, { path: pc.path, kind: "pic", run: run.id, task: run.task, sources: pc.sources || [] }, startNew),
           pc.sources && pc.sources.length ? h("div", { class: "note" }, `🗂 Made from ${pc.sources.length} source${pc.sources.length > 1 ? "s" : ""}: ${pc.sources.map(x => x.split("/").pop()).join(", ")}`) : null,
+          pc.style_from ? h("div", { class: "note" }, `🎨 Style from ${pc.style_from.split("/").pop()}`) : null,
           pc.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, pc.prompt)) : null,
           h("a", { class: "btn", href: url, download: pc.path.split("/").pop() }, "⬇ Download"));
       })));
@@ -2817,7 +2818,7 @@ function motionPicker(p, ctl) {
       const warn = v.warn && v.warn.length ? h("div", { class: "step lookwarn" }, `⚠️ ${v.warn[0][1]} separate actions at ${v.warn[0][0]} s — video models get shaky past about ${v.max_actions}. `,
         h("button", { class: "btn pri", type: "button", onclick: () => send({ split: true }).then(paintTl) }, "✂️ Split into shots ⭐"),
         h("span", { class: "note" }, " (the ~3 limit is a guess until tested)")) : null;
-      body.replaceChildren(ruler, camRow, ...lanes, warn,
+      body.replaceChildren(...[ruler, camRow, ...lanes, warn].filter(Boolean),
         h("div", { class: "note" }, `🖼 ${v.plan.pictures} picture${v.plan.pictures === 1 ? "" : "s"} · 🎬 ${v.plan.clips} clip${v.plan.clips === 1 ? "" : "s"} of ≤ ${v.plan.clip_max_s} s (${v.length} s in all) · ⛓ each clip starts from the last frame of the one before`));
       if (!wordsDirty) wordsBox.value = v.words;
     }
@@ -3316,7 +3317,7 @@ function agentView(wb) {
     steps.innerHTML = "";
     const stage = [], put = el => { if (wb) stage.push(el); else steps.append(el); };
     if (!wb) steps.append(stageCard(run));                         /* 📣 M3: the first thing you see — what is happening now */
-    if (run.batch) put(batchGrid(p.id, run, startWith));   /* 🎛 the batch grid fills in as each one lands */
+    if (run.batch) { const bg = batchGrid(p.id, run, startWith); if (bg) put(bg); }   /* 🎛 the batch grid fills in as each one lands */
     const mdc = motionDraftCard(run, () => motion.refresh()); if (mdc) put(mdc);   /* 🏃 name + save a pulled/written motion */
     if (run.state !== "running") {                         /* 📦 + ✏️ right under it (2026-11-24) */
       if (run.gate) put(h("button", { class: "btn pri gatebtn", type: "button", title: "Carry on with the build prompt — it stops again at the next check-in",
