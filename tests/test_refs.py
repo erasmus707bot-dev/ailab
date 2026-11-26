@@ -237,3 +237,20 @@ class Strict(Refs):
         last = [s for s in r.steps if s["action"] == "eyes"][-1]
         self.assertIn("1 of 1 checked views match", last["why"])
         self.assertIn("2 not checked (ConnectionResetError: hermes-mcp restarted)", last["why"])
+
+
+import unittest  # noqa: E402
+
+
+class SourceUploadTest(unittest.TestCase):
+    """📥 Source (2026-11-25): his own picture lands in sources/ and is pinned; junk is refused."""
+    def test_upload(self):
+        import base64, tempfile
+        from pathlib import Path
+        from ailab import refs as R
+        d = Path(tempfile.mkdtemp())
+        r = R.upload(d, "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 50).decode())
+        self.assertTrue(r["ok"]); self.assertTrue(r["path"].startswith("sources/") and r["path"].endswith(".jpg"))
+        self.assertEqual(R.get(d), [r["path"]])
+        self.assertFalse(R.upload(d, "data:image/png;base64," + base64.b64encode(b"<html>").decode())["ok"])
+        self.assertFalse(R.upload(d, "data:text/html;base64,AAAA")["ok"])

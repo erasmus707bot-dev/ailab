@@ -422,6 +422,10 @@ class App:
         from . import refs
         return 200, refs.pin(preview.ensure_site(self._pid(b.get("project"))), str(b.get("path") or ""))
 
+    def refs_upload(self, b: dict) -> tuple[int, dict]:                 # 📥 Source: his own picture, pinned
+        from . import refs
+        return 200, refs.upload(preview.ensure_site(self._pid(b.get("project"))), str(b.get("data") or ""))
+
     def refs_unpin(self, b: dict) -> tuple[int, dict]:
         from . import refs
         return 200, refs.unpin(preview.ensure_site(self._pid(b.get("project"))), str(b.get("path") or ""))
@@ -1532,7 +1536,7 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return
             n = int(self.headers.get("Content-Length") or 0)
             p = urlparse(self.path).path
-            if n > (MAX_CAPTURE_BODY if p in ("/api/preview/capture", "/api/compare/capture") else MAX_BODY):
+            if n > (MAX_CAPTURE_BODY if p in ("/api/preview/capture", "/api/compare/capture", "/api/refs/upload") else MAX_BODY):
                 return self._send(413, {"ok": False, "code": "too_big"})
             if (self.headers.get("Origin") and urlparse(self.headers["Origin"]).netloc != self.headers.get("Host")) \
                     or self._foreign():
@@ -1620,7 +1624,7 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.review_reject, b)
             if p == "/api/review/shots":                   # 📸 Before | After pictures (2026-11-25)
                 return self._run(app.review_shots, b)
-            if p in ("/api/refs/pin", "/api/refs/unpin"):
+            if p in ("/api/refs/pin", "/api/refs/unpin", "/api/refs/upload"):
                 return self._run(getattr(app, "refs_" + p.rsplit("/", 1)[1]), b)
             if p in ("/api/breakdown/start", "/api/breakdown/make", "/api/breakdown/frame"):
                 return self._run(getattr(app, "bd_" + p.rsplit("/", 1)[1]), b)

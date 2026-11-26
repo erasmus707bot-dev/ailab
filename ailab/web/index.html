@@ -42,6 +42,7 @@
   .ib:hover, .ib:focus-visible { background: var(--panel2); outline: none; }
   .title { font-weight: 650; font-size: 1rem; white-space: nowrap; }
   .chips { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .srcstrip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; font-size: 17px; }
   .chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px;
     background: var(--panel2); border: 1px solid var(--line); font-size: .85rem; white-space: nowrap; }
   .spend .bar { width: 46px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
@@ -2014,7 +2015,7 @@ function startView() {
   if (impBtn) { impBtn.classList.add("ib"); impBtn.textContent = "🪄"; impBtn.setAttribute("aria-label", "Improve my prompt"); }
   if (ag) { ag.picker.addEventListener("change", optSync); new MutationObserver(optSync).observe(ag.picker, { childList: true, subtree: true }); }
   const agentPane = h("div", { class: "pane wbagent agent", "data-pane": "agent" }, paneBar("agent", "🤖 Make", sec, panes),
-    ...(ag ? [ag.task, ag.typeRow, ag.batchRow, h("div", { class: "runbar" }, ag.startBtn, impBtn, ag.stopBtn, ag.held), ag.improve, ag.censor, ag.status, ag.liveRow, ag.final,
+    ...(ag ? [ag.task, ag.typeRow, ag.batchRow, h("div", { class: "runbar" }, ag.startBtn, impBtn, ag.srcBtn, ag.stopBtn, ag.held), ag.improve, ag.censor, ag.status, ag.liveRow, ag.final,
       h("details", { class: "optfold", id: "agstepsfold", open: !!store.get("wbsteps", false), ontoggle: e => store.set("wbsteps", e.target.open) }, h("summary", {}, "📜 Steps"), ag.steps), options]
       : [offCard("agent", "🤖", "Agent")]),
     h("details", {}, h("summary", {}, "🧰 More tools"), tools, h("button", { class: "btn", type: "button", onclick: wbResetLayout, title: "Put the two panes back to the standard size and order" }, "🧱 Reset pane layout")));
@@ -2861,6 +2862,43 @@ function motionPullForm(path, hooks, dflt) {
   document.body.append(dlg); dlg.showModal();
 }
 
+/* 📥 Source (Scott 2026-11-25: "my source button … upload my own image to work on"): pick a picture from this computer →
+   shrunk to ≤ 2048 px here → <project>/sources/ → 📌 pinned, so the next 🖼 picture starts from it (same cast strip as 📚 Library). */
+function sourcePicker(p, onAdd) {
+  const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", hidden: true });
+  const note = h("span", { class: "note", role: "status" });
+  const strip = h("div", { class: "srcstrip", id: "agsrc", hidden: true });
+  let refs = [];
+  const pic = r => `/preview/${p.id}/${encodeURI(r)}`;
+  function paint() {
+    strip.hidden = !refs.length && !note.textContent;
+    strip.replaceChildren(file, ...(refs.length ? [h("span", {}, `📥 Source (${refs.length}/4) — your next 🖼 picture starts from:`)] : []),
+      ...refs.map(r => h("span", { class: "chip" }, h("img", { src: pic(r), alt: r.split("/").pop(), style: "height:56px;border-radius:6px;vertical-align:middle" }),
+        h("button", { class: "btn", type: "button", "aria-label": `Take ${r.split("/").pop()} off`, onclick: async () => {
+          const x = await api("/api/refs/unpin", { project: p.id, path: r }); if (x.ok) { refs = x.refs; note.textContent = ""; paint(); } } }, "✕"))), note);
+  }
+  async function load() { const x = await api(`/api/refs?project=${encodeURIComponent(p.id)}`); refs = x.ok ? (x.refs || []) : []; paint(); }
+  function shrink(f) {
+    return new Promise((ok, bad) => { const img = new Image(), u = URL.createObjectURL(f);
+      img.onload = () => { const k = Math.min(1, 2048 / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+        ok(f.type === "image/png" && k === 1 && f.size < 6e6 ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.92)); };
+      img.onerror = () => { URL.revokeObjectURL(u); bad(new Error("not a picture")); }; img.src = u; });
+  }
+  file.onchange = async () => {
+    const f = file.files[0]; file.value = ""; if (!f) return;
+    note.textContent = `📥 Adding ${f.name}…`; paint();
+    let data; try { data = await shrink(f); } catch (e) { note.textContent = "🖼 That file isn't a picture the browser can open."; paint(); return; }
+    const x = await api("/api/refs/upload", { project: p.id, data });
+    if (!x.ok) { note.textContent = `${x.icon || "⚠️"} ${x.message || (x.status === 413 ? "That picture is too big." : "Couldn't add it.")}`; paint(); return; }
+    refs = x.refs; note.textContent = `✅ ${f.name} is your source — say what to change, then ▶ Start.`; paint(); if (onAdd) onAdd(x.path);
+  };
+  const btn = h("button", { class: "btn", type: "button", id: "agsrcbtn", title: "Upload your own picture to work on — the next 🖼 picture starts from it", onclick: () => file.click() }, "📥 Source");
+  load();
+  return { btn, strip, load };
+}
+
 function agentView(wb) {
   if (!S.flags.agent) return wb ? null : [offCard("agent", "🤖", "Agent")];
   const p = curProject();
@@ -2955,6 +2993,7 @@ function agentView(wb) {
   const typeRow = h("div", { class: "typerow", id: "agtypes", role: "group", "aria-label": "What are you making?" });
   const look = lookPicker(p.id);                         /* 🎨 shows only while 🖼 Image is picked */
   const motion = motionPicker(p, { start: (...a) => startWith(...a), idea: () => task.value });   /* 🏃 Motion Presets */
+  const src = sourcePicker(p, () => { const on = typePicked(); if (!on.includes("image")) { store.set(tkey, { ids: on.concat("image"), manual: true }); paintTypes(); suggest(); } task.focus(); });
   let typesOpen = false;                                   /* phones: all chips shown only after ▾ All types */
   function paintTypes() {
     const st = tstate(), on = typePicked();
@@ -3221,10 +3260,10 @@ function agentView(wb) {
     if (!r.ok) { status.textContent = `${r.icon || "⚠️"} ${r.message || "Didn't start."}`; return r; }
     store.set("agrun." + p.id, r.run.id); paint(r.run); return r;
   }
-  if (wb) return { startWith, typeRow, improve: impRow, censor: cenCard, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), look.row, motion.row, hint), goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
+  if (wb) return { startWith, typeRow, improve: impRow, censor: cenCard, picker: h("div", { class: "picker" }, provSel, modelSel, legend), task: h("div", {}, growBox(task, "task box"), src.strip, look.row, motion.row, hint), srcBtn: src.btn, goals, repoRow, startBtn, stopBtn, newBtn, askRow, held, status, liveRow, final, steps, more, batchRow };
   return [projectRow(), h("section", { class: "agent" },
-    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, impRow, look.row, motion.row, hint, batchRow, repoRow, goals,
-    h("div", { class: "runbar" }, startBtn, stopBtn, newBtn, askRow, held,
+    typeRow, h("div", { class: "picker" }, provSel, modelSel), legend, task, src.strip, impRow, look.row, motion.row, hint, batchRow, repoRow, goals,
+    h("div", { class: "runbar" }, startBtn, src.btn, stopBtn, newBtn, askRow, held,
       S.flags.preview ? h("button", { class: "btn", onclick: () => go("preview") }, "👁 Preview") : null),
     cenCard, liveRow, status, final, steps,
     h("details", {}, h("summary", {}, "ℹ️ Limits"),

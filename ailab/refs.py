@@ -67,6 +67,38 @@ def pin(root, rel: str) -> dict:
     return {"ok": True, "refs": _save(root, xs + [rel])}
 
 
+MAX_SOURCE = 8_000_000
+_MAGIC = ((b"\xff\xd8\xff", ".jpg"), (b"\x89PNG\r\n\x1a\n", ".png"))
+
+
+def upload(root, data_url: str) -> dict:
+    """📥 Source (Scott 2026-11-25): his own picture from his computer → <project>/sources/ → 📌 pinned as a reference, so
+    the next 🖼 picture starts from it (local FLUX.2 Klein / 🔓 Venice edit). The page shrinks it to ≤ 2048 px first."""
+    import base64
+    import time
+    m = re.fullmatch(r"data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)", str(data_url or ""))
+    if not m:
+        return {"ok": False, "icon": "🖼", "message": "That isn't a picture the Lab can use (PNG, JPEG or WebP)."}
+    raw = base64.b64decode(m.group(1))
+    ext = next((e for sig, e in _MAGIC if raw.startswith(sig)), ".webp" if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP" else "")
+    if not ext or len(raw) > MAX_SOURCE:
+        return {"ok": False, "icon": "🖼", "message": "That picture is too big or not a real picture file."}
+    xs = get(root)
+    if len(xs) >= MAX_REFS:
+        return {"ok": False, "icon": "🎭", "message": f"Up to {MAX_REFS} source/reference pictures — take one off first.", "refs": xs}
+    d = Path(root) / "sources"
+    d.mkdir(parents=True, exist_ok=True)
+    stem, n = time.strftime("source-%Y%m%d-%H%M%S"), 2
+    f = d / (stem + ext)
+    while f.exists():
+        f, n = d / f"{stem}-{n}{ext}", n + 1
+    f.write_bytes(raw)
+    r = pin(root, f"sources/{f.name}")
+    if r.get("ok"):
+        r["path"] = f"sources/{f.name}"
+    return r
+
+
 def unpin(root, rel: str) -> dict:
     return {"ok": True, "refs": _save(root, [x for x in get(root) if x != str(rel or "")])}
 
