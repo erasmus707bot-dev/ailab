@@ -387,3 +387,13 @@ class Story(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_spend_words_count_the_writer():
+    """2026-11-25 live: ch2 said "Spend: $0.000" while the run bar showed $0.0037 (writer calls)."""
+    from ailab import story
+    assert "all on this computer" in story._spend_words(0.0, 0.0)
+    w = story._spend_words(0.0, 0.0037)
+    assert "$0.0037" in w and "writer was the only spend" in w and "all on this computer, $0" not in w
+    assert story._spend_words(0.02, 0.0237) == ". Spend: $0.0237 (pictures $0.0200)."
+    assert "$0.0200" in story._spend_words(0.02, 0.0)                       # never less than the pictures

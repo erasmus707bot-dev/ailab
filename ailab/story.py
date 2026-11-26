@@ -837,6 +837,16 @@ def _film(run, chap: dict, ch_n: int, bib: dict, narrate: bool) -> None:
                  + (" with narration" if chap["voice"] else " (no voice)"), "result": vid, "usd": 0.0})
 
 
+def _spend_words(pics: float, total: float) -> str:
+    """The run's real spend (writer calls included, 2026-11-25 live: said $0.000 while the bar showed $0.0037)."""
+    total = max(total, pics)
+    if total < 0.00005:
+        return ". Spend: $0.000 — all on this computer, $0."
+    if pics < 0.00005:
+        return f". Spend: ${total:.4f} — pictures, clips and voice $0 on this computer; the writer was the only spend."
+    return f". Spend: ${total:.4f} (pictures ${pics:.4f})."
+
+
 def _finish(run, chap: dict, ch_n: int, bib: dict) -> None:
     from . import picture
     b = run.batch
@@ -859,7 +869,7 @@ def _finish(run, chap: dict, ch_n: int, bib: dict) -> None:
                    + (f" (weak: shot {', '.join(map(str, low))})" if low else "")
                    + (f". 🎞 Film: {chap['film']}" + ("" if chap.get("voice") else " (no voice)") if chap.get("film") else
                       f". 🎞 No film: {chap.get('film_error', 'clips off')}")
-                   + f". Spend: ${cost:.3f}" + (" — all on this computer, $0." if not cost else "."))
+                   + _spend_words(cost, float(getattr(run, "usd", 0) or 0)))
     chap["done"] = run.state == "done"
     save_chapter(run.root, ch_n, chap)
     picture.stage(run, "✅" if run.state == "done" else "❌", "Story chapter ready" if run.state == "done" else "Story didn't finish")
