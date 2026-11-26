@@ -34,6 +34,7 @@ SHORT_SHOTS, LONG_SHOTS = 6, 8
 SHORT_MIN_S, SHORT_MAX_S = 15, 30
 SHOT_MIN_S, SHOT_MAX_S = 2, 8
 RETRIES = 1                                       # $0 remakes of a low-scoring still (config "story": {"retries": n})
+LOCAL_WAIT_S = 120                                # 💳 wait this long for the local picture model before asking to pay (config "story": {"local_wait_s": n})
 FIX_TEXT, FIX_BIBLE, KEEP_BOTH = "✏️ Fix the chapter (keep the bible)", "📚 Fix the bible (the chapter is right)", "↔️ Keep both as they are"
 SIZE = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (1080, 1080)}
 
@@ -432,6 +433,71 @@ def anchors_for(shot: dict, cast: dict[str, dict]) -> list[str]:
     return [cast[w.lower()]["anchor_path"] for w in shot["who"] if w.lower() in cast and cast[w.lower()].get("anchor_path")][:4]
 
 
+def _price(run, refs: bool) -> float | None:
+    """💳 Hermes's listed price for the paid picture a still would fall to (None = no paid model is set up)."""
+    from . import picture_route, refs as R
+    ven = [r for r in picture_route.rows(run) if str(r.get("id", "")).startswith("venice/")]
+    if refs:
+        ven = [r for r in ven if r.get("id") == R.REF_MODELS[1]]
+    p = [float(r["usd_per_image"]) for r in ven if r.get("usd_per_image") is not None]
+    return min(p) if p else (0.04 if ven else None)
+
+
+def paid_gate(run, refs: bool, left: int) -> None:
+    """💳 live 2026-11-25 (ch3, project test): the local picture model wasn't ready (GPU busy with other runs), so every
+    still fell to Venice's edit model at $0.04 with no word — $0.32 for a chapter that cost $0 before. Before a still:
+    no local model ready → wait for it (up to LOCAL_WAIT_S), then ask: wait more / pay / stop. "Pay" holds for the chapter."""
+    from . import agent, picture, picture_route, refs as R
+    b = run.batch
+    if b.get("paid_ok") or (run.cfg or {}).get("picture_model"):
+        return
+
+    def ready() -> bool:
+        rd = picture_route.ready(run)
+        return (R.REF_MODELS[0] in rd) if refs else bool(rd)
+
+    if ready():
+        return
+    wait_s = max(0, int(((run.cfg or {}).get("story") or {}).get("local_wait_s", LOCAL_WAIT_S)))
+    waited = 0
+    while True:
+        picture.stage(run, "⏳", f"The picture model on gandalf isn't ready (busy?) — waiting up to {max(1, wait_s // 60)} min, $0 when it's back")
+        end, nxt = time.time() + wait_s, time.time() + 15
+        while time.time() < end:
+            run._check_stop()
+            run.last_progress = time.time()
+            time.sleep(1)
+            if time.time() >= nxt:
+                nxt = time.time() + 15
+                picture_route.forget()
+                if ready():
+                    waited += int(wait_s - (end - time.time()))
+                    run._record({"action": "story", "why": f"⏳ the local picture model is back after ~{max(1, waited // 60)} min — $0 stills carry on",
+                                 "result": {"waited_s": waited}, "usd": 0.0})
+                    return
+        waited += wait_s
+        picture_route.forget()
+        if ready():
+            return
+        price = _price(run, refs)
+        pay = f"💳 Pay — about ${price:.2f} a shot on Venice ({left} left ≈ ${price * left:.2f})" if price is not None else ""
+        choices = ["⏳ Wait 2 more minutes"] + ([pay] if pay else []) + ["⏹ Stop here (shots so far are kept)"]
+        q = (f"The $0 picture model on gandalf still isn't ready after ~{max(1, waited // 60)} min — another run may be using the graphics card. "
+             + ("Pay for the rest of this chapter's stills, keep waiting, or stop?" if pay else "No paid picture model is set up. Keep waiting or stop?"))
+        picture.stage(run, "❓", "The local picture model is busy — your call")
+        run.question = {"kind": "ask", "text": q, "choices": choices, "items": [{"q": q, "choices": choices, "best": 0, "why": "stays $0 — the picture model frees up when the other run ends"}]}
+        ans = run._wait()
+        run._record({"action": "ask", "why": f"💳 local picture model busy — you chose: {ans[:80]}", "result": {"answer": ans}, "usd": 0.0})
+        if ans.startswith("💳"):
+            b["paid_ok"] = True
+            return
+        if ans.startswith("⏹"):
+            run.why = "⏹ Stopped — the local picture model was busy; shots so far are kept"
+            run.stop_flag.set()
+            raise agent.Stopped(run.why)
+        wait_s = 120
+
+
 def bible_text(b: dict) -> str:
     lines = [f"Title: {b.get('title', '')}", f"Tone: {b.get('tone', '')}", f"When: {b.get('when', '')}"]
     lines += [f"Person: {p['name']} — {p['who']}" for p in b.get("people", [])]
@@ -674,6 +740,7 @@ def _stills(run, chap: dict, ch_n: int, bib: dict, cast: dict) -> None:
                 continue
             words = shot_prompt(s, bib, cast)
             b["refs_abs"] = anchors_for(s, cast)
+            paid_gate(run, bool(b["refs_abs"]), sum(1 for x in chap["shots"] if not (x.get("still") and (root / x["still"]).is_file())))
             tries = 0
             task = words + f"\nShape: {aspect}" + (f"\nLook: {looks.SEP.join(look)}" if look else "")
             while True:
