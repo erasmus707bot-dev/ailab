@@ -748,7 +748,35 @@ function rebuildWalk(m) {
     else { txt.textContent = "⏳ Opening the project…"; if (++tries > 120) { txt.textContent = "⚠️ Couldn't find 🎬 Rebuild in this project — open the project's workbench and try the link again."; glow(null); } }
   }, 400);
 }
+/* 🎬 #yours=bd:<breakdown>:<scene> (2026-11-25) — Harvest's "Make one like this in the AI Lab": opens his last project,
+   📚 Library → 🎞 Video breakdowns → that scene, and glows 🎬 Make one like this. Nothing is made until he taps it. */
+function bdWalk(m) {
+  const id = m[1], sc = +m[2] || 0, pid = store.get("project");
+  const bar = h("div", { class: "rbwalk", role: "status", "aria-live": "polite", style: "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);max-width:min(94vw,680px);z-index:2147483000;display:flex;gap:.7rem;align-items:center;padding:.75rem 1rem;border-radius:14px;background:#0d1520;color:#e8dfc8;border:2px solid #e2c56e;font-size:18px" });
+  const txt = h("span", {}), x = h("button", { type: "button", "aria-label": "Stop", style: "min-width:44px;min-height:44px;border-radius:10px;border:1px solid #e2c56e;background:transparent;color:#e8dfc8;font-size:20px" }, "✕");
+  bar.append(txt, x); document.body.append(bar);
+  let cur = null, opened = false, tries = 0;
+  const stop = () => { clearInterval(t); if (cur) cur.classList.remove("yours"); bar.remove(); history.replaceState(history.state, "", location.pathname + location.search); };
+  x.onclick = stop;
+  if (!pid) { txt.textContent = "👉 Open a project first (🚪 start), then tap the Harvest button again — the scene goes into that project."; trail = []; view = "start"; render(); return; }
+  store.set("project", pid); store.set("libopen", true); trail = []; view = "start"; render();
+  const t = setInterval(() => {
+    const lib = $("#wblib"), fold = $("#libbreakdown");
+    const card = document.getElementById(`bd-${id}-${sc}`);
+    const mk = card && [...card.querySelectorAll("button")].find(b => b.textContent.startsWith("🎬"));
+    if (mk) { if (cur !== mk) { mk.classList.add("yours"); mk.scrollIntoView({ block: "center", behavior: "smooth" }); cur = mk;
+        mk.addEventListener("click", () => { txt.textContent = "✅ Started — watch 🤖 Make."; mk.classList.remove("yours"); setTimeout(stop, 6000); }, { once: true }); }
+      txt.textContent = `👉 Scene ${sc + 1} — tap 🎬 Make one like this (your cast goes in for the people)`; return; }
+    if (lib && fold) { lib.open = true; if (!fold.open) fold.open = true;
+      const box = fold.querySelector("#bdbox"); if (box && box.open && !opened) { opened = true; box.open(id, sc); }
+      txt.textContent = "⏳ Opening the scene…"; }
+    else txt.textContent = "⏳ Opening the project…";
+    if (++tries > 120) { txt.textContent = "⚠️ Couldn't open that scene — is Hermes up? Try the button again."; clearInterval(t); }
+  }, 400);
+}
 async function openYours() {                 /* opens the row's project (past the 🚪 start screen), then the ✋ list */
+  const bd = /yours=bd:(bd-[0-9a-f]{16}):(\d+)/.exec(location.hash || "");
+  if (bd) { bdWalk(bd); return; }
   const rb = /yours=rebuild:([\w-]+):(\d+)/.exec(location.hash || "");
   if (rb) { rebuildWalk(rb); return; }
   const m = /yours=\w+:([\w-]+)/.exec(location.hash || "");
@@ -1317,6 +1345,7 @@ function breakdownBox(p, hooks) {
     tick();
   }
   box.start = start;
+  box.open = openSheet;   /* 🎬 a Harvest #yours=bd: link opens a scene here */
   box.replaceChildren(h("div", { class: "trow" }, q, sbtn), hits, list, sheet, note);
   paint();
   return box;
