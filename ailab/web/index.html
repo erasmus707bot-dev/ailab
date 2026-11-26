@@ -1292,7 +1292,7 @@ function castPicker(p, hooks, opts) {
     if (ch.ids && ch.ids.length) rows.push(h("div", { class: "trow" }, h("span", {}, `This project uses: 🎭 ${ch.cast}`), ...ch.ids.map(i => byId[i]).filter(Boolean).map(thumb)));
     const picks = casts.map(c => ({ name: c.name, ids: c.ids }));
     /* live 2026-11-25: the list opened on the first saved cast ("Mara & Dina") while the project used Aria & Ben — it now opens on the one in use */
-    const inUse = c => ch.cast === c.name && (ch.ids || []).join() === c.ids.join();
+    const inUse = c => ch.cast === c.name && [...(ch.ids || [])].sort().join() === [...c.ids].sort().join();   /* same people, any order (live: Ben,Aria vs Aria,Ben) */
     const sel = h("select", { "aria-label": "Saved casts" }, ...(picks.length ? picks.map((c, i) => h("option", { value: String(i), selected: inUse(c) }, `🎭 ${c.name} (${c.ids.length})${inUse(c) ? " ✓ in use" : ""}`)) : [h("option", { value: "" }, "— no saved casts yet —")]));
     const reuse = h("button", { class: "btn pri", type: "button", disabled: !picks.length, onclick: async () => {
       const c = picks[+sel.value]; if (!c) return; const r = await api("/api/cast/choose", { project: p.id, name: c.name, ids: c.ids });
