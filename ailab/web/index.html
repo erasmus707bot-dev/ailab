@@ -734,7 +734,8 @@ function capWalk(pid) {        /* 👉 #yours=capture[:project] — 🎥 on, the
   trail = []; view = "start"; render();
   let tries = 0;
   const t = setInterval(() => { const box = $("#agtask");
-    if (box) { clearInterval(t); box.classList.add("yours"); box.scrollIntoView({ block: "center", behavior: "smooth" }); box.focus();
+    if (box) { clearInterval(t); window.__capFresh = true; box.classList.add("yours"); const sb = $("#agstart"); if (sb) sb.classList.remove("yours");
+      box.scrollIntoView({ block: "center", behavior: "smooth" }); box.focus(); box.select();
       history.replaceState(history.state, "", location.pathname + location.search); }
     else if (++tries > 40) clearInterval(t); }, 250);
 }
@@ -3248,13 +3249,14 @@ function agentView(wb) {
      typed a sentence, then ▶ Start glows. Nothing glows while a run is going. */
   function capGlow() {
     const sb = document.getElementById("agstart"), stop = document.getElementById("agstop");
-    const on = typePicked().includes("capture") && !(stop && !stop.disabled), typed = task.value.trim().length >= 8;
+    const on = typePicked().includes("capture") && !(stop && !stop.disabled);
+    const typed = task.value.trim().length >= 8 && !window.__capFresh;   /* came by the link: old text is selected, type over it */
     task.classList.toggle("yours", on && !typed);
     if (sb) sb.classList.toggle("yours", on && typed);
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
-  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest(); capGlow();
+  task.oninput = () => { window.__capFresh = false; store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest(); capGlow();
     t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
   // 2026-11-22 goal starters: fill the task box (Hermes studio tools → connected mode only)
   const GOALS = [
