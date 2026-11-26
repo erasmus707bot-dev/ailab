@@ -725,6 +725,19 @@ $("#waiting").onclick = () => { store.set("wbtab", "code"); if (view !== "start"
 /* 👉 a link with #yours=… opens the ✋ list by itself (2026-11-25), so Scott lands on the glowing button */
 /* 👉 #yours=rebuild:<project>:<shot> (2026-11-25, Scott: "walk me through with my glowing circle") — opens the project,
    then glows one thing at a time: 🎬 Rebuild fold → ⚖️ the rebuild → 🔁 Retry on that shot. A bar says the step; ✕ stops. */
+function capWalk(pid) {        /* 👉 #yours=capture[:project] — 🎥 on, then the box glows where he types (Lab capture C2) */
+  pid = pid || store.get("project", "");
+  if (!pid || !(S.projects || []).some(x => x.id === pid)) pid = (S.projects || [])[0] ? S.projects[0].id : "";
+  if (!pid) return;
+  store.set("project", pid);
+  store.set("ctypes." + pid, { ids: ["capture"], manual: true }); store.set("wbtab", "agent");
+  trail = []; view = "start"; render();
+  let tries = 0;
+  const t = setInterval(() => { const box = $("#agtask");
+    if (box) { clearInterval(t); box.classList.add("yours"); box.scrollIntoView({ block: "center", behavior: "smooth" }); box.focus();
+      history.replaceState(history.state, "", location.pathname + location.search); }
+    else if (++tries > 40) clearInterval(t); }, 250);
+}
 function rebuildWalk(m) {
   const pid = m[1], shot = +m[2] || 1;
   store.set("project", pid); trail = []; view = "start"; render();
@@ -775,6 +788,8 @@ function bdWalk(m) {
   }, 400);
 }
 async function openYours() {                 /* opens the row's project (past the 🚪 start screen), then the ✋ list */
+  const cap = /yours=capture(?::([\w-]+))?/.exec(location.hash || "");
+  if (cap) { capWalk(cap[1]); return; }
   const bd = /yours=bd:(bd-[0-9a-f]{16}):(\d+)/.exec(location.hash || "");
   if (bd) { bdWalk(bd); return; }
   const rb = /yours=rebuild:([\w-]+):(\d+)/.exec(location.hash || "");
@@ -3225,12 +3240,21 @@ function agentView(wb) {
         onclick: () => { store.set(tkey, { ids: [], manual: false }); paintTypes(); suggest(); } }, "↺ Guess for me")] : []),
       h("button", { class: "tchip more", type: "button", "aria-expanded": String(typesOpen),
         onclick: () => { typesOpen = !typesOpen; paintTypes(); } }, typesOpen ? "▴ Fewer" : on.length ? "▾ More" : "▾ Pick what you're making"));
+    capGlow();
     look.show(on.includes("image") || on.includes("video"));   /* 🎬 2026-11-25 (Scott: "I need access to the mood/theme options") */
     motion.show(on.includes("image") || on.includes("video"));
   }
+  /* 👉 🎥 Capture (Lab capture C2, Scott 2026-11-25 "make where I type glow"): with 🎥 on, the box glows until he has
+     typed a sentence, then ▶ Start glows. Nothing glows while a run is going. */
+  function capGlow() {
+    const sb = document.getElementById("agstart"), stop = document.getElementById("agstop");
+    const on = typePicked().includes("capture") && !(stop && !stop.disabled), typed = task.value.trim().length >= 8;
+    task.classList.toggle("yours", on && !typed);
+    if (sb) sb.classList.toggle("yours", on && typed);
+  }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
-  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest();
+  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest(); capGlow();
     t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
   // 2026-11-22 goal starters: fill the task box (Hermes studio tools → connected mode only)
   const GOALS = [
@@ -3442,6 +3466,7 @@ function agentView(wb) {
     const code = m => (tg[m] || {}).use === "💻 coding" ? 0 : picks[m] ? 1 : 2;
     return loaded.models.filter(m => !unc(m)).sort((a, b) => code(a) - code(b));
   }
+  startBtn.addEventListener("click", () => { task.classList.remove("yours"); startBtn.classList.remove("yours"); });
   startBtn.onclick = () => {
     if (!task.value.trim()) { status.textContent = "✏️ Tell the agent what to do first."; return; }
     const coders = censorChoice();
