@@ -59,6 +59,14 @@
   .verdict .ba2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .verdict .ba2 img, .verdict .ba2 video { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 10px; }
   .verdict .vbtns .btn { min-height: 48px; font-size: 18px; }
+  /* ✨ Lab capture C3.3 (2026-11-25): Quick Cut / Polish on a 🎥 capture */
+  .captools { margin: 8px 0; display: grid; gap: 8px; }
+  .captools .btn, .captools .opt { min-height: 44px; font-size: 17px; }
+  .captools .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .captools .opt { padding: 6px 12px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); color: inherit; }
+  .captools .opt[aria-pressed=true] { outline: 3px solid var(--accent, var(--ok)); outline-offset: 1px; font-weight: 650; }
+  .captools input[type=text] { min-height: 44px; font-size: 17px; width: 100%; box-sizing: border-box; }
+  .captools .ba img, .captools .ba video { width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; background: #000; }
   .libtile .lrate { position: absolute; left: 4px; bottom: 4px; background: rgba(13,21,32,.85); color: #e8dfc8; border-radius: 8px; padding: 0 5px; font-size: 14px; }
   @media (max-width: 600px) { .verdict .ba2 { grid-template-columns: 1fr; } .star { min-width: 44px; } }
   .srcstrip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; font-size: 17px; }
@@ -1812,6 +1820,7 @@ function startView() {
         madeBox.append(h("figure", { class: "vidbig" }, h("video", { src: url, controls: true, playsinline: true, preload: "metadata", style: "width:100%;max-height:75vh;border-radius:12px;background:#000" }),
           h("figcaption", {}, `🎬 ${String(v.model || "").split("/").pop()} · $${(+v.usd || 0).toFixed(2)}${v.duration ? ` · ${v.duration}` : ""}${v.media_item ? " · 💾 in Media Studio" : ""}`),
           eyesBox(v.eyes, !running && ag && ag.startWith ? t => ag.startWith(t, run.ctypes && run.ctypes.length ? run.ctypes : ["video"], false) : null),
+          running ? null : captureTools(p.id, v),
           running ? null : rateRow(p.id, { path: v.path, kind: "vid", run: run.id, task: run.task }, startNew),
           v.prompt ? h("details", {}, h("summary", {}, "✍️ The prompt it used"), h("p", {}, v.prompt)) : null,
           h("a", { class: "btn", href: url, download: v.path.split("/").pop() }, "⬇ Download")));
@@ -1827,6 +1836,7 @@ function startView() {
         return h("figure", {}, h("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" }, h("img", { src: url, alt: pc.prompt ? pc.prompt.slice(0, 140) : "Picture the Lab made", loading: "lazy" })),
           h("figcaption", {}, `🎨 ${String(pc.model || "").split("/").pop()} · $${(+pc.usd || 0).toFixed(3)}${pc.seconds ? ` · ${pc.seconds} s` : ""}${pc.library ? " · 💾 in your Gallery" : ""}`),
           eyesBox(pc.eyes, !running && ag && ag.startWith ? t => ag.startWith(t, run.ctypes && run.ctypes.length ? run.ctypes : ["image"], false) : null),
+          running ? null : captureTools(p.id, pc),
           running ? null : rateRow(p.id, { path: pc.path, kind: "pic", run: run.id, task: run.task, sources: pc.sources || [] }, startNew),
           pc.sources && pc.sources.length ? h("div", { class: "note" }, `🗂 Made from ${pc.sources.length} source${pc.sources.length > 1 ? "s" : ""}: ${pc.sources.map(x => x.split("/").pop()).join(", ")}`) : null,
           pc.style_from ? h("div", { class: "note" }, `🎨 Style from ${pc.style_from.split("/").pop()}`) : null,
@@ -3034,6 +3044,51 @@ function rateRow(pid, it, start) {
     box.replaceChildren(...[h("div", { class: "rtop" }, stars, acc, ...(row.accepted || it.kind === "pic" ? build : [])), reasons, note].filter(Boolean));
   }
   rateLoad(pid).then(d => { row = d.files[it.path] || {}; paint(); });
+  return box;
+}
+/* ✨ Lab capture C3.3 (2026-11-25): one tap from a 🎥 capture to Hermes Quick Cut, or ✨ Polish here
+   (shape · tap zoom · tap rings · caption line) → ↔️ Before | After → ✋ Keep / ✕ Not this. The original is never changed. */
+function captureTools(pid, it) {
+  if (!it || !it.hermes) return null;
+  const clip = /\.mp4$/i.test(it.path), lib = String(it.library || "");
+  const hq = (homeUrl() || reachable("http://127.0.0.1:8780/")).replace(/\/+$/, "");
+  const qc = clip && lib.startsWith("media: ") ? `${hq}/quickcut?src=${encodeURIComponent("media:" + lib.slice(7))}&return=${encodeURIComponent(location.href)}` : "";
+  const st = { frame: "9:16", zoom: clip, rings: clip, title: "" }, box = h("div", { class: "captools" });
+  let open = false, busy = false, msg = "";
+  const opt = (lbl, on, fn) => h("button", { class: "opt", type: "button", "aria-pressed": on ? "true" : "false", onclick: fn }, lbl);
+  const FR = [["📱 9:16 ⭐", "9:16"], ["⬛ 1:1", "1:1"], ["🖼 4:5", "4:5"], ["🖥 16:9", "16:9"], ["◻ As it is", "none"]];
+  function tools() {
+    box.replaceChildren(
+      h("div", { class: "runbar" }, qc ? h("a", { class: "btn", href: qc, target: "_blank", rel: "noopener" }, "✂️ Open in Quick Cut") : null,
+        h("button", { class: "btn" + (open ? "" : " yours"), type: "button", "aria-expanded": open ? "true" : "false",
+          onclick: () => { open = !open; tools(); } }, "✨ Polish")),
+      open ? h("div", { class: "captools" },
+        h("div", { class: "note" }, "📐 Shape"), h("div", { class: "opts" }, ...FR.map(([l, v]) => opt(l, st.frame === v, () => { st.frame = v; tools(); }))),
+        clip ? h("div", { class: "opts" }, opt("🔍 Zoom on taps", st.zoom, () => { st.zoom = !st.zoom; tools(); }),
+          opt("⭕ Tap rings", st.rings, () => { st.rings = !st.rings; tools(); })) : null,
+        h("input", { type: "text", maxlength: 60, placeholder: "💬 One caption line (optional)", value: st.title, oninput: e => { st.title = e.target.value; } }),
+        h("div", { class: "runbar" }, h("button", { class: "btn pri yours", type: "button", disabled: busy, onclick: go }, busy ? "✨ Polishing…" : "▶ Polish ⭐")),
+        msg ? h("div", { class: "note", role: "status" }, msg) : null) : null);
+  }
+  async function go() {
+    busy = true; msg = "✨ Polishing on gandalf ($0) — the original stays as it is…"; tools();
+    const r = await api("/api/capture/polish", { project: pid, path: it.path, hermes: it.hermes, ...st });
+    busy = false;
+    if (!r.ok) { msg = `⚠️ ${r.message || "The polish didn't work."}${r.fix ? " 👉 " + r.fix : ""}`; tools(); return; }
+    msg = ""; result(r.item);
+  }
+  function result(n) {
+    const u = x => `/preview/${pid}/${encodeURI(x)}`;
+    box.replaceChildren(h("section", { class: "verdict ba", "aria-label": "Before and after" }, h("h3", {}, "↔️ Before | After"),
+      n.before_after ? h("img", { src: u(n.before_after), alt: "The capture before and after the polish" }) : null,
+      clip ? h("video", { src: u(n.path), controls: true, playsinline: true, preload: "metadata" }) : (n.before_after ? null : h("img", { src: u(n.path), alt: "The polished picture" })),
+      ...(n.notes || []).map(t => h("div", { class: "note" }, t)),
+      h("div", { class: "runbar vbtns" },
+        h("button", { class: "btn pri yours", type: "button", onclick: () => { box.replaceChildren(h("div", { class: "note", role: "status" },
+          `✋ Kept — ${n.path} · also in Hermes's library (✂️ edited by the Lab)`), h("a", { class: "btn", href: u(n.path), download: n.path.split("/").pop() }, "⬇ Download")); } }, "✋ Keep"),
+        h("button", { class: "btn", type: "button", onclick: async () => { await api("/api/capture/drop", { project: pid, path: n.path }); open = true; tools(); } }, "✕ Not this"))));
+  }
+  tools();
   return box;
 }
 function runFiles(run) {

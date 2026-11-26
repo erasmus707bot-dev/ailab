@@ -1656,6 +1656,9 @@ def make_server(app: App, host: str = "127.0.0.1", port: int = 0) -> ThreadingHT
                 return self._run(app.batch_estimate, b)
             if p == "/api/batch/keep":
                 return self._run(app.batch_keep, b)
+            if p in ("/api/capture/polish", "/api/capture/drop"):   # ✨ Lab capture C3.3 (2026-11-25)
+                from . import capturepolish as CP          # noqa: PLC0415
+                return self._run(lambda: (CP.polish if p.endswith("polish") else CP.drop)(app, b))
             if p == "/api/agent/rephrase":
                 return self._run(app.agent_rephrase, b)
             if p == "/api/agent/more":

@@ -161,6 +161,9 @@ def _args(run, s: dict, n: int, retry: bool) -> dict:
         if k in s:
             a[k] = s[k]
     steps = [dict(d) for d in s.get("do") or []]
+    if s["target"] == "argus" and s.get("record") and steps:  # ✨ C3: phone taps/scrolls play WHILE recording → a click
+        a["during"] = steps                                   # track Polish can zoom on (browser clicks already do)
+        steps = []
     if retry:                                     # the one fix: give the page longer, start from the top
         steps = [{"wait": 2.5}] + [{**d, "wait": max(float(d.get("wait", 0.8)), 1.5)} for d in steps]
         if s["target"] == "browser":
