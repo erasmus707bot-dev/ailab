@@ -71,7 +71,7 @@ class Shelf(unittest.TestCase):
 
 
 def test_page_has_the_keep_loop_and_the_library_shows_it():
-    for must in ('id: "wbkeep"', 'id: "wbtoss"', '"/api/shelf/keep"', '"/api/shelf/toss"', '"/api/shelf/restore"', "✅ Keep & start new ⭐",
+    for must in ('id: "wbkeep"', 'id: "wbtoss"', '"/api/shelf/keep"', '"/api/shelf/toss"', '"/api/shelf/restore"', "🆕 Keep & clear",
                  "🗑 Throw away", "🆕 Just clear", "↩ Bring back", '["kept", "✅ Kept"]', "Kept as #${r.item.n}"):
         assert must in HTML, must
 
