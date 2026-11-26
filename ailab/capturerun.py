@@ -43,17 +43,38 @@ PLAN_SYS = (
     "Rules: phone shots that need clicks → browser with viewport phone (clicks by visible text: \"text=…\"). "
     "argus = the real test phone: open + scroll only. vm = the Windows test VM (no url). desktop = Scott's real screen — "
     "only when he asks for his desktop or a window by name. Use only the pages listed below; never invent a host. "
-    "Give exactly the number of shots and clips he asks for.")
+    "Give exactly the number of shots and clips he asks for. \"expect\" = only what is visible on the screen "
+    "(\"the AI Lab home page\"), never the device, length or shot number. Prefer a page he names.")
 
 
 # ---------------------------------------------------------------- plan
 
-def pages(run) -> dict[str, str]:
-    """Pages the writer may use: config `capture_pages` {name: url} + this project's own preview."""
-    out = {str(k): str(v) for k, v in (run.cfg.get("capture_pages") or {}).items() if str(v).startswith("http://127.0.0.1")}
+_URL = re.compile(r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?[^\s\"'<>)]*")
+
+
+def pages(run, words: str = "") -> dict[str, str]:
+    """Pages the writer may use: a local URL in Scott's words first, config `capture_pages` {name: url}, the AI Lab
+    itself, then this project's own preview (last: a new project's preview is a blank page — 2026-11-25 live)."""
+    out = {f"from your words {i + 1}": u.replace("localhost", "127.0.0.1") for i, u in enumerate(_URL.findall(words or ""))}
+    out.update({str(k): str(v) for k, v in (run.cfg.get("capture_pages") or {}).items()
+                if str(v).startswith("http://127.0.0.1")})
     port = int(run.cfg.get("port") or 8850)
+    out.setdefault("the AI Lab (this app)", f"http://127.0.0.1:{port}/")
     out.setdefault("this project (preview)", f"http://127.0.0.1:{port}/preview/{run.project['id']}/")
     return out
+
+
+_META = re.compile(r"(?:\b(?:a |an |the )?\d+[ -]?(?:second|sec|s)\b(?: video| screen)?(?: clip| recording)?(?: of)?"
+                   r"|\b(?:clip|recording|screenshot|screen shot|shot|picture)s?(?: \d+)?(?: of)?\b"
+                   r"|\b(?:on|in|from|using) (?:the )?(?:argus|test phone|phone|vm|test vm|browser|headless browser|desktop)\b"
+                   r"|\b(?:page|step) \d+\b)", re.I)
+
+
+def eyes_want(s: dict) -> str:
+    """👁 asks about what's ON the screen. Step labels ("shot 3", "10 second clip", "on Argus") can't be seen in a
+    frame, so they're stripped (2026-11-25 live: two correct frames called misses)."""
+    t = _META.sub(" ", str(s.get("expect") or ""))
+    return re.sub(r"\s{2,}", " ", t).strip(" ,.-") or ""
 
 
 def _json(text: str) -> dict | None:
@@ -115,7 +136,7 @@ def line(s: dict) -> str:
 
 
 def make_plan(run, words: str, change: str = "", old: list[dict] | None = None) -> tuple[list[dict], str]:
-    known = pages(run)
+    known = pages(run, f"{words} {change}")
     user = (f"Scott's words: {words}\n\nPages on this computer:\n" + "\n".join(f"- {k}: {v}" for k, v in known.items()))
     if old:
         user += f"\n\nThe plan so far:\n{json.dumps({'steps': old})}\nScott wants this changed: {change}\nSend the whole new plan."
@@ -201,8 +222,9 @@ def look(run, item: dict, s: dict) -> dict:
     raw = eyes.frame(p) if item["kind"] == "clip" else p.read_bytes()
     pts = [{"q": "Is this a sign-in page, an error page, or a blank screen?", "what": "not a sign-in / error / blank screen",
             "kind": "screen", "want": False}]
-    if s.get("expect"):
-        pts.insert(0, {"q": f"Does this screen show {s['expect']}?", "what": s["expect"], "kind": "subject", "want": True})
+    want = eyes_want(s)
+    if want:
+        pts.insert(0, {"q": f"Does this screen show {want}?", "what": want, "kind": "subject", "want": True})
     e = eyes.ask(run, raw, pts, s.get("label", "the capture"))
     if not e.get("error"):
         e["low"] = e.get("score") is not None and e["score"] < 100 and bool(e.get("missing"))
@@ -238,12 +260,52 @@ def _on_fail(run, s: dict, n: int, why: str, can_keep: bool = True) -> str:
     return "keep" if "keep" in a else "stop" if "stop" in a else "skip"
 
 
+def _resumed(run) -> tuple[list[dict] | None, set[int]]:
+    """After a Lab restart the run replays from the top: the agreed plan and the steps already captured come back
+    from the run's own record (2026-11-25 live: a restart mid-run re-planned and lost Scott's plan change)."""
+    plan, done = None, set()
+    for st in run.steps:
+        res = st.get("result") if isinstance(st.get("result"), dict) else {}
+        if st.get("action") == "capture" and str(st.get("why", "")).startswith("🗺") and isinstance(res.get("steps"), list):
+            plan, done = res["steps"], set()
+        elif plan is not None and isinstance(res.get("step"), int) and (
+                st.get("action") in ("picture", "video") or res.get("skipped") or res.get("error")):
+            done.add(res["step"])
+    return plan, done
+
+
+def _stale(run) -> tuple[int, str]:
+    """An answer Scott gave to a card the restart caught: (step it was about, keep|skip|stop) — never a plan change."""
+    if not getattr(run, "_answered", None) or not run._answered.is_set():
+        return 0, ""
+    a = str(getattr(run, "_answer", "") or "").lower()
+    run._answered.clear()
+    q = json.dumps(getattr(run, "question", None) or {}, ensure_ascii=False)   # the card the restart caught
+    run.question = None
+    m = re.search(r"Step (\d+)", q)
+    return (int(m.group(1)) if m else 0), ("keep" if "keep" in a else "stop" if "stop" in a else "skip" if "skip" in a else "")
+
+
 def run(run) -> None:
     if not run.connected or not getattr(run.lab, "mcp", None):
         run.state, run.why = "failed", "🎥 Captures run through Hermes — switch the Lab to connected mode."
         return
     words = picture.picture_words(run.task).strip()
     run.cap_usd = max(run.cap_usd, 0.10)
+    old, done = _resumed(run)
+    sn, sa = _stale(run)
+    if old:
+        steps = old
+        if sa == "stop":
+            run.state, run.why = "done", "🎥 Stopped where you said — what was captured is in captures/."
+            return
+        if sa == "skip" and sn:
+            done.add(sn)                                   # "keep" → that step is captured again (its file wasn't kept)
+        picture.stage(run, "🔄", f"Carrying on after a Lab restart — {len(done)} of {len(steps)} steps already done")
+        run._record({"action": "capture", "why": "🔄 resumed the agreed shot plan", "result": {"done": sorted(done)},
+                     "usd": 0.0})
+        _loop(run, steps, words, done)
+        return
     steps, who = make_plan(run, words)
     for i in range(MAX_REPLANS + 1):
         picture.stage(run, "🗺", "Your shot plan")
@@ -261,8 +323,16 @@ def run(run) -> None:
     if not steps:
         run.state, run.why = "done", "🎥 Nothing to capture (desktop steps skipped)."
         return
+    _loop(run, steps, words, set())
+
+
+def _loop(run, steps: list[dict], words: str, done: set[int]) -> None:
     got, failed, tips = [], 0, []
+    got += [{"kind": "shot" if st.get("action") == "picture" else "clip"} for st in run.steps
+            if st.get("action") in ("picture", "video") and (st.get("result") or {}).get("step") in done]
     for n, s in enumerate(steps, 1):
+        if n in done:
+            continue
         run._check_stop()
         res = capture(run, s, n, len(steps))
         e, item = {}, None
@@ -280,7 +350,8 @@ def run(run) -> None:
             res = capture(run, s, n, len(steps), retry=True)
         if res.get("error"):
             why = res["error"] + (f" 👉 {res['fix']}" if res.get("fix") else "")
-            run._record({"action": "capture", "why": f"{ICON[s['target']]} {s['label']}", "result": {"error": why}, "usd": 0.0})
+            run._record({"action": "capture", "why": f"{ICON[s['target']]} {s['label']}", "result": {"error": why, "step": n},
+                         "usd": 0.0})
             failed += 1
             # a refusal / target not running already says what to do — no question; the next step may work
             if res.get("code") not in HARD and n < len(steps) and _on_fail(run, s, n, why, can_keep=False) == "stop":
@@ -288,13 +359,14 @@ def run(run) -> None:
             continue
         if e.get("low") and _on_fail(run, s, n, "👁 missing: " + ", ".join(e.get("missing") or [])) != "keep":
             (run.root / item["path"]).unlink(missing_ok=True)
+            run._record({"action": "capture", "why": f"⏭ {s['label']}", "result": {"skipped": True, "step": n}, "usd": 0.0})
             failed += 1
             continue
         item["eyes"] = {k: e.get(k) for k in ("score", "missing", "caption")} if not e.get("error") else {}
         (run.pictures if item["kind"] == "shot" else run.videos).append(item)
         got.append(item)
         run._record({"action": "picture" if item["kind"] == "shot" else "video", "path": item["path"],
-                     "why": f"{ICON[s['target']]} {s['label']}", "result": {k: v for k, v in item.items() if k != "prompt"},
+                     "why": f"{ICON[s['target']]} {s['label']}", "result": {**{k: v for k, v in item.items() if k != "prompt"}, "step": n},
                      "usd": 0.0})
         picture._craft_seen(run, "capture", e, s.get("expect") or words, compare=False)
     run.capture_tips = tips

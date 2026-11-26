@@ -159,3 +159,49 @@ class Run(Base):
         r.answer("Go"); t.join(10)
         self.assertEqual(r.state, "done", r.why)
         self.assertEqual([a["target"] for c, a in zip(mcp.calls, mcp.args) if c == "capture_shot"], ["vm"])
+
+
+class LiveFixes(Run):
+    """2026-11-25 live test: Eyes saw step labels, a new project filmed its blank preview, a restart re-planned."""
+
+    def test_eyes_asks_about_the_screen_not_the_step_label(self):
+        for e, want in (("10 second clip of AI Lab home page on Argus", "AI Lab home page"),
+                        ("AI Lab home page on phone", "AI Lab home page"),
+                        ("screenshot 3 of the Family view", "the Family view")):
+            self.assertEqual(capturerun.eyes_want({"expect": e}), want)
+        self.assertEqual(capturerun.eyes_want({"expect": "10 second clip"}), "")
+
+    def test_pages_take_scotts_url_first_and_preview_last(self):
+        r, _ = self.make(CapMCP(Path(tempfile.mkdtemp())))
+        known = capturerun.pages(r, "film http://localhost:8850/ please")
+        names = list(known)
+        self.assertEqual(known[names[0]], "http://127.0.0.1:8850/")
+        self.assertIn("the AI Lab (this app)", known)
+        self.assertEqual(names[-1], "this project (preview)")
+
+    def test_restart_keeps_the_plan_and_skips_done_steps(self):
+        tmp = Path(tempfile.mkdtemp())
+        mcp = CapMCP(tmp)
+        r, b = self.make(mcp)
+        plan = capturerun.norm(json.loads(PLAN)["steps"], capturerun.pages(r))
+        r.steps = [{"action": "capture", "why": "🗺 shot plan (x)", "result": {"steps": plan}},
+                   {"action": "picture", "path": "captures/a.png", "result": {"step": 1}},
+                   {"action": "picture", "path": "captures/b.png", "result": {"step": 2}}]
+        r.question = {"kind": "ask", "items": [{"q": "Step 3 (VM) didn't come out right: 👁 missing: x"}]}
+        r._answer = "Keep it anyway"; r._answered.set()            # the answer that arrived after the restart
+        t = threading.Thread(target=r.loop); t.start(); t.join(10)
+        self.assertEqual(r.state, "done", r.why)
+        caps = [a.get("target") for c, a in zip(mcp.calls, mcp.args) if c.startswith("capture_")]
+        self.assertEqual(caps, ["vm", "browser"])                 # steps 3 + 4 only; no new plan card
+        self.assertIn("3 shots + 1 clip", r.why)
+
+    def test_restart_stop_answer_ends_the_run(self):
+        mcp = CapMCP(Path(tempfile.mkdtemp()))
+        r, _ = self.make(mcp)
+        plan = capturerun.norm(json.loads(PLAN)["steps"], capturerun.pages(r))
+        r.steps = [{"action": "capture", "why": "🗺 shot plan (x)", "result": {"steps": plan}}]
+        r.question = {"kind": "ask", "items": [{"q": "Step 1 (x) didn't come out right"}]}
+        r._answer = "Stop here"; r._answered.set()
+        t = threading.Thread(target=r.loop); t.start(); t.join(10)
+        self.assertEqual(r.state, "done")
+        self.assertFalse([c for c in mcp.calls if c.startswith("capture_")])
