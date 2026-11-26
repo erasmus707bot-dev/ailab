@@ -734,8 +734,12 @@ function capWalk(pid) {        /* 👉 #yours=capture[:project] — 🎥 on, the
   trail = []; view = "start"; render();
   let tries = 0;
   const t = setInterval(() => { const box = $("#agtask");
-    if (box) { clearInterval(t); window.__capFresh = true; box.classList.add("yours"); const sb = $("#agstart"); if (sb) sb.classList.remove("yours");
-      box.scrollIntoView({ block: "center", behavior: "smooth" }); box.focus(); box.select();
+    if (box) { clearInterval(t); box.classList.add("yours"); const sb = $("#agstart"); if (sb) sb.classList.remove("yours");
+      /* live 2026-11-25: an old picture prompt left in the box became the capture request — start empty, keep the old
+         words (agtask.prev.<project>) so nothing is lost */
+      if (box.value.trim()) { store.set("agtask.prev." + pid, box.value); store.set("agtask." + pid, ""); box.value = ""; }
+      box.placeholder = "🎥 Say what to film — e.g. 3 phone shots and a 10 second clip of this project's page";
+      box.scrollIntoView({ block: "center", behavior: "smooth" }); box.focus();
       history.replaceState(history.state, "", location.pathname + location.search); }
     else if (++tries > 40) clearInterval(t); }, 250);
 }
@@ -3250,13 +3254,13 @@ function agentView(wb) {
   function capGlow() {
     const sb = document.getElementById("agstart"), stop = document.getElementById("agstop");
     const on = typePicked().includes("capture") && !(stop && !stop.disabled);
-    const typed = task.value.trim().length >= 8 && !window.__capFresh;   /* came by the link: old text is selected, type over it */
+    const typed = task.value.trim().length >= 8;
     task.classList.toggle("yours", on && !typed);
     if (sb) sb.classList.toggle("yours", on && typed);
   }
   ctypesLoad().then(() => { paintTypes(); suggest(); });
   let t = null;
-  task.oninput = () => { window.__capFresh = false; store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest(); capGlow();
+  task.oninput = () => { store.set("agtask." + p.id, task.value); clearTimeout(t); if (!tstate().manual) paintTypes(); suggest(); capGlow();
     t = setTimeout(() => api("/api/autosave", { project: p.id, field: "agent-task", text: task.value }), 700); };
   // 2026-11-22 goal starters: fill the task box (Hermes studio tools → connected mode only)
   const GOALS = [
