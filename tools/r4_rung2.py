@@ -5,6 +5,7 @@ plainly (merged limbs / swaps)").
     python3 ~/ailab/tools/r4_rung2.py            # clip A only ($0: local pictures, 🆓 pan-and-zoom, narrator)
     python3 ~/ailab/tools/r4_rung2.py --all      # clips A, B, C in a row (~3x the GPU time)
     python3 ~/ailab/tools/r4_rung2.py B          # one named clip
+    python3 ~/ailab/tools/r4_rung2.py --retry-failed [A|--all]   # 🔁 each failed shot once ($0), then a new report
 
 Same flow and $0 rules as r4_rung1.py (its helpers are reused): 🎞 breakdown (a finished one is reused — clip A's
 `bd-fa40e7996c89a744` already exists) → the project's cast (Mara + Dina, never redesigned here) → 🎬 rebuild level 2 →
@@ -35,6 +36,38 @@ def kind_of(miss: str) -> str:
     if m.startswith("exactly "):
         return "wrong head-count"
     return "lost look"                                            # a cast member's own hair + outfit not found
+
+
+def shot_fails(b: dict) -> list[str]:
+    sc = (b.get("eyes") or {}).get("score")
+    kinds = sorted({kind_of(m) for m in (b.get("identity") or []) + (b.get("clip_identity") or [])})
+    if sc is not None and sc < PASS_SCORE:
+        kinds.append("low score")
+    if not b.get("still"):
+        kinds.append("no picture")
+    if sc is None and not kinds:
+        kinds.append("no 👁 score")
+    return kinds
+
+
+def retry_failed(name: str, clip: str) -> None:
+    r = call("/api/breakdown/start", {"project": PROJECT, "path": clip, "fresh": False})
+    if not r.get("ok") or r.get("state") == "running":
+        say(f"🔁 {name}: no finished breakdown — run without --retry-failed first")
+        return
+    bid = r["id"]
+    beats = call(f"/api/rebuild?project={PROJECT}&bd={bid}").get("beats") or []
+    todo = [b["k"] for b in beats if shot_fails(b)]
+    say(f"🔁 {name}: retrying shots {', '.join(str(k + 1) for k in todo) or 'none'} ($0)")
+    for k in todo:
+        st = call("/api/agent/start", {"project": PROJECT, "task": f"Retry Twister clip {name} shot {k + 1}", "ctypes": ["image"],
+                                       "batch": {"rebuild": {"bd": bid, "level": 2, "clips": "free", "audio": "narrate",
+                                                             "voice": "narrator", "retry": k}}})
+        if not st.get("ok"):
+            say(f"🔁 shot {k + 1}: {st.get('message')}")
+            continue
+        v = run_until_done(st["run"]["id"], f"🔁 {name} shot {k + 1}")
+        say(f"🔁 {name} shot {k + 1} {v['state']}: {v.get('why', '')[:200]}")
 
 
 def one_clip(name: str, clip: str, fresh: bool) -> dict:
@@ -74,12 +107,8 @@ def section(res: dict) -> tuple[list[str], int, float, dict]:
     for b in beats:
         sc = (b.get("eyes") or {}).get("score")
         misses = (b.get("identity") or []) + (b.get("clip_identity") or [])
-        kinds = sorted({kind_of(m) for m in misses})
-        if sc is not None and sc < PASS_SCORE:
-            kinds.append("low score")
-        if not b.get("still"):
-            kinds.append("no picture")
-        ok = not kinds and sc is not None
+        kinds = shot_fails(b)
+        ok = not kinds
         fails += not ok
         for k in kinds:
             tally[k] = tally.get(k, 0) + 1
@@ -102,6 +131,9 @@ def main(argv: list[str]) -> int:
     if not cast.get("ids"):
         raise SystemExit("🎭 no cast chosen in video-testing — run r4_rung1.py first (rung 2 must use the same cast).")
     say(f"🎭 same cast as rung 1: {cast.get('cast')}")
+    if "--retry-failed" in argv:
+        for n in names:
+            retry_failed(n, CLIPS[n])
     results = [one_clip(n, CLIPS[n], fresh) for n in names]
     body, fails, spend, tally = [], 0, 0.0, {}
     for res in results:
