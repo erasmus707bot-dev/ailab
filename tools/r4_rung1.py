@@ -55,9 +55,14 @@ def free_pick(q: dict) -> str:
 
 
 def run_until_done(rid: str, label: str, limit_s: int = 3 * 3600) -> dict:
-    t0, last, answered = time.time(), "", set()
+    t0, last, answered, answered_at = time.time(), "", set(), {}
     while time.time() - t0 < limit_s:
-        v = call(f"/api/agent/run?id={rid}")["run"]
+        try:
+            v = call(f"/api/agent/run?id={rid}")["run"]
+        except Exception as e:                                   # noqa: BLE001 — Lab restarting: wait, don't crash
+            say(f"{label}: Lab not answering ({e}) — waiting")
+            time.sleep(15)
+            continue
         q = v.get("question")
         key = json.dumps(q, sort_keys=True) if q else ""
         if q and key not in answered and v["state"] not in ("done", "failed", "stopped"):
@@ -66,10 +71,19 @@ def run_until_done(rid: str, label: str, limit_s: int = 3 * 3600) -> dict:
             try:
                 call("/api/agent/answer", {"id": rid, "answer": ans})
                 answered.add(key)
+                answered_at[key] = time.time()
             except Exception as e:                               # noqa: BLE001 — asked again next loop
                 say(f"❓ answer not taken yet: {e}")
         if v["state"] in ("done", "failed", "stopped"):
             return v
+        if v["state"] == "interrupted":                          # live rung 2 2026-11-25: a Lab restart at 17:10 left the run
+            say(f"{label}: 🔄 the Lab restarted — resuming (finished shots are kept)")   # waiting for ▶ Resume for an hour
+            try:
+                call("/api/agent/resume", {"id": rid})
+            except Exception as e:                               # noqa: BLE001 — Lab still starting; next loop tries again
+                say(f"🔄 resume not taken yet: {e}")
+        if q and key in answered and time.time() - answered_at.get(key, 0) > 60:
+            answered.discard(key)                                # same card again (or answer lost) → answer it again
         stage = ((v.get("steps") or [{}])[-1].get("why") or "")[:110]
         if stage != last:
             say(f"{label}: {stage}")
