@@ -3272,13 +3272,16 @@ function agentView(wb) {
   const askFirst = h("input", { type: "checkbox", id: "agaskfirst", checked: !!store.get("askfirst", true), onchange: e => store.set("askfirst", e.target.checked) });
   const askRow = h("label", { class: "askrow", title: "The AI asks 1–3 quick choices (with its ⭐ pick) and shows a plan before it builds. Small exact changes skip this." }, askFirst, "❓ Ask me first");
   const stopBtn = h("button", { class: "btn", id: "agstop", disabled: true }, "⏹ Stop");
-  /* 🆕 New (2026-11-24, Scott: "clear the fields to work on a new build/image/doc"): empties the task box, chips,
+  /* 🆕 New (2026-11-24, Scott: "clear the fields to work on a new build/image/doc"): empties the task box, Look chips,
      Change it box and result — keeps the project, the model and past runs (they stay in history and on disk) */
   const newBtn = h("button", { class: "btn", id: "agnew", type: "button", title: "Clear the screen for the next build, picture or doc — keeps the project, model and past runs" }, "🆕 New");
   newBtn.onclick = () => {
     clearTimeout(agTimer);
+    const keepKind = typePicked();                           /* picked or guessed from the words — read before they go */
     task.value = ""; store.set("agtask." + p.id, ""); api("/api/autosave", { project: p.id, field: "agent-task", text: "" });
-    store.set(tkey, { ids: [], manual: false }); typesOpen = false; paintTypes(); suggest();
+    /* 2026-11-25 live: clearing the kind too sent the next picture idea to the code builder ("who writes the code?").
+       The kind chip (🖼 Image, 🎬 Video…) stays — the next one is usually the same kind; tap it off to change. */
+    store.set(tkey, { ids: keepKind, manual: keepKind.length > 0 }); typesOpen = false; paintTypes(); suggest();
     store.set("agrun." + p.id, null);
     steps.innerHTML = ""; final.hidden = true; final.replaceChildren(); status.textContent = "🆕 Cleared — say what to make next.";
     startBtn.disabled = false; stopBtn.disabled = true; held.hidden = true;
