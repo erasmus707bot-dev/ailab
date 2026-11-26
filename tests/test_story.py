@@ -397,3 +397,14 @@ def test_spend_words_count_the_writer():
     assert "$0.0037" in w and "writer was the only spend" in w and "all on this computer, $0" not in w
     assert story._spend_words(0.02, 0.0237) == ". Spend: $0.0237 (pictures $0.0200)."
     assert "$0.0200" in story._spend_words(0.02, 0.0)                       # never less than the pictures
+
+
+def test_fresh_facts_drop_rewordings_of_the_bible():
+    """Live 2026-11-25: ch2 added "Aria and Ben are racing … night market at midnight" after ch1 "… have raced …"."""
+    from ailab.story import fresh_facts
+    old = [{"ch": 1, "fact": "Aria and Ben have raced motorbikes through the neon-lit night market at midnight."}]
+    new = [{"ch": 2, "fact": "Aria and Ben are racing their motorbikes through the neon-lit night market at midnight."},
+           {"ch": 2, "fact": "Ben crashed into a noodle stall and lost the lead to Aria."},
+           {"ch": 2, "fact": "Ben crashed into the noodle stall, losing the lead to Aria."}]
+    assert [f["fact"] for f in fresh_facts(new, old)] == ["Ben crashed into a noodle stall and lost the lead to Aria."]
+    assert fresh_facts(new[1:2], []) == new[1:2]

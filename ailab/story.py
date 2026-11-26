@@ -58,7 +58,28 @@ NEXT_EXTRA = ("Earlier chapters already happened (the facts say what changed) �
               "chapter shows his idea for it, starting where his idea starts.")
 PROSE_SYS = "You write fiction prose. {keep} Follow the bible and the outline. Plain, vivid, readable."
 FACTS_SYS = ("List what CHANGED in this chapter that later chapters must respect: who knows what, who is where, what is "
-             "broken, worn, lost or gained, who is hurt or gone. JSON only: [\"one fact per line\"]. 3–10 short lines.")
+             "broken, worn, lost or gained, who is hurt or gone, who is ahead or behind, how the chapter ends. Name the person, "
+             "the place and the thing in each line, and say the state at the END of the chapter. Never repeat or reword a "
+             "fact the bible already lists — only what is new. JSON only: [\"one fact per line\"]. 3–10 short lines.")
+_STOP = set("a an the and or of to in on at by for with from into is are was were be been has have had as it its their "
+            "his her they them he she this that these those through".split())
+
+
+def _words(t: str) -> set:
+    return {w[:5] for w in re.findall(r"[a-z0-9']+", t.lower()) if w not in _STOP}   # 5-letter stems: raced ≈ racing
+
+
+def fresh_facts(new: list[dict], old: list[dict]) -> list[dict]:
+    """Drop a new fact that only rewords one already in the bible (live 2026-11-25: ch2 "Aria and Ben are racing their
+    motorbikes through the neon-lit night market at midnight" after ch1 "… have raced motorbikes through …")."""
+    seen = [_words(f["fact"]) for f in old]
+    out = []
+    for f in new:
+        w = _words(f["fact"])
+        if w and not any(len(w & o) / len(w | o) >= 0.6 for o in seen if o):
+            out.append(f)
+            seen.append(w)
+    return out
 CHECK_SYS = ("You check a new chapter against the story bible's facts — his idea for the chapter and the plan made from it. "
              "List only real contradictions: something his idea or the plan says that a listed fact rules out. Things the facts "
              "don't cover are not contradictions. Facts tell what happened before; a later chapter may move on — a new day, a new "
@@ -615,14 +636,18 @@ def run(run) -> None:
     if not chap.get("facts_done"):
         try:
             text, _ = makers.write(run, FACTS_SYS, f"Bible:\n{bible_text(bib)}\n\nChapter {ch_n}:\n{chap.get('outline', '')}\n"
-                                   + "\n".join(f"- {', '.join(s['who'])}: {s['action']} ({s['where']})" for s in chap["shots"]),
+                                   + "\n".join(f"- {', '.join(s['who'])}: {s['action']} ({s['where']})" + (f" — “{s['line']}”" if s.get("line") else "")
+                                               for s in chap["shots"]),
                                    500, "Noting what changed", "lab-story")
-            facts = new_facts(text, ch_n)
+            got = new_facts(text, ch_n)
+            facts = fresh_facts(got, bib["facts"])
             if facts:
                 bib = save_bible(root, {**bib, "facts": bib["facts"] + facts})
             chap["facts_done"] = True
             save_chapter(root, ch_n, chap)
-            run._record({"action": "story", "why": f"🔗 {len(facts)} new fact(s) into the bible" + (": " + " · ".join(f["fact"] for f in facts[:4]) if facts else ""),
+            dup = len(got) - len(facts)
+            run._record({"action": "story", "why": f"🔗 {len(facts)} new fact(s) into the bible" + (": " + " · ".join(f["fact"] for f in facts[:4]) if facts else "")
+                         + (f" ({dup} only repeated the bible — left out)" if dup else ""),
                          "result": {"facts": facts}, "usd": 0.0})
         except Exception as e:                                   # noqa: BLE001 — facts are a bonus
             if _hard(e):
