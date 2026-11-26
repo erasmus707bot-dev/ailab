@@ -383,6 +383,12 @@ def run(run) -> None:
     queue, res, out, model, est, t0, pmodel, venice_off, refused = list(plan["models"]), {}, {}, "?", 0.0, time.time(), "", None, None
     base_prompt, base_neg, tagged = args["prompt"], args["negative_prompt"], None
     ref_paths, ref_added = ([] if forced else _refs(run)), False   # 🎭 M2: the cast strip / a character sheet's source
+    style_abs = ""                                           # 🎨 only 🎨 Style sources in use → the look, not a face lock
+    roles0 = getattr(run, "src_roles", None) or {}
+    if ref_paths and roles0 and all(roles0.get(_rel(run, x)) == "style" for x in ref_paths):
+        style_abs, ref_paths = ref_paths[0], []
+        run._record({"action": "refs", "why": f"🎨 style picture {Path(style_abs).name} rides with the picture model (SDXL: IP-Adapter style transfer · FLUX.2: as a reference)",
+                     "result": {"style": _rel(run, style_abs)}, "usd": 0.0})
     strict = False                                           # True = a reference is in play: never make it without one
     if ref_paths:
         from . import refs as R
@@ -419,8 +425,14 @@ def run(run) -> None:
         pmodel = args["model"] = queue.pop(0)
         if ref_paths and pmodel in _REF_MODELS:
             args["reference_images"] = ref_paths
+        elif style_abs and pmodel == _REF_MODELS[0]:          # 🎨 FLUX.2 Klein reads style from a reference picture
+            args["reference_images"] = [style_abs]
         else:
             args.pop("reference_images", None)
+        if style_abs and pmodel.startswith("local/") and "flux" not in pmodel:
+            args["style_image"] = style_abs
+        else:
+            args.pop("style_image", None)
         if pmodel.startswith("local/"):
             args["speed"] = "full" if args.get("reference_images") else speed      # ⚡ 8 steps washes a source out
         else:
@@ -446,6 +458,13 @@ def run(run) -> None:
         try:
             start = run.lab.mcp.call("image_make", args)
         except HermesRefused as e:
+            if args.get("style_image") and e.code in ("not_installed", "bad_path", "bad_args", "not_enabled"):
+                run._record({"action": "refs", "why": f"🎨 style picture not used — {e.message}" + (f" 👉 {e.fix}" if getattr(e, "fix", "") else ""),
+                             "result": {"fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
+                style_abs = ""
+                args.pop("style_image", None)
+                queue.insert(0, pmodel)
+                continue
             if args.get("pose_image") and e.code in ("not_installed", "bad_path", "bad_args"):
                 run._record({"action": "pose", "why": f"🦴 pose not used — {e.message} Made from the words only.",
                              "result": {"fix": getattr(e, "fix", "") or ""}, "usd": 0.0})
