@@ -47,7 +47,8 @@
   .srccard { display: inline-flex; gap: 8px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: 12px; }
   .srccard.off { opacity: .75; } .srccard img { height: 64px; width: 64px; object-fit: cover; border-radius: 8px; }
   .srcmeta { display: flex; flex-direction: column; gap: 4px; } .srcmeta select { min-height: 44px; font-size: 17px; }
-  .srcstrength { display: flex; flex-direction: column; gap: 2px; } .srcstrength input[type=range] { width: 160px; min-height: 44px; accent-color: #d4af37; touch-action: pan-y; }
+  .srcstrength { display: flex; flex-direction: column; gap: 2px; } .srcstrength input[type=range] { width: 160px; min-height: 44px; accent-color: #d4af37; pointer-events: none; }
+  .rngpad { touch-action: pan-y; cursor: ew-resize; width: 160px; }
   .raterow { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
   .raterow .rtop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .stars { display: inline-flex; gap: 2px; border-radius: 10px; }
@@ -423,7 +424,7 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
   .wbtools .btn.off { opacity: .6; }
   @media (max-width: 980px) {
     .title { display: none; }
-    .wbtabs { display: flex; position: sticky; top: 52px; z-index: 3; background: var(--bg); padding-bottom: 2px; }
+    .wbtabs { display: flex; position: sticky; top: var(--hdrh, 52px); z-index: 3; background: var(--bg); padding-bottom: 2px; }
     .wb, .wb.custom { grid-template-columns: minmax(0, 1fr) !important; height: auto; }
     .wb > .pane { display: none; overflow: visible; }
     .gutter, .panebar .ib { display: none; }
@@ -443,7 +444,7 @@ input[aria-label="Type apply"] + .btn.pri { min-height: 48px; }
     header .chip { padding: 4px 6px; } header .chips { gap: 2px; flex-shrink: 0; }
     /* 2026-11-25 Argus: 📓 + 🔁 made the bar 494 px on a 393 px phone (⚙️ ☀️ off screen, page scrolled sideways).
        Phone: no ⛶ (the phone is full screen already), no title text, and the bar wraps instead of overflowing. */
-    header { flex-wrap: wrap; row-gap: 2px; } header #full, header .title { display: none; }
+    header { flex-wrap: wrap; row-gap: 2px; height: auto; max-height: none; } header #full, header .title { display: none; }
     .wb[data-tab="files"] > .wbfiles, .wb[data-tab="code"] > .wbcode, .wb[data-tab="agent"] > .wbagent { display: flex; }
     .wbcode .code { min-height: 46vh; }
     .wbcode .frame { min-height: 56vh; }
@@ -690,6 +691,13 @@ function paintBar() {
 }
 
 /* ---------- project ---------- */
+/* 👆 Argus 2026-11-25: on a 393 px phone the wrapped top bar's 2nd row (💲 chip) sat on the sticky 🤖 Make / 👀 Stage
+   tabs and ate the 👀 Stage tap. The tabs now sit under the bar's real height. */
+(function hdrWatch() { const hd = document.querySelector("header"); if (!hd) return;
+  const set = () => { const b = [...hd.children].reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), hd.getBoundingClientRect().bottom);
+    document.documentElement.style.setProperty("--hdrh", Math.ceil(b - hd.getBoundingClientRect().top + 4) + "px"); };
+  try { new ResizeObserver(set).observe(hd); new MutationObserver(set).observe(hd, { childList: true, subtree: true, characterData: true }); } catch (e) {}
+  addEventListener("resize", set); setTimeout(set, 300); set(); })();
 const curProject = () => S.projects.find(p => p.id === store.get("project", "scratch")) || S.projects[0];
 function projectRow() {            // the switcher lives in the top bar now; views keep only the 🔒 note
   const p = curProject();
@@ -3155,10 +3163,25 @@ function sourcePicker(p, onAdd) {
         title: "How strongly this picture's look is applied — subtle keeps your Look (e.g. Photo), strong paints everything in its style" });
       const say = v => { lab.textContent = `🎨 ${(+v).toFixed(1)} · ${word(+v)}`; };
       say(v0);
-      rng.oninput = () => say(rng.value);
-      rng.onchange = async () => { const r = await api("/api/refs/strength", { project: p.id, path: x.path, strength: +rng.value });
+      const save = async () => { const r = await api("/api/refs/strength", { project: p.id, path: x.path, strength: +rng.value });
         if (r.ok) { say(r.strength); rateNotify(p.id); } else note.textContent = `${r.icon || "⚠️"} ${r.message}`; };
-      strong = h("label", { class: "srcstrength" }, lab, rng);
+      rng.oninput = () => say(rng.value);
+      rng.onchange = save;                                 /* keyboard: ← → still work on the focused slider */
+      /* 👆 Argus 2026-11-25: on a phone a vertical swipe that started on the slider jumped it (0.4 → 0.7) and barely
+         scrolled. The finger now only moves it after a clear sideways drag; a tap or an up/down swipe leaves it alone. */
+      const pad = h("div", { class: "rngpad" }, rng);
+      let st = null;
+      const valAt = cx => { const b = rng.getBoundingClientRect(), f = Math.max(0, Math.min(1, (cx - b.left) / b.width));
+        return Math.round((0.2 + f * 1.0) * 10) / 10; };
+      pad.addEventListener("pointerdown", e => { st = { x: e.clientX, y: e.clientY, on: false, id: e.pointerId }; });
+      pad.addEventListener("pointermove", e => { if (!st || e.pointerId !== st.id) return;
+        const dx = e.clientX - st.x, dy = e.clientY - st.y;
+        if (!st.on) { if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { st = null; return; }
+          if (Math.abs(dx) < 8) return; st.on = true; try { pad.setPointerCapture(e.pointerId); } catch (_) {} }
+        rng.value = String(valAt(e.clientX)); say(rng.value); e.preventDefault(); });
+      const end = () => { if (st && st.on) save(); st = null; };
+      pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", () => { st = null; });
+      strong = h("label", { class: "srcstrength" }, lab, pad);
     }
     return h("span", { class: "srccard" + (on ? "" : " off") }, h("img", { src: pic(x.path), alt: x.path.split("/").pop(), loading: "lazy" }),
       h("span", { class: "srcmeta" }, sel, h("span", { class: "note" }, `${x.from === "accept" ? "✅ accepted" : x.from === "upload" ? "📥 yours" : "📌"}${rec}`), strong),
