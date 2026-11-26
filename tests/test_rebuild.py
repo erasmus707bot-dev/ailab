@@ -361,3 +361,21 @@ class LiveR4(Base):
         sc = {**SCENES[0], "recipe": {**SCENES[0]["recipe"], "in_frame": "2 — person A"}}
         b = rebuild.beats([sc])[0]
         self.assertEqual([c["name"] for c in rebuild.cast_for(b, [MARA, JUN])], ["Mara", "Jun"])
+
+
+class Rung2(Base):
+    """Live R4 rung 2 2026-11-25 (Twister): a 3rd source person with no cast member was drawn as a copy of the cast;
+    "in both frames" recipe wording made a split-screen picture."""
+    def test_third_person_becomes_a_distinct_extra(self):
+        mara = {**MARA, "traits": {"hair_colour": "copper red", "outfit_colour": "purple"}}
+        dina = {**JUN, "name": "Dina", "traits": {"hair_colour": "black", "outfit_colour": "red"}}
+        sc = {**SCENES[0], "recipe": {**SCENES[0]["recipe"], "subject": "person A leans over person B while person C watches",
+                                       "in_frame": "3 — all of person A, B and C in both frames",
+                                       "pose": "person C stands near the spinner in both frames"}}
+        b = rebuild.beats([sc])[0]
+        w = rebuild.words_for(b, [mara, dina])
+        self.assertNotIn("person C", w)
+        self.assertIn("a plain extra (a man with short brown hair", w)    # black hair is Dina's → skipped
+        self.assertIn("the extra stands near the spinner", w)
+        self.assertNotIn("frames", w.replace("not a split screen", ""))
+        self.assertIn("not a split screen or collage", w)

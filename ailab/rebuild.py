@@ -136,10 +136,35 @@ def words_for(beat: dict, cast: list[dict]) -> str:
     pose = r.get("pose", "")
     for i, c in enumerate(cast):
         pose = re.sub(rf"\bperson {LETTERS[i]}\b", c["name"], pose, flags=re.I)
+    extra = extra_look(cast)                                     # R4 rung 2 (Twister): a 3rd source person with no cast
+    for L in LETTERS[len(cast):]:                                # member was drawn as a copy of Dina (shots 6, 14, 16)
+        subj = re.sub(rf"\bperson {L}\b", f"a plain extra ({extra})", subj, count=1, flags=re.I)
+        subj = re.sub(rf"\bperson {L}\b", "the extra", subj, flags=re.I)
+        pose = re.sub(rf"\bperson {L}\b", "the extra", pose, flags=re.I)
+    subj, pose = _no_frames(subj), _no_frames(pose)
     who = cast_for(beat, cast)
     only = f"only {' and '.join(c['name'] for c in who)} in the frame" if 0 < len(who) < len(people_in({"subject": r["subject"]}) or LETTERS[:len(cast)]) else ""
-    parts = [subj, only, pose, r["setting"], r["framing"], r["light"]]
+    parts = [subj, only, pose, r["setting"], r["framing"], r["light"], "one single photograph, not a split screen or collage"]
     return ", ".join(p.strip().rstrip(".") for p in parts if p.strip())
+
+
+_HAIRS = ("short black hair", "short brown hair", "a shaved head")
+_CLOTHES = ("a plain black T-shirt and black trousers", "a plain navy T-shirt and khaki trousers")
+
+
+def extra_look(cast: list[dict]) -> str:
+    """A look for source people beyond the cast that shares no hair or outfit colour with any cast member."""
+    taken = " ".join(f"{(c.get('traits') or {}).get('hair_colour', '')} {(c.get('traits') or {}).get('outfit_colour', '')}".lower()
+                     for c in cast)
+    hair = next((h for h in _HAIRS if h.split()[-2] not in taken), _HAIRS[-1])
+    wear = next((w for w in _CLOTHES if w.split()[1] not in taken), _CLOTHES[0])
+    return f"a man with {hair} in {wear}, clearly different from the named women"
+
+
+def _no_frames(t: str) -> str:
+    """Breakdown recipes compare two sampled frames ("in both frames") — the picture model drew a split screen (rung 2 shot 18)."""
+    t = re.sub(r"\s*\b(?:in|across|between|from) (?:both|the two|the first|the second|each of the two) frames?\b", "", str(t), flags=re.I)
+    return re.sub(r"\s{2,}", " ", t).strip()
 
 
 def identity_points(people: list[dict]) -> list[dict]:
